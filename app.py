@@ -20,6 +20,7 @@ try:
     from core.progress_manager import ProgressManager
     from core.agent_manager import AgentManager
     from core.model_manager import ModelManager, create_model_manager
+    from core.config_manager import save_api_key, get_available_api_keys, load_env_file
     from config.settings import NovelConfig, DEFAULT_CONFIG
 except ImportError:
     # 如果作为包导入
@@ -27,6 +28,11 @@ except ImportError:
     from novel_generator.core.progress_manager import ProgressManager
     from novel_generator.core.agent_manager import AgentManager
     from novel_generator.core.model_manager import ModelManager, create_model_manager
+    from novel_generator.core.config_manager import (
+        save_api_key,
+        get_available_api_keys,
+        load_env_file,
+    )
     from novel_generator.config.settings import NovelConfig, DEFAULT_CONFIG
 
 # 页面配置
@@ -705,8 +711,46 @@ def render_settings():
     projects_dir = st.text_input("项目存储目录", value="novels")
     auto_save = st.checkbox("自动保存进度", value=True)
 
+    # 保存所有设置
     if st.button("💾 保存设置", use_container_width=True):
-        st.success("设置已保存！")
+        success_count = 0
+        error_messages = []
+
+        # 保存API密钥
+        if api_key and api_key_env:
+            if save_api_key(api_key_env, api_key):
+                success_count += 1
+                st.success(f"✅ {api_key_env} 已保存到 .env 文件")
+            else:
+                error_messages.append(f"保存 {api_key_env} 失败")
+
+        # 保存自定义模型配置
+        if selected_model_id == "custom":
+            if custom_model_name and save_api_key(
+                "CUSTOM_MODEL_NAME", custom_model_name
+            ):
+                success_count += 1
+            if custom_base_url and save_api_key("CUSTOM_BASE_URL", custom_base_url):
+                success_count += 1
+            if custom_api_key_env != "CUSTOM_API_KEY" and save_api_key(
+                "CUSTOM_API_KEY_ENV", custom_api_key_env
+            ):
+                success_count += 1
+        else:
+            # 保存默认模型设置
+            save_api_key("DEFAULT_MODEL_ID", selected_model_id)
+
+        # 保存温度和token设置
+        save_api_key("DEFAULT_TEMPERATURE", str(temperature))
+        save_api_key("DEFAULT_MAX_TOKENS", str(int(max_tokens)))
+
+        if success_count > 0 and not error_messages:
+            st.success(f"✅ 成功保存 {success_count} 项设置！")
+            st.info("📄 配置已保存到项目根目录的 .env 文件")
+        elif error_messages:
+            st.error("❌ 部分设置保存失败：" + "; ".join(error_messages))
+        else:
+            st.info("💡 没有需要保存的更改")
 
 
 def render_agent_management():

@@ -8,6 +8,11 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
+try:
+    from config_manager import get_api_key
+except ImportError:
+    from .config_manager import get_api_key
+
 
 class ModelProvider(Enum):
     """模型提供商枚举"""
@@ -184,8 +189,8 @@ class ModelManager:
         ]
 
     def get_api_key(self) -> Optional[str]:
-        """获取API密钥"""
-        return os.getenv(self.config.api_key_env)
+        """获取API密钥（从环境变量或.env文件）"""
+        return get_api_key(self.config.api_key_env)
 
     def generate(
         self,
