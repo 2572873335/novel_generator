@@ -1,0 +1,20 @@
+# 全自动AI小说生成系统依赖
+
+# LLM客户端（选择一个）
+# anthropic>=0.21.0  # Claude API
+# openai>=1.0.0      # OpenAI API
+
+# 数据处理
+# pydantic>=2.0.0
+# dataclasses>=0.6; python_version < "3.7"
+
+# 工具库
+# gitpython>=3.1.0   # Git操作
+
+# Web UI
+streamlit>=1.28.0    # Web界面
+
+# 开发依赖（可选）
+# pytest>=7.0.0      # 测试
+# black>=22.0.0      # 代码格式化
+# flake8>=5.0.0      # 代码检查

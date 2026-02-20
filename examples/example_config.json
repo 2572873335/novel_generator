@@ -1,0 +1,12 @@
+{
+  "title": "星际觉醒",
+  "genre": "科幻",
+  "target_chapters": 15,
+  "words_per_chapter": 3500,
+  "description": "在2147年，人类发现了一种神秘的外星信号。年轻的天文学家林晓被选中加入解密团队，却意外发现这个信号背后隐藏着一个足以改变人类命运的秘密。随着调查的深入，她逐渐意识到，人类的未来可能取决于她即将做出的选择。",
+  "writing_style": "descriptive",
+  "tone": "neutral",
+  "enable_self_review": true,
+  "min_chapter_quality_score": 7.0,
+  "max_revision_attempts": 3
+}
