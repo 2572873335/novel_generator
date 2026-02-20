@@ -22,8 +22,9 @@ def load_env_file(env_path: Optional[str] = None) -> Dict[str, str]:
 
     # 如果未指定路径，查找项目根目录
     if env_path is None:
-        # 获取当前文件所在目录
-        current_dir = Path(__file__).parent.parent.parent
+        # 获取当前文件所在目录 (core/)
+        # config_manager.py -> core/ -> 项目根目录
+        current_dir = Path(__file__).parent.parent
         env_path = current_dir / ".env"
     else:
         env_path = Path(env_path)
@@ -139,7 +140,8 @@ def save_api_key(key_name: str, key_value: str, env_path: Optional[str] = None) 
     try:
         # 确定.env文件路径
         if env_path is None:
-            current_dir = Path(__file__).parent.parent.parent
+            # config_manager.py -> core/ -> 项目根目录
+            current_dir = Path(__file__).parent.parent
             env_path = current_dir / ".env"
         else:
             env_path = Path(env_path)
