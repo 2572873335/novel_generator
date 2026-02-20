@@ -18,11 +18,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from core.novel_generator import NovelGenerator, create_novel
     from core.progress_manager import ProgressManager
+    from core.agent_manager import AgentManager
     from config.settings import NovelConfig, DEFAULT_CONFIG
 except ImportError:
     # 如果作为包导入
     from novel_generator import create_novel, NovelGenerator
     from novel_generator.core.progress_manager import ProgressManager
+    from novel_generator.core.agent_manager import AgentManager
     from novel_generator.config.settings import NovelConfig, DEFAULT_CONFIG
 
 # 页面配置
@@ -153,6 +155,7 @@ def render_sidebar():
                 "✍️ 写作控制",
                 "📊 进度监控",
                 "📖 查看章节",
+                "🤖 智能体管理",
                 "⚙️ 系统设置",
             ],
             label_visibility="collapsed",
@@ -255,15 +258,15 @@ def render_home():
 
                 st.markdown(
                     f"""
-                <div class="card">
-                    <h4>{project["title"]}</h4>
-                    <p>类型: {project["genre"]}</p>
-                    <p>进度: {project["completed_chapters"]}/{project["total_chapters"]} 章</p>
-                    <div style="background-color: #e0e0e0; border-radius: 10px; height: 10px;">
-                        <div style="background-color: #1f77b4; width: {progress_pct}%; 
+                <div class="metric-card">
+                    <h4 style="color: white;">{project["title"]}</h4>
+                    <p style="color: rgba(255,255,255,0.9);">类型: {project["genre"]}</p>
+                    <p style="color: rgba(255,255,255,0.9);">进度: {project["completed_chapters"]}/{project["total_chapters"]} 章</p>
+                    <div style="background-color: rgba(255,255,255,0.3); border-radius: 10px; height: 10px;">
+                        <div style="background-color: white; width: {progress_pct}%; 
                                     height: 100%; border-radius: 10px;"></div>
                     </div>
-                    <p style="text-align: right; margin-top: 5px;">{progress_pct:.1f}%</p>
+                    <p style="text-align: right; margin-top: 5px; color: white;">{progress_pct:.1f}%</p>
                 </div>
                 """,
                     unsafe_allow_html=True,
@@ -571,6 +574,137 @@ def render_settings():
         st.success("设置已保存！")
 
 
+def render_agent_management():
+    """渲染智能体管理页面"""
+    st.header("🤖 智能体管理")
+
+    # 初始化 AgentManager
+    agent_manager = AgentManager(".")
+
+    # 获取可用智能体
+    available_agents = agent_manager.get_available_agents()
+
+    st.subheader("📋 可用智能体")
+
+    # 显示智能体列表
+    if available_agents:
+        cols = st.columns(3)
+        for idx, agent in enumerate(available_agents):
+            with cols[idx % 3]:
+                with st.container():
+                    st.markdown(
+                        f"""
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                color: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <h4 style="margin: 0; color: white;">{agent["name"]}</h4>
+                        <p style="margin: 5px 0; font-size: 0.9em; opacity: 0.9;">{agent["description"][:50]}...</p>
+                    </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+    st.divider()
+
+    # 创建新项目使用完整工作流
+    st.subheader("🚀 完整智能体工作流")
+    st.info("使用所有智能体协作完成小说创作")
+
+    # 选择项目
+    projects = get_projects()
+    if projects:
+        project_names = [p["title"] for p in projects]
+        selected_project = st.selectbox(
+            "选择要处理的项目", project_names, key="agent_project_select"
+        )
+
+        if selected_project:
+            project = projects[project_names.index(selected_project)]
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("项目", project["title"])
+            with col2:
+                st.metric(
+                    "进度",
+                    f"{project['completed_chapters']}/{project['total_chapters']}",
+                )
+            with col3:
+                progress = (
+                    (project["completed_chapters"] / project["total_chapters"] * 100)
+                    if project["total_chapters"] > 0
+                    else 0
+                )
+                st.metric("完成度", f"{progress:.1f}%")
+
+            if st.button("▶️ 启动完整工作流", use_container_width=True, type="primary"):
+                with st.spinner("正在协调智能体..."):
+                    # 读取项目配置
+                    progress_file = Path(project["path"]) / "novel-progress.txt"
+                    if progress_file.exists():
+                        with open(progress_file, "r", encoding="utf-8") as f:
+                            config = json.load(f)
+
+                        # 运行完整工作流
+                        result = agent_manager.run_coordinator_workflow(config)
+
+                        if result["success"]:
+                            st.success(
+                                f"✅ 工作流完成！共执行 {result['total_steps']} 个步骤"
+                            )
+
+                            # 显示执行结果
+                            with st.expander("查看执行详情"):
+                                for step_result in result["results"]:
+                                    st.markdown(f"**{step_result['step']}**")
+                                    st.text(
+                                        step_result["result"]["result"][:200] + "..."
+                                    )
+                        else:
+                            st.error("❌ 工作流执行失败")
+    else:
+        st.warning("⚠️ 暂无项目，请先创建新项目")
+
+    st.divider()
+
+    # 自定义智能体工作流
+    st.subheader("⚙️ 自定义智能体工作流")
+    st.info("选择特定智能体执行特定任务")
+
+    if available_agents:
+        agent_names = [a["name"] for a in available_agents]
+        selected_agents = st.multiselect("选择要执行的智能体", agent_names)
+
+        if selected_agents:
+            st.write("执行顺序:")
+            for idx, agent in enumerate(selected_agents, 1):
+                st.write(f"{idx}. {agent}")
+
+            task_description = st.text_area(
+                "任务描述", placeholder="描述需要智能体完成的任务..."
+            )
+
+            if st.button("▶️ 执行选定智能体", use_container_width=True):
+                if task_description:
+                    with st.spinner("正在执行智能体..."):
+                        # 创建并执行工作流
+                        workflow = agent_manager.create_agent_workflow(
+                            selected_agents, {"task": task_description}
+                        )
+                        result = agent_manager.execute_workflow(workflow)
+
+                        if result["success"]:
+                            st.success(f"✅ 已执行 {len(selected_agents)} 个智能体")
+
+                            # 显示结果
+                            for idx, res in enumerate(result["results"], 1):
+                                with st.expander(f"智能体 {idx}: {res['agent']}"):
+                                    st.text(res["result"])
+                        else:
+                            st.error("❌ 执行失败")
+                else:
+                    st.error("请输入任务描述")
+
+
 def main():
     """主函数"""
     init_session_state()
@@ -600,6 +734,8 @@ def main():
         render_progress_monitor()
     elif page == "📖 查看章节":
         render_chapter_view()
+    elif page == "🤖 智能体管理":
+        render_agent_management()
     elif page == "⚙️ 系统设置":
         render_settings()
 
