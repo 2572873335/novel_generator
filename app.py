@@ -20,7 +20,12 @@ try:
     from core.progress_manager import ProgressManager
     from core.agent_manager import AgentManager
     from core.model_manager import ModelManager, create_model_manager
-    from core.config_manager import save_api_key, get_available_api_keys, load_env_file
+    from core.config_manager import (
+        save_api_key,
+        get_available_api_keys,
+        load_env_file,
+        get_api_key,
+    )
     from config.settings import NovelConfig, DEFAULT_CONFIG
 except ImportError:
     # 如果作为包导入
@@ -32,6 +37,7 @@ except ImportError:
         save_api_key,
         get_available_api_keys,
         load_env_file,
+        get_api_key,
     )
     from novel_generator.config.settings import NovelConfig, DEFAULT_CONFIG
 
@@ -581,9 +587,29 @@ def render_settings():
         "⚙️ 自定义模型",
     ]
 
+    # 从配置中读取默认模型
+    config = load_env_file()
+    saved_model_id = config.get("DEFAULT_MODEL_ID", "claude-3-5-sonnet")
+
+    # 根据保存的模型ID确定提供商
+    if saved_model_id == "custom":
+        default_provider = "custom"
+    elif saved_model_id in model_manager.AVAILABLE_MODELS:
+        default_provider = model_manager.AVAILABLE_MODELS[saved_model_id].provider.value
+    else:
+        default_provider = "anthropic"
+
+    # 设置默认选中索引
+    default_provider_idx = (
+        provider_list.index(default_provider)
+        if default_provider in provider_list
+        else 0
+    )
+
     selected_provider_idx = st.selectbox(
         "选择模型提供商",
         range(len(provider_list)),
+        index=default_provider_idx,
         format_func=lambda x: provider_labels[x],
     )
     selected_provider = provider_list[selected_provider_idx]
@@ -599,16 +625,22 @@ def render_settings():
     if selected_provider == "custom":
         # 自定义模型设置
         st.markdown("#### ⚙️ 自定义模型配置")
+        custom_model_name = config.get("CUSTOM_MODEL_NAME", "")
+        custom_base_url = config.get("CUSTOM_BASE_URL", "")
+        custom_api_key_env = config.get("CUSTOM_API_KEY_ENV", "CUSTOM_API_KEY")
+
         custom_model_name = st.text_input(
-            "模型名称", placeholder="例如: my-custom-model"
+            "模型名称", value=custom_model_name, placeholder="例如: my-custom-model"
         )
         custom_base_url = st.text_input(
-            "API基础URL", placeholder="例如: https://api.custom.com/v1"
+            "API基础URL",
+            value=custom_base_url,
+            placeholder="例如: https://api.custom.com/v1",
         )
         custom_api_key_env = st.text_input(
             "API密钥环境变量名",
+            value=custom_api_key_env,
             placeholder="例如: CUSTOM_API_KEY",
-            value="CUSTOM_API_KEY",
         )
 
         selected_model_id = "custom"
@@ -619,9 +651,15 @@ def render_settings():
         model_options = [m["name"] for m in provider_models]
         model_ids_list = [m["id"] for m in provider_models]
 
+        # 根据保存的模型ID确定默认选中的模型
+        default_model_idx = 0
+        if saved_model_id in model_ids_list:
+            default_model_idx = model_ids_list.index(saved_model_id)
+
         selected_model_idx = st.selectbox(
             "选择具体模型",
             range(len(model_options)),
+            index=default_model_idx,
             format_func=lambda x: model_options[x],
         )
 
@@ -635,27 +673,36 @@ def render_settings():
     # API密钥输入
     col1, col2 = st.columns([3, 1])
     with col1:
+        # 检查是否已有密钥配置
+        current_key = get_api_key(api_key_env)
+        api_key_placeholder = f"输入您的 {api_key_env}"
+        if current_key:
+            api_key_placeholder = f"{api_key_env} 已配置 (输入新值可覆盖)"
+
         api_key = st.text_input(
             f"{api_key_env} 密钥",
             type="password",
-            placeholder=f"输入您的 {api_key_env}",
+            placeholder=api_key_placeholder,
         )
     with col2:
         # 显示密钥状态
-        current_key = os.getenv(api_key_env)
         if current_key:
             st.success("✓ 已配置")
         else:
             st.warning("✗ 未配置")
 
     # Temperature设置
+    # 从配置读取默认值
+    default_temperature = float(config.get("DEFAULT_TEMPERATURE", "0.8"))
+    default_max_tokens = int(config.get("DEFAULT_MAX_TOKENS", "4000"))
+
     col1, col2 = st.columns(2)
     with col1:
         temperature = st.slider(
             "Temperature",
             0.0,
             1.0,
-            0.8,
+            default_temperature,
             0.1,
             help="控制生成文本的创造性，值越高越有创意",
         )
@@ -664,7 +711,7 @@ def render_settings():
             "最大Token数",
             min_value=1000,
             max_value=8000,
-            value=4000,
+            value=default_max_tokens,
             step=500,
             help="模型生成的最大token数量",
         )
