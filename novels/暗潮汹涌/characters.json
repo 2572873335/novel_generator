@@ -1,0 +1,18 @@
+[
+  {
+    "name": "主角",
+    "role": "protagonist",
+    "age": 25,
+    "appearance": "普通但有个性的外表",
+    "personality": "勇敢、好奇、有些固执",
+    "background": "平凡的成长背景",
+    "motivation": "寻找真相，保护重要的人",
+    "character_arc": "从普通人成长为英雄",
+    "relationships": {},
+    "distinctive_features": [
+      "特殊的眼神",
+      "独特的习惯"
+    ],
+    "speech_patterns": "直接、真诚"
+  }
+]

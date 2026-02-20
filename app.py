@@ -576,7 +576,18 @@ def main():
     init_session_state()
     render_header()
 
+    # 检查是否有页面切换请求
+    if "page" in st.session_state:
+        current_page = st.session_state.page
+        del st.session_state.page  # 清除状态避免重复跳转
+    else:
+        current_page = None
+
     page = render_sidebar()
+
+    # 优先使用按钮跳转的页面
+    if current_page:
+        page = current_page
 
     # 根据选择的页面渲染内容
     if page == "🏠 首页":
