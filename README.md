@@ -373,9 +373,3 @@ MIT License
 本系统基于 Anthropic 的研究成果：
 - [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
 - [Claude 4 Prompting Guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/multi-context-window-workflows)
-
-## 联系方式
-
-如有问题或建议，欢迎联系：
-- Email: your.email@example.com
-- GitHub: https://github.com/yourusername/novel_generator

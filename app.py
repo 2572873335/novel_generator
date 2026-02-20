@@ -19,12 +19,14 @@ try:
     from core.novel_generator import NovelGenerator, create_novel
     from core.progress_manager import ProgressManager
     from core.agent_manager import AgentManager
+    from core.model_manager import ModelManager, create_model_manager
     from config.settings import NovelConfig, DEFAULT_CONFIG
 except ImportError:
     # 如果作为包导入
     from novel_generator import create_novel, NovelGenerator
     from novel_generator.core.progress_manager import ProgressManager
     from novel_generator.core.agent_manager import AgentManager
+    from novel_generator.core.model_manager import ModelManager, create_model_manager
     from novel_generator.config.settings import NovelConfig, DEFAULT_CONFIG
 
 # 页面配置
@@ -551,19 +553,152 @@ def render_settings():
 
     st.subheader("🤖 AI模型设置")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        model = st.selectbox(
-            "选择模型", ["Claude-3.5-Sonnet", "GPT-4", "本地模型"], index=0
+    # 获取可用模型列表
+    model_manager = ModelManager()
+    available_models = model_manager.get_available_models()
+
+    # 按提供商分组
+    providers = {}
+    for model in available_models:
+        provider = model["provider"]
+        if provider not in providers:
+            providers[provider] = []
+        providers[provider].append(model)
+
+    # 选择模型提供商
+    provider_list = ["anthropic", "openai", "moonshot", "deepseek", "custom"]
+    provider_labels = [
+        "🅰️ Anthropic (Claude)",
+        "🅾️ OpenAI (GPT)",
+        "🌙 Moonshot (Kimi)",
+        "🔮 DeepSeek",
+        "⚙️ 自定义模型",
+    ]
+
+    selected_provider_idx = st.selectbox(
+        "选择模型提供商",
+        range(len(provider_list)),
+        format_func=lambda x: provider_labels[x],
+    )
+    selected_provider = provider_list[selected_provider_idx]
+
+    # 初始化变量
+    custom_model_name = ""
+    custom_base_url = ""
+    custom_api_key_env = "CUSTOM_API_KEY"
+    selected_model_id = ""
+    selected_model = None
+    api_key_env = "API_KEY"
+
+    if selected_provider == "custom":
+        # 自定义模型设置
+        st.markdown("#### ⚙️ 自定义模型配置")
+        custom_model_name = st.text_input(
+            "模型名称", placeholder="例如: my-custom-model"
         )
-    with col2:
-        api_key = st.text_input(
-            "API密钥", type="password", placeholder="输入您的API密钥"
+        custom_base_url = st.text_input(
+            "API基础URL", placeholder="例如: https://api.custom.com/v1"
+        )
+        custom_api_key_env = st.text_input(
+            "API密钥环境变量名",
+            placeholder="例如: CUSTOM_API_KEY",
+            value="CUSTOM_API_KEY",
         )
 
-    temperature = st.slider(
-        "Temperature", 0.0, 1.0, 0.8, 0.1, help="控制生成文本的创造性，值越高越有创意"
-    )
+        selected_model_id = "custom"
+        api_key_env = custom_api_key_env
+    else:
+        # 选择具体模型
+        provider_models = providers[selected_provider]
+        model_options = [m["name"] for m in provider_models]
+        model_ids_list = [m["id"] for m in provider_models]
+
+        selected_model_idx = st.selectbox(
+            "选择具体模型",
+            range(len(model_options)),
+            format_func=lambda x: model_options[x],
+        )
+
+        selected_model_id = model_ids_list[selected_model_idx]
+        selected_model = model_manager.AVAILABLE_MODELS.get(selected_model_id)
+
+        if selected_model:
+            st.info(f"📋 {selected_model.description}")
+            api_key_env = selected_model.api_key_env
+
+    # API密钥输入
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        api_key = st.text_input(
+            f"{api_key_env} 密钥",
+            type="password",
+            placeholder=f"输入您的 {api_key_env}",
+        )
+    with col2:
+        # 显示密钥状态
+        current_key = os.getenv(api_key_env)
+        if current_key:
+            st.success("✓ 已配置")
+        else:
+            st.warning("✗ 未配置")
+
+    # Temperature设置
+    col1, col2 = st.columns(2)
+    with col1:
+        temperature = st.slider(
+            "Temperature",
+            0.0,
+            1.0,
+            0.8,
+            0.1,
+            help="控制生成文本的创造性，值越高越有创意",
+        )
+    with col2:
+        max_tokens = st.number_input(
+            "最大Token数",
+            min_value=1000,
+            max_value=8000,
+            value=4000,
+            step=500,
+            help="模型生成的最大token数量",
+        )
+
+    # 测试连接按钮
+    if st.button("🧪 测试模型连接", use_container_width=True):
+        with st.spinner("正在测试模型连接..."):
+            try:
+                if selected_model_id == "custom":
+                    test_manager = create_model_manager(
+                        "custom",
+                        {
+                            "name": custom_model_name
+                            if custom_model_name
+                            else "custom-model",
+                            "display_name": "测试模型",
+                            "api_key_env": api_key_env,
+                            "base_url": custom_base_url if custom_base_url else None,
+                        },
+                    )
+                else:
+                    test_manager = create_model_manager(selected_model_id)
+
+                # 测试生成
+                test_prompt = "你好，请用一句话介绍你自己。"
+                result = test_manager.generate(
+                    test_prompt, temperature=0.7, system_prompt="你是一个友好的AI助手。"
+                )
+
+                if result.startswith("[错误]"):
+                    st.error(result)
+                else:
+                    st.success("✅ 模型连接成功！")
+                    with st.expander("查看测试结果"):
+                        st.markdown(f"**提示:** {test_prompt}")
+                        st.markdown(f"**回复:** {result}")
+            except Exception as e:
+                st.error(f"❌ 测试失败: {str(e)}")
+
+    st.divider()
 
     st.subheader("💾 存储设置")
 

@@ -11,34 +11,42 @@ import os
 @dataclass
 class NovelConfig:
     """小说生成配置"""
+
     # 基本设置
     title: str
     genre: str  # 类型：科幻、奇幻、悬疑等
     target_chapters: int = 20
     words_per_chapter: int = 3000
-    
-    # 代理设置
-    model_name: str = "claude-3-5-sonnet-20241022"
+
+    # 模型设置
+    model_id: str = "claude-3-5-sonnet"  # 模型ID
+    model_name: str = "claude-3-5-sonnet-20241022"  # 实际模型名称
     temperature: float = 0.8
-    
+    max_tokens: int = 4000
+
+    # 自定义模型设置（当使用自定义模型时）
+    custom_model_name: str = ""  # 自定义模型名称
+    custom_base_url: str = ""  # 自定义API基础URL
+    custom_api_key_env: str = ""  # 自定义API密钥环境变量名
+
     # 项目路径
     project_dir: str = ""
-    
+
     # 进度管理
     progress_file: str = "novel-progress.txt"
     chapter_list_file: str = "chapter-list.json"
     outline_file: str = "outline.md"
     characters_file: str = "characters.json"
-    
+
     # 写作风格
     writing_style: str = "descriptive"  # descriptive, concise, poetic, dramatic
     tone: str = "neutral"  # dark, light, neutral, humorous
-    
+
     # 质量控制
     enable_self_review: bool = True
     min_chapter_quality_score: float = 7.0  # 1-10
     max_revision_attempts: int = 3
-    
+
     def __post_init__(self):
         if not self.project_dir:
             self.project_dir = f"novels/{self.title.replace(' ', '_').lower()}"
@@ -47,7 +55,7 @@ class NovelConfig:
 @dataclass
 class AgentPrompts:
     """代理提示词模板"""
-    
+
     INITIALIZER_SYSTEM_PROMPT = """你是一个专业的小说创作策划师。你的任务是初始化一个新的小说项目。
 
 你需要：
@@ -102,8 +110,5 @@ class AgentPrompts:
 
 # 默认配置
 DEFAULT_CONFIG = NovelConfig(
-    title="未命名小说",
-    genre="general",
-    target_chapters=10,
-    words_per_chapter=2500
+    title="未命名小说", genre="general", target_chapters=10, words_per_chapter=2500
 )
