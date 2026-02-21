@@ -990,127 +990,302 @@ def render_log_viewer():
 
 
 def render_dialog_creation():
-    """渲染对话创作页面"""
-    st.header("💬 对话创作模式")
-    st.markdown("通过对话引导AI帮助你构建小说大纲和设定")
+    """渲染对话创作页面 - 类似豆包AI的对话体验"""
+    st.header("💬 AI对话创作模式")
+    st.markdown(
+        "与AI助手对话，共同创作你的小说。每次回答后，AI会为你提供可选的参考建议。"
+    )
 
-    # 初始化对话历史
     if "dialog_messages" not in st.session_state:
         st.session_state.dialog_messages = []
-    if "dialog_stage" not in st.session_state:
-        st.session_state.dialog_stage = "basic_info"
-    if "dialog_config" not in st.session_state:
-        st.session_state.dialog_config = {}
+    if "dialog_suggestions" not in st.session_state:
+        st.session_state.dialog_suggestions = []
+    if "dialog_settings" not in st.session_state:
+        st.session_state.dialog_settings = {}
+    if "current_project_name" not in st.session_state:
+        st.session_state.current_project_name = None
 
-    # 显示对话历史
+    SYSTEM_PROMPT = """你是一位专业的小说创作助手，帮助用户进行小说创作。你的职责包括：
+1. 帮助用户构思故事情节、人物设定、世界观等
+2. 提供专业的写作建议和技巧指导
+3. 协助用户解决创作过程中遇到的问题
+4. 保持对话流畅、友好、有建设性
+
+回答要求：
+- 回答要简洁明了，不要太长
+- 针对用户的具体问题给出专业建议
+- 如果用户提供了一些设定信息，要记住并保持一致性
+- 适当引导用户深入思考故事细节
+- 用中文回答"""
+
+    def get_model_manager():
+        config = load_env_file()
+        model_id = config.get("DEFAULT_MODEL_ID", "claude-3-5-sonnet")
+        if model_id == "custom":
+            custom_config = {
+                "name": config.get("CUSTOM_MODEL_NAME", "custom-model"),
+                "api_key_env": config.get("CUSTOM_API_KEY_ENV", "CUSTOM_API_KEY"),
+                "base_url": config.get("CUSTOM_BASE_URL"),
+            }
+            return ModelManager("custom", custom_config)
+        return ModelManager(model_id)
+
+    def generate_suggestions(ai_response: str, messages: list) -> list:
+        suggestion_prompt = f"""基于以下AI回复和对话历史，生成4个用户可能想要继续询问或讨论的问题/建议。
+每个建议一行，简洁明了（10-20字以内）。
+
+AI回复：
+{ai_response[:500]}
+
+请直接输出4个建议，每行一个，不要编号或其他格式。"""
+
+        try:
+            model = get_model_manager()
+            suggestion_text = model.generate(
+                suggestion_prompt,
+                temperature=0.9,
+                system_prompt="你是一个帮助生成对话建议的助手。",
+            )
+            suggestions = [
+                s.strip() for s in suggestion_text.strip().split("\n") if s.strip()
+            ][:4]
+            if len(suggestions) < 4:
+                default_suggestions = [
+                    "能详细说说吗？",
+                    "有什么例子吗？",
+                    "换一个思路呢？",
+                    "继续深入讨论",
+                ]
+                suggestions.extend(default_suggestions[len(suggestions) :])
+            return suggestions
+        except Exception as e:
+            return [
+                "能详细说说吗？",
+                "有什么例子吗？",
+                "换一个思路呢？",
+                "继续深入讨论",
+            ]
+
+    def save_to_project_settings():
+        if not st.session_state.dialog_messages:
+            return False, "没有对话内容可保存"
+
+        project_name = st.session_state.current_project_name or "对话创作记录"
+        settings_dir = Path("novels") / project_name.replace(" ", "_").lower()
+        settings_dir.mkdir(parents=True, exist_ok=True)
+
+        dialog_file = settings_dir / "dialog-history.json"
+        settings_file = settings_dir / "project-settings.json"
+
+        try:
+            dialog_data = {
+                "project_name": project_name,
+                "created_at": datetime.now().isoformat(),
+                "messages": st.session_state.dialog_messages,
+                "settings": st.session_state.dialog_settings,
+            }
+            with open(dialog_file, "w", encoding="utf-8") as f:
+                json.dump(dialog_data, f, ensure_ascii=False, indent=2)
+
+            if st.session_state.dialog_settings:
+                if settings_file.exists():
+                    with open(settings_file, "r", encoding="utf-8") as f:
+                        existing = json.load(f)
+                else:
+                    existing = {}
+                existing.update(st.session_state.dialog_settings)
+                existing["last_updated"] = datetime.now().isoformat()
+                with open(settings_file, "w", encoding="utf-8") as f:
+                    json.dump(existing, f, ensure_ascii=False, indent=2)
+
+            return True, str(settings_dir)
+        except Exception as e:
+            return False, str(e)
+
+    with st.sidebar:
+        st.divider()
+        st.subheader("📝 项目设置")
+        project_name = st.text_input(
+            "项目名称",
+            value=st.session_state.current_project_name or "我的小说",
+            key="dialog_project_name_input",
+        )
+        if project_name != st.session_state.current_project_name:
+            st.session_state.current_project_name = project_name
+
+        if st.button("💾 保存对话到项目", use_container_width=True):
+            success, result = save_to_project_settings()
+            if success:
+                st.success(f"已保存到: {result}")
+            else:
+                st.error(f"保存失败: {result}")
+
+    if not st.session_state.dialog_messages:
+        welcome_msg = """👋 你好！我是你的AI创作助手。
+
+我可以帮你：
+- 🎭 构思故事情节和人物设定
+- 🌍 构建世界观和背景设定
+- ✍️ 讨论写作技巧和风格
+- 📚 规划章节大纲和剧情走向
+
+你想从哪里开始？可以直接告诉我你的想法，或者参考下方的建议。"""
+        st.session_state.dialog_messages.append(
+            {"role": "assistant", "content": welcome_msg}
+        )
+        st.session_state.dialog_suggestions = [
+            "我想写一个科幻小说",
+            "帮我设计一个主角",
+            "怎么构建世界观？",
+            "给我一些创意灵感",
+        ]
+        st.rerun()
+
     chat_container = st.container()
     with chat_container:
         for msg in st.session_state.dialog_messages:
-            if msg["role"] == "assistant":
-                st.chat_message("assistant").markdown(msg["content"])
-            else:
-                st.chat_message("user").markdown(msg["content"])
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-    # 根据阶段显示不同的引导
-    if st.session_state.dialog_stage == "basic_info":
-        if not st.session_state.dialog_messages:
-            welcome_msg = """你好！我是你的AI创作助手。让我们通过对话来完成小说的初步设定吧！
+    if st.session_state.dialog_suggestions:
+        st.markdown("---")
+        st.markdown("**💡 建议的回复：**")
+        cols = st.columns(4)
+        for idx, suggestion in enumerate(st.session_state.dialog_suggestions):
+            with cols[idx]:
+                if st.button(
+                    suggestion,
+                    key=f"suggestion_{idx}_{len(st.session_state.dialog_messages)}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pending_suggestion = suggestion
+                    st.rerun()
 
-首先，请告诉我你想写什么类型的小说？比如：
-- 科幻
-- 奇幻
-- 悬疑
-- 言情
-- 武侠
-- 历史等"""
+    if "pending_suggestion" in st.session_state:
+        pending = st.session_state.pending_suggestion
+        del st.session_state.pending_suggestion
+        st.session_state.dialog_messages.append({"role": "user", "content": pending})
+
+        model = get_model_manager()
+        with st.chat_message("assistant"):
+            response_placeholder = st.empty()
+            full_response = ""
+
+            try:
+                messages = [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.dialog_messages
+                ]
+                for chunk in model.generate_stream(
+                    messages[-1]["content"],
+                    temperature=0.8,
+                    system_prompt=SYSTEM_PROMPT,
+                    messages=messages[:-1],
+                ):
+                    full_response += chunk
+                    response_placeholder.markdown(full_response + "▌")
+                response_placeholder.markdown(full_response)
+            except Exception as e:
+                full_response = f"抱歉，生成回复时出现错误: {str(e)}"
+                response_placeholder.markdown(full_response)
+
             st.session_state.dialog_messages.append(
-                {"role": "assistant", "content": welcome_msg}
+                {"role": "assistant", "content": full_response}
             )
-            st.rerun()
 
-    # 用户输入
-    if prompt := st.chat_input("请输入你的回复..."):
-        st.session_state.dialog_messages.append({"role": "user", "content": prompt})
-
-        # 根据当前阶段处理用户输入
-        if st.session_state.dialog_stage == "basic_info":
-            if "类型" not in st.session_state.dialog_config:
-                st.session_state.dialog_config["类型"] = prompt
-                response = f"好的，{prompt}是个很有趣的类型！那你想给小说取什么名字呢？"
-            elif "标题" not in st.session_state.dialog_config:
-                st.session_state.dialog_config["标题"] = prompt
-                response = f"'{prompt}'是个不错的标题！能简单描述一下故事的核心构思吗？"
-            elif "构思" not in st.session_state.dialog_config:
-                st.session_state.dialog_config["构思"] = prompt
-                response = "很棒的故事构思！你计划写多少章呢？"
-            elif "章节数" not in st.session_state.dialog_config:
-                try:
-                    st.session_state.dialog_config["章节数"] = int(prompt)
-                except:
-                    st.session_state.dialog_config["章节数"] = 10
-                response = f"好的，{st.session_state.dialog_config['章节数']}章的规模。你想让故事发生在什么样的世界观背景下？"
-            elif "世界观" not in st.session_state.dialog_config:
-                st.session_state.dialog_config["世界观"] = prompt
-                response = (
-                    "很有意思的世界设定！现在让我们来讨论主要人物。主角是什么样的人？"
+            with st.spinner("正在生成建议..."):
+                st.session_state.dialog_suggestions = generate_suggestions(
+                    full_response, st.session_state.dialog_messages
                 )
-            elif "主角" not in st.session_state.dialog_config:
-                st.session_state.dialog_config["主角"] = prompt
-                st.session_state.dialog_stage = "outline"
-                response = f"""很好！我们已经收集了基本信息：
 
-📌 **小说信息汇总**
-- 类型：{st.session_state.dialog_config.get("类型", "未设定")}
-- 标题：{st.session_state.dialog_config.get("标题", "未设定")}
-- 核心构思：{st.session_state.dialog_config.get("构思", "未设定")}
-- 章节数：{st.session_state.dialog_config.get("章节数", "未设定")}
-- 世界观：{st.session_state.dialog_config.get("世界观", "未设定")}
-- 主角：{st.session_state.dialog_config.get("主角", "未设定")}
-
-接下来我们可以开始构建详细大纲。你想从哪个方面开始？
-1. 故事主线规划
-2. 人物关系设计
-3. 世界观细节
-4. 章节分配
-
-请输入数字选择，或直接描述你的想法。"""
-            else:
-                response = "好的，让我们继续。你还有什么想补充的吗？"
-
-        elif st.session_state.dialog_stage == "outline":
-            response = f"好的，让我帮你思考这个方面。关于'{prompt}'，你有什么具体的想法或要求吗？"
-
-        else:
-            response = f"收到！让我继续帮你完善设定。"
-
-        st.session_state.dialog_messages.append(
-            {"role": "assistant", "content": response}
-        )
         st.rerun()
 
-    # 操作按钮
+    if prompt := st.chat_input("输入你的想法..."):
+        st.session_state.dialog_messages.append({"role": "user", "content": prompt})
+
+        model = get_model_manager()
+        with st.chat_message("assistant"):
+            response_placeholder = st.empty()
+            full_response = ""
+
+            try:
+                messages = [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.dialog_messages
+                ]
+                for chunk in model.generate_stream(
+                    messages[-1]["content"],
+                    temperature=0.8,
+                    system_prompt=SYSTEM_PROMPT,
+                    messages=messages[:-1],
+                ):
+                    full_response += chunk
+                    response_placeholder.markdown(full_response + "▌")
+                response_placeholder.markdown(full_response)
+            except Exception as e:
+                full_response = f"抱歉，生成回复时出现错误: {str(e)}"
+                response_placeholder.markdown(full_response)
+
+            st.session_state.dialog_messages.append(
+                {"role": "assistant", "content": full_response}
+            )
+
+            with st.spinner("正在生成建议..."):
+                st.session_state.dialog_suggestions = generate_suggestions(
+                    full_response, st.session_state.dialog_messages
+                )
+
+        st.rerun()
+
     st.divider()
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("🔄 重新开始", use_container_width=True):
+        if st.button("🔄 新对话", use_container_width=True):
             st.session_state.dialog_messages = []
-            st.session_state.dialog_stage = "basic_info"
-            st.session_state.dialog_config = {}
+            st.session_state.dialog_suggestions = []
+            st.session_state.dialog_settings = {}
             st.rerun()
     with col2:
-        if st.button("📋 查看当前设定", use_container_width=True):
-            st.json(st.session_state.dialog_config)
+        if st.button("📋 导出对话", use_container_width=True):
+            if st.session_state.dialog_messages:
+                export_text = "\n\n".join(
+                    [
+                        f"**{'用户' if m['role'] == 'user' else 'AI助手'}**:\n{m['content']}"
+                        for m in st.session_state.dialog_messages
+                    ]
+                )
+                st.download_button(
+                    label="📥 下载对话记录",
+                    data=export_text,
+                    file_name=f"dialog_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                    mime="text/markdown",
+                )
     with col3:
-        if st.button("✅ 完成并创建项目", use_container_width=True):
-            if st.session_state.dialog_config:
-                config = {
-                    "title": st.session_state.dialog_config.get("标题", "未命名"),
-                    "genre": st.session_state.dialog_config.get("类型", "通用"),
-                    "target_chapters": st.session_state.dialog_config.get("章节数", 10),
-                    "description": st.session_state.dialog_config.get("构思", ""),
+        if st.button("📊 提取设定", use_container_width=True):
+            if st.session_state.dialog_messages:
+                model = get_model_manager()
+                extract_prompt = "从以下对话中提取所有小说相关的设定信息（人物、世界观、情节等），以结构化格式输出：\n\n"
+                for m in st.session_state.dialog_messages:
+                    extract_prompt += f"{m['role']}: {m['content']}\n"
+
+                with st.spinner("正在提取设定..."):
+                    extracted = model.generate(extract_prompt, temperature=0.3)
+                    st.session_state.dialog_settings["extracted"] = extracted
+                    st.markdown("### 📋 提取的设定")
+                    st.markdown(extracted)
+    with col4:
+        if st.button("✅ 创建项目", use_container_width=True):
+            if st.session_state.dialog_messages:
+                extracted_settings = st.session_state.dialog_settings.get(
+                    "extracted", ""
+                )
+                st.session_state.prefilled_config = {
+                    "title": st.session_state.current_project_name or "新小说",
+                    "description": extracted_settings[:500]
+                    if extracted_settings
+                    else "",
                 }
                 st.session_state.page = "➕ 创建新项目"
-                st.session_state.prefilled_config = config
                 st.rerun()
 
 

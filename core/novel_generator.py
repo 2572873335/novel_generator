@@ -190,8 +190,10 @@ class NovelGenerator:
 
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
         from agents.writer_agent import WriterAgent
+        from agents.consistency_checker import ConsistencyChecker
 
         self.writer = WriterAgent(self.llm_client, self.project_dir)
+        self.consistency_checker = ConsistencyChecker(self.llm_client, self.project_dir)
 
         # 加载进度
         progress = self.progress_manager.load_progress()
@@ -209,6 +211,7 @@ class NovelGenerator:
         # 循环写作直到完成
         session_count = 0
         max_sessions = total_chapters * 2  # 防止无限循环
+        last_consistency_check = 0  # 上次一致性检查的章节数
 
         while completed < total_chapters and session_count < max_sessions:
             session_count += 1
@@ -229,6 +232,39 @@ class NovelGenerator:
             # 更新进度
             completed += 1
 
+            # 每5章进行一次一致性检查
+            if completed % 5 == 0 and completed > last_consistency_check:
+                last_consistency_check = completed
+                print(f"\n{'=' * 60}")
+                print(f"🔍 一致性检查点: 第{completed}章完成")
+                print("=" * 60)
+
+                check_result = self.consistency_checker.check_chapters(
+                    list(range(1, completed + 1))
+                )
+
+                if not check_result.get("passed", True):
+                    print("\n⚠️ 发现一致性问题：")
+                    for issue in check_result.get("issues", []):
+                        print(f"  - {issue}")
+
+                    # 生成详细报告
+                    report = self.consistency_checker.generate_report(check_result)
+                    report_path = os.path.join(
+                        self.project_dir,
+                        "consistency_reports",
+                        f"check_chapter_{completed}.md",
+                    )
+                    os.makedirs(os.path.dirname(report_path), exist_ok=True)
+                    with open(report_path, "w", encoding="utf-8") as f:
+                        f.write(report)
+                    print(f"  详细报告已保存: {report_path}")
+
+                    # 标记需要用户确认
+                    self._flag_consistency_issue(completed, check_result)
+                else:
+                    print("✅ 一致性检查通过")
+
             # 显示进度
             percentage = (completed / total_chapters) * 100
             print(f"\n总体进度: {completed}/{total_chapters} ({percentage:.1f}%)")
@@ -237,6 +273,26 @@ class NovelGenerator:
             time.sleep(0.5)
 
         print(f"\n✓ 写作阶段完成，共完成 {completed} 章")
+
+    def _flag_consistency_issue(self, chapter: int, check_result: Dict):
+        """标记一致性问题，等待用户确认"""
+        flag_file = os.path.join(self.project_dir, "consistency_issues.json")
+        issues = []
+        if os.path.exists(flag_file):
+            with open(flag_file, "r", encoding="utf-8") as f:
+                issues = json.load(f)
+
+        issues.append(
+            {
+                "chapter": chapter,
+                "timestamp": datetime.now().isoformat(),
+                "issues": check_result.get("issues", []),
+                "status": "pending_review",
+            }
+        )
+
+        with open(flag_file, "w", encoding="utf-8") as f:
+            json.dump(issues, f, ensure_ascii=False, indent=2)
 
     def _review_novel(self):
         """审查阶段"""

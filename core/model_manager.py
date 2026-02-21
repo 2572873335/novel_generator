@@ -253,6 +253,210 @@ class ModelManager:
         else:
             raise ValueError(f"不支持的模型提供商: {provider}")
 
+    def generate_stream(
+        self,
+        prompt: str,
+        temperature: float = 0.8,
+        system_prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, str]]] = None,
+        **kwargs,
+    ):
+        """
+        流式生成文本（统一的调用接口）
+
+        Args:
+            prompt: 用户提示词
+            temperature: 温度参数
+            system_prompt: 系统提示词
+            messages: 对话历史（可选，用于多轮对话）
+            **kwargs: 其他参数
+
+        Yields:
+            生成的文本片段
+        """
+        provider = self.config.provider
+
+        if provider == ModelProvider.ANTHROPIC:
+            yield from self._stream_anthropic(
+                prompt, temperature, system_prompt, messages, **kwargs
+            )
+        elif provider in (
+            ModelProvider.OPENAI,
+            ModelProvider.MOONSHOT,
+            ModelProvider.DEEPSEEK,
+            ModelProvider.CUSTOM,
+        ):
+            yield from self._stream_openai_compatible(
+                prompt, temperature, system_prompt, messages, **kwargs
+            )
+        else:
+            yield f"[错误] 不支持的模型提供商: {provider}"
+
+    def _stream_anthropic(
+        self,
+        prompt: str,
+        temperature: float,
+        system_prompt: Optional[str],
+        messages: Optional[List[Dict]],
+        **kwargs,
+    ):
+        """流式调用 Anthropic Claude API"""
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=self.get_api_key())
+
+            if messages:
+                api_messages = messages
+            else:
+                api_messages = [{"role": "user", "content": prompt}]
+
+            with client.messages.stream(
+                model=self.config.name,
+                max_tokens=self.config.max_tokens,
+                temperature=temperature,
+                messages=api_messages,
+                system=system_prompt if system_prompt else "",
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except ImportError:
+            yield "[错误] 请安装 anthropic 包: pip install anthropic"
+        except Exception as e:
+            yield f"[错误] Claude API调用失败: {str(e)}"
+
+    def _stream_openai_compatible(
+        self,
+        prompt: str,
+        temperature: float,
+        system_prompt: Optional[str],
+        messages: Optional[List[Dict]],
+        **kwargs,
+    ):
+        """流式调用 OpenAI 兼容 API (OpenAI, Moonshot, DeepSeek, Custom)"""
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=self.get_api_key(), base_url=self.config.base_url)
+
+            api_messages = []
+            if system_prompt:
+                api_messages.append({"role": "system", "content": system_prompt})
+
+            if messages:
+                api_messages.extend(messages)
+            else:
+                api_messages.append({"role": "user", "content": prompt})
+
+            response = client.chat.completions.create(
+                model=self.config.name,
+                messages=api_messages,
+                max_tokens=self.config.max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except ImportError:
+            yield "[错误] 请安装 openai 包: pip install openai"
+        except Exception as e:
+            yield f"[错误] API调用失败: {str(e)}"
+
+    def chat(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.8,
+        system_prompt: Optional[str] = None,
+        **kwargs,
+    ) -> str:
+        """
+        多轮对话（统一的调用接口）
+
+        Args:
+            messages: 对话历史 [{"role": "user/assistant", "content": "..."}]
+            temperature: 温度参数
+            system_prompt: 系统提示词
+            **kwargs: 其他参数
+
+        Returns:
+            生成的文本
+        """
+        provider = self.config.provider
+
+        if provider == ModelProvider.ANTHROPIC:
+            return self._chat_anthropic(messages, temperature, system_prompt, **kwargs)
+        elif provider in (
+            ModelProvider.OPENAI,
+            ModelProvider.MOONSHOT,
+            ModelProvider.DEEPSEEK,
+            ModelProvider.CUSTOM,
+        ):
+            return self._chat_openai_compatible(
+                messages, temperature, system_prompt, **kwargs
+            )
+        else:
+            return f"[错误] 不支持的模型提供商: {provider}"
+
+    def _chat_anthropic(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        system_prompt: Optional[str],
+        **kwargs,
+    ) -> str:
+        """多轮对话 - Anthropic Claude"""
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=self.get_api_key())
+
+            response = client.messages.create(
+                model=self.config.name,
+                max_tokens=self.config.max_tokens,
+                temperature=temperature,
+                messages=messages,
+                system=system_prompt if system_prompt else "",
+            )
+
+            return response.content[0].text
+        except ImportError:
+            return f"[错误] 请安装 anthropic 包: pip install anthropic"
+        except Exception as e:
+            return f"[错误] Claude API调用失败: {str(e)}"
+
+    def _chat_openai_compatible(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        system_prompt: Optional[str],
+        **kwargs,
+    ) -> str:
+        """多轮对话 - OpenAI 兼容 API"""
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=self.get_api_key(), base_url=self.config.base_url)
+
+            api_messages = []
+            if system_prompt:
+                api_messages.append({"role": "system", "content": system_prompt})
+            api_messages.extend(messages)
+
+            response = client.chat.completions.create(
+                model=self.config.name,
+                messages=api_messages,
+                max_tokens=self.config.max_tokens,
+                temperature=temperature,
+            )
+
+            return response.choices[0].message.content
+        except ImportError:
+            return f"[错误] 请安装 openai 包: pip install openai"
+        except Exception as e:
+            return f"[错误] API调用失败: {str(e)}"
+
     def _call_anthropic(
         self, prompt: str, temperature: float, system_prompt: Optional[str], **kwargs
     ) -> str:
