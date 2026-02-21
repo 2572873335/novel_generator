@@ -23,6 +23,7 @@ Thumbs.db
 # Novel generation output (user data)
 novels/
 *.log
+logs/
 
 # Jupyter Notebook
 .ipynb_checkpoints
