@@ -47,7 +47,10 @@ class AgentManager:
         )
 
         # 导入设定追踪器
-        from consistency_tracker import ConsistencyTracker
+        try:
+            from .consistency_tracker import ConsistencyTracker
+        except ImportError:
+            from consistency_tracker import ConsistencyTracker
 
         self.tracker = ConsistencyTracker(project_dir)
 
