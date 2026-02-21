@@ -166,7 +166,26 @@ def save_api_key(key_name: str, key_value: str, env_path: Optional[str] = None) 
             f.write("# AI小说生成器配置文件\n")
             f.write("# 此文件包含敏感的API密钥，请勿提交到Git仓库\n\n")
 
-            # 按提供商分组写入
+            # 写入默认模型设置
+            model_settings = [
+                "DEFAULT_MODEL_ID",
+                "DEFAULT_TEMPERATURE",
+                "DEFAULT_MAX_TOKENS",
+                "CUSTOM_MODEL_NAME",
+                "CUSTOM_BASE_URL",
+                "CUSTOM_API_KEY_ENV",
+            ]
+            has_model_settings = any(k in config for k in model_settings)
+            if has_model_settings:
+                f.write("# ============================================\n")
+                f.write("# 模型设置\n")
+                f.write("# ============================================\n")
+                for key in model_settings:
+                    if key in config:
+                        f.write(f"{key}={config[key]}\n")
+                f.write("\n")
+
+            # 按提供商分组写入API密钥
             providers = {
                 "Anthropic Claude 系列": ["ANTHROPIC_API_KEY"],
                 "OpenAI GPT 系列": ["OPENAI_API_KEY"],
@@ -176,12 +195,13 @@ def save_api_key(key_name: str, key_value: str, env_path: Optional[str] = None) 
             }
 
             for provider, keys in providers.items():
-                f.write(f"\n# ============================================\n")
+                f.write(f"# ============================================\n")
                 f.write(f"# {provider}\n")
                 f.write(f"# ============================================\n")
                 for key in keys:
                     if key in config:
                         f.write(f"{key}={config[key]}\n")
+                f.write("\n")
 
         # 同时更新环境变量
         os.environ[key_name] = key_value
