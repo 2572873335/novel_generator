@@ -95,32 +95,50 @@ class ModelManager:
             description="GPT-3.5 Turbo - 快速经济",
         ),
         # Moonshot Kimi 系列
-        "kimi-v1-8k": ModelConfig(
+        "kimi-k2.5": ModelConfig(
+            name="kimi-k2.5",
+            display_name="Kimi K2.5",
+            provider=ModelProvider.MOONSHOT,
+            api_key_env="MOONSHOT_API_KEY",
+            base_url="https://api.moonshot.cn/v1",
+            max_tokens=4000,
+            description="Kimi K2.5 - 最新多模态模型，支持图像视频",
+        ),
+        "kimi-for-code": ModelConfig(
+            name="kimi-for-code",
+            display_name="Kimi for Coding",
+            provider=ModelProvider.MOONSHOT,
+            api_key_env="MOONSHOT_API_KEY",
+            base_url="https://api.moonshot.cn/v1",
+            max_tokens=4000,
+            description="Kimi for Coding - 专为编程优化，代码能力强",
+        ),
+        "moonshot-v1-8k": ModelConfig(
             name="moonshot-v1-8k",
-            display_name="Kimi V1 8K",
+            display_name="Moonshot V1 8K",
             provider=ModelProvider.MOONSHOT,
             api_key_env="MOONSHOT_API_KEY",
             base_url="https://api.moonshot.cn/v1",
             max_tokens=4000,
-            description="Kimi V1 8K - Moonshot基础模型，性价比高",
+            description="Moonshot V1 8K - 基础模型，性价比高",
         ),
-        "kimi-v1-32k": ModelConfig(
+        "moonshot-v1-32k": ModelConfig(
             name="moonshot-v1-32k",
-            display_name="Kimi V1 32K",
+            display_name="Moonshot V1 32K",
             provider=ModelProvider.MOONSHOT,
             api_key_env="MOONSHOT_API_KEY",
             base_url="https://api.moonshot.cn/v1",
             max_tokens=4000,
-            description="Kimi V1 32K - 长文本能力强",
+            description="Moonshot V1 32K - 长文本能力强",
         ),
-        "kimi-v1-128k": ModelConfig(
+        "moonshot-v1-128k": ModelConfig(
             name="moonshot-v1-128k",
-            display_name="Kimi V1 128K",
+            display_name="Moonshot V1 128K",
             provider=ModelProvider.MOONSHOT,
             api_key_env="MOONSHOT_API_KEY",
             base_url="https://api.moonshot.cn/v1",
             max_tokens=4000,
-            description="Kimi V1 128K - 超长文本处理能力",
+            description="Moonshot V1 128K - 超长文本处理能力",
         ),
         # DeepSeek 系列
         "deepseek-v3": ModelConfig(
