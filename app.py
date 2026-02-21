@@ -26,6 +26,7 @@ try:
         load_env_file,
         get_api_key,
     )
+    from core.log_manager import get_logger, init_logger
     from config.settings import NovelConfig, DEFAULT_CONFIG
 except ImportError:
     # 如果作为包导入
@@ -39,6 +40,7 @@ except ImportError:
         load_env_file,
         get_api_key,
     )
+    from novel_generator.core.log_manager import get_logger, init_logger
     from novel_generator.config.settings import NovelConfig, DEFAULT_CONFIG
 
 # 页面配置
@@ -170,6 +172,7 @@ def render_sidebar():
                 "📊 进度监控",
                 "📖 查看章节",
                 "🤖 智能体管理",
+                "📋 日志查看",
                 "⚙️ 系统设置",
             ],
             label_visibility="collapsed",
@@ -195,6 +198,18 @@ def render_sidebar():
                 ]
         else:
             st.info("暂无项目")
+
+        st.divider()
+
+        # API密钥状态
+        st.subheader("🔑 API密钥状态")
+        api_keys_status = get_available_api_keys()
+
+        for name, is_configured in api_keys_status.items():
+            if is_configured:
+                st.success(f"✓ {name}")
+            else:
+                st.error(f"✗ {name}")
 
         st.divider()
 
@@ -334,8 +349,11 @@ def render_create_project():
         submitted = st.form_submit_button("🚀 开始生成", use_container_width=True)
 
         if submitted:
+            logger = get_logger()
+
             if not title:
                 st.error("❌ 请输入小说标题！")
+                logger.warning("[创建项目] 未输入小说标题")
             else:
                 config = {
                     "title": title,
@@ -350,6 +368,8 @@ def render_create_project():
                     "max_revision_attempts": max_revision_attempts,
                 }
 
+                logger.log_project_creation(title, config)
+
                 with st.spinner("正在初始化项目..."):
                     try:
                         result = create_novel(config)
@@ -358,10 +378,17 @@ def render_create_project():
                                 f"✅ 项目创建成功！\n\n项目位置: {result['project_dir']}"
                             )
                             st.balloons()
+                            logger.info(
+                                f"[创建项目] 成功 - 项目位置: {result['project_dir']}"
+                            )
                         else:
                             st.error(f"❌ 创建失败: {result.get('error', '未知错误')}")
+                            logger.error(
+                                f"[创建项目] 失败 - {result.get('error', '未知错误')}"
+                            )
                     except Exception as e:
                         st.error(f"❌ 发生错误: {str(e)}")
+                        logger.log_error_with_traceback(e, "创建项目")
 
 
 def render_writing_control():
@@ -760,6 +787,9 @@ def render_settings():
 
     # 保存所有设置
     if st.button("💾 保存设置", use_container_width=True):
+        logger = get_logger()
+        logger.info(f"[设置] 开始保存配置 - 模型: {selected_model_id}")
+
         success_count = 0
         error_messages = []
 
@@ -768,8 +798,10 @@ def render_settings():
             if save_api_key(api_key_env, api_key):
                 success_count += 1
                 st.success(f"✅ {api_key_env} 已保存到 .env 文件")
+                logger.log_api_key_save(api_key_env, True)
             else:
                 error_messages.append(f"保存 {api_key_env} 失败")
+                logger.log_api_key_save(api_key_env, False)
 
         # 保存自定义模型配置
         if selected_model_id == "custom":
@@ -783,9 +815,13 @@ def render_settings():
                 "CUSTOM_API_KEY_ENV", custom_api_key_env
             ):
                 success_count += 1
+            logger.info(f"[设置] 保存自定义模型配置: {custom_model_name}")
         else:
             # 保存默认模型设置
             save_api_key("DEFAULT_MODEL_ID", selected_model_id)
+            logger.log_model_selection(
+                selected_model_id, selected_provider, temperature, max_tokens
+            )
 
         # 保存温度和token设置
         save_api_key("DEFAULT_TEMPERATURE", str(temperature))
@@ -794,10 +830,79 @@ def render_settings():
         if success_count > 0 and not error_messages:
             st.success(f"✅ 成功保存 {success_count} 项设置！")
             st.info("📄 配置已保存到项目根目录的 .env 文件")
+            logger.info(f"[设置] 成功保存 {success_count} 项配置")
         elif error_messages:
             st.error("❌ 部分设置保存失败：" + "; ".join(error_messages))
+            logger.error(f"[设置] 部分保存失败: {'; '.join(error_messages)}")
         else:
             st.info("💡 没有需要保存的更改")
+
+
+def render_log_viewer():
+    """渲染日志查看页面"""
+    st.header("📋 日志查看")
+
+    logger = get_logger()
+
+    # 获取所有日志文件
+    log_files = logger.get_log_files()
+
+    if not log_files:
+        st.warning("暂无日志文件")
+        return
+
+    # 选择日志文件
+    log_file_names = [f.name for f in log_files]
+    selected_log = st.selectbox("选择日志文件", log_file_names)
+
+    if selected_log:
+        log_path = logger.log_dir / selected_log
+
+        # 读取日志内容
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                log_content = f.read()
+
+            # 显示日志行数
+            lines = log_content.split("\n")
+            st.info(f"📄 共 {len(lines)} 行日志")
+
+            # 过滤选项
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                show_info = st.checkbox("显示 INFO", value=True)
+            with col2:
+                show_warning = st.checkbox("显示 WARNING", value=True)
+            with col3:
+                show_error = st.checkbox("显示 ERROR", value=True)
+
+            # 过滤日志
+            filtered_lines = []
+            for line in lines:
+                if not line.strip():
+                    continue
+                if show_info and "[INFO]" in line:
+                    filtered_lines.append(line)
+                elif show_warning and "[WARNING]" in line:
+                    filtered_lines.append(line)
+                elif show_error and "[ERROR]" in line:
+                    filtered_lines.append(line)
+                elif "[CRITICAL]" in line or "[DEBUG]" in line:
+                    filtered_lines.append(line)
+
+            # 显示日志内容
+            st.code("\n".join(filtered_lines), language="text")
+
+            # 下载按钮
+            st.download_button(
+                label="📥 下载日志文件",
+                data=log_content,
+                file_name=selected_log,
+                mime="text/plain",
+            )
+
+        except Exception as e:
+            st.error(f"读取日志文件失败: {e}")
 
 
 def render_agent_management():
@@ -933,8 +1038,17 @@ def render_agent_management():
 
 def main():
     """主函数"""
+    # 初始化日志管理器
+    logger = init_logger()
+    logger.info("=" * 60)
+    logger.info("AI小说生成器启动")
+    logger.info("=" * 60)
+
     init_session_state()
     render_header()
+
+    # 记录页面访问
+    logger.info("用户访问主页面")
 
     # 检查是否有页面切换请求
     if "page" in st.session_state:
@@ -950,6 +1064,8 @@ def main():
         page = current_page
 
     # 根据选择的页面渲染内容
+    logger.info(f"[页面访问] {page}")
+
     if page == "🏠 首页":
         render_home()
     elif page == "➕ 创建新项目":
@@ -962,6 +1078,8 @@ def main():
         render_chapter_view()
     elif page == "🤖 智能体管理":
         render_agent_management()
+    elif page == "📋 日志查看":
+        render_log_viewer()
     elif page == "⚙️ 系统设置":
         render_settings()
 
