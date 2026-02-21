@@ -76,10 +76,312 @@ class ConsistencyChecker:
     def _check_name_consistency(
         self, text: str, profiles: Dict[str, Any]
     ) -> List[Dict]:
-        """检查姓名一致性 - 硬编码规则"""
         issues = []
 
+        COMPOUND_SURNAMES = [
+            "欧阳",
+            "司马",
+            "上官",
+            "慕容",
+            "东方",
+            "独孤",
+            "皇甫",
+            "公孙",
+            "令狐",
+            "夏侯",
+            "诸葛",
+            "南宫",
+            "北冥",
+            "轩辕",
+            "端木",
+        ]
+        EXCLUDED_SUFFIXES = [
+            "一",
+            "二",
+            "三",
+            "四",
+            "五",
+            "六",
+            "七",
+            "八",
+            "九",
+            "十",
+            "之",
+            "的",
+            "与",
+            "和",
+            "或",
+            "及",
+            "在",
+            "有",
+            "无",
+            "不",
+            "是",
+            "为",
+            "以",
+            "于",
+            "从",
+            "到",
+            "向",
+            "往",
+            "被",
+            "把",
+            "让",
+            "给",
+            "同",
+            "跟",
+            "比",
+            "像",
+            "按",
+            "照",
+            "按",
+            "据",
+            "依",
+            "因",
+            "由",
+            "为",
+            "所",
+            "而",
+            "且",
+            "但",
+            "却",
+            "只",
+            "才",
+            "就",
+            "也",
+            "还",
+            "又",
+            "再",
+            "已",
+            "曾",
+            "将",
+            "要",
+            "能",
+            "会",
+            "可",
+            "应",
+            "该",
+            "须",
+            "必",
+            "敢",
+            "肯",
+            "愿",
+            "想",
+            "要",
+            "当",
+            "应",
+            "须",
+            "得",
+            "着",
+            "了",
+            "过",
+            "起",
+            "来",
+            "去",
+            "进",
+            "出",
+            "上",
+            "下",
+            "前",
+            "后",
+            "左",
+            "右",
+            "里",
+            "外",
+            "中",
+            "内",
+            "间",
+            "旁",
+            "边",
+            "处",
+            "地",
+            "时",
+            "人",
+            "事",
+            "物",
+            "情",
+            "理",
+            "法",
+            "道",
+            "心",
+            "意",
+            "性",
+            "命",
+            "身",
+            "手",
+            "眼",
+            "口",
+            "头",
+            "面",
+            "身",
+            "体",
+            "力",
+            "气",
+            "声",
+            "光",
+            "影",
+            "色",
+            "形",
+            "状",
+            "样",
+            "般",
+            "种",
+            "类",
+            "些",
+            "个",
+            "次",
+            "回",
+            "遍",
+            "番",
+            "趟",
+            "场",
+            "局",
+            "段",
+            "节",
+            "章",
+            "篇",
+            "首",
+            "句",
+            "字",
+            "词",
+            "语",
+            "文",
+            "书",
+            "信",
+            "件",
+            "份",
+            "本",
+            "册",
+            "页",
+            "行",
+            "列",
+            "排",
+            "层",
+            "级",
+            "阶",
+            "步",
+            "尺",
+            "寸",
+            "分",
+            "秒",
+            "年",
+            "月",
+            "日",
+            "时",
+            "刻",
+            "钟",
+            "点",
+            "期",
+            "季",
+            "周",
+            "天",
+            "夜",
+            "晨",
+            "昏",
+            "暮",
+            "晚",
+            "早",
+            "午",
+            "晚",
+        ]
+        COMMON_WORDS = [
+            "一起",
+            "一字",
+            "一句",
+            "一声",
+            "一下",
+            "一直",
+            "一样",
+            "一般",
+            "一切",
+            "一时",
+            "有些",
+            "有点",
+            "有种",
+            "有个",
+            "所谓",
+            "自己",
+            "他人",
+            "此时",
+            "此刻",
+            "当日",
+            "当年",
+            "原本",
+            "本来",
+            "忽然",
+            "突然",
+            "竟然",
+            "居然",
+            "果然",
+            "仍然",
+            "依然",
+            "当然",
+            "虽然",
+            "即使",
+            "如果",
+            "只要",
+            "无论",
+            "不管",
+            "尽管",
+            "哪怕",
+            "宁可",
+            "与其",
+            "不如",
+            "而且",
+            "并且",
+            "或者",
+            "还是",
+            "不是",
+            "没有",
+            "不会",
+            "不能",
+            "不要",
+            "不必",
+            "不用",
+            "难以",
+            "无法",
+            "未曾",
+            "早已",
+            "已经",
+            "正在",
+            "将要",
+            "即将",
+            "终于",
+            "最后",
+            "首先",
+            "起初",
+            "最初",
+            "开始",
+            "结束",
+            "结果",
+            "原来",
+            "其实",
+            "实际上",
+            "事实上",
+            "确实",
+            "的确",
+            "真的",
+            "真是",
+            "正好",
+            "恰好",
+            "刚好",
+            "只是",
+            "就是",
+            "还是",
+            "也是",
+            "都是",
+            "也是",
+            "全是",
+            "倒是",
+            "反是",
+            "总是",
+            "老是",
+            "常是",
+            "总是",
+        ]
+
         known_names = {}
+        nicknames = {}
         char_file = self.project_dir / "characters.json"
         if char_file.exists():
             try:
@@ -96,34 +398,99 @@ class ConsistencyChecker:
                             role = char.get("role", "")
                             if name:
                                 known_names[name] = role
+                                surname = self._extract_surname(name, COMPOUND_SURNAMES)
+                                if surname and surname != name:
+                                    nicknames[f"老{surname[-1]}"] = name
+                                    nicknames[f"小{surname[-1]}"] = name
             except:
                 pass
 
+        all_known = set(known_names.keys()) | set(nicknames.keys())
+
         for name in known_names:
-            surname = name[0] if len(name) >= 1 else ""
-            given_name = name[1:] if len(name) > 1 else ""
+            surname = self._extract_surname(name, COMPOUND_SURNAMES)
+            given_name = name[len(surname) :] if len(name) > len(surname) else ""
 
-            pattern = rf"{surname}[\u4e00-\u9fa5]{{1,3}}"
-            matches = re.findall(pattern, text)
+            for i in range(len(surname), len(surname) + 3):
+                if i >= len(name):
+                    break
+                pattern = (
+                    rf"{surname}[^\s{{}}()（）「」『』【】《》<>\"''"
+                    " ]{{0,{i-len(surname)+1}}}"
+                )
 
-            variants = [m for m in matches if m != name and len(m) >= 2]
+            full_name_pattern = rf"\b{name}\b|[^\u4e00-\u9fa5]{name}[^\u4e00-\u9fa5]"
+            if re.search(full_name_pattern, text):
+                continue
 
-            if variants:
-                unique_variants = list(set(variants))[:3]
+            variant_pattern = rf"{re.escape(surname)}[\u4e00-\u9fa5]{{1,{len(name) - len(surname) + 1}}}"
+            matches = re.findall(variant_pattern, text)
+
+            true_variants = []
+            for match in matches:
+                if match == name:
+                    continue
+                if match in all_known:
+                    continue
+                if len(match) < 2:
+                    continue
+
+                is_false_positive = False
+
+                for word in COMMON_WORDS:
+                    if match in word or word.startswith(match):
+                        context = self._find_context(text, match, 10)
+                        if word in context:
+                            is_false_positive = True
+                            break
+
+                if not is_false_positive:
+                    for suffix in EXCLUDED_SUFFIXES:
+                        if match.endswith(suffix) and len(match) > len(surname) + 1:
+                            context = self._find_context(text, match, 5)
+                            if context and not any(
+                                c in context for c in ["，", "。", "！", "？", "、"]
+                            ):
+                                is_false_positive = True
+                                break
+
+                if not is_false_positive:
+                    name_pattern = rf"{re.escape(name)}"
+                    if re.search(name_pattern, text):
+                        name_count = len(re.findall(name_pattern, text))
+                        variant_count = len(re.findall(re.escape(match), text))
+                        if variant_count > name_count * 2:
+                            true_variants.append(match)
+
+            if true_variants:
+                unique_variants = list(set(true_variants))[:2]
                 for variant in unique_variants:
-                    if variant not in known_names:
-                        issues.append(
-                            {
-                                "type": "name_inconsistency",
-                                "severity": "critical",
-                                "message": f"姓名不一致：'{name}' 在文中出现变体 '{variant}'",
-                                "original_name": name,
-                                "variant": variant,
-                                "suggestion": f"统一使用 '{name}'",
-                            }
-                        )
+                    issues.append(
+                        {
+                            "type": "name_inconsistency",
+                            "severity": "warning",
+                            "message": f"疑似姓名变体：'{name}' → '{variant}'（请人工确认）",
+                            "original_name": name,
+                            "variant": variant,
+                            "suggestion": f"检查'{variant}'是否为'{name}'的误写",
+                        }
+                    )
 
         return issues
+
+    def _extract_surname(self, name: str, compound_surnames: List[str]) -> str:
+        for cs in compound_surnames:
+            if name.startswith(cs):
+                return cs
+        return name[0] if name else ""
+
+    def _find_context(self, text: str, match: str, radius: int) -> str:
+        idx = text.find(match)
+        if idx == -1:
+            return ""
+        start = max(0, idx - radius)
+        end = min(len(text), idx + len(match) + radius)
+        return text[start:end]
 
     def _check_combat_consistency(self, text: str) -> List[Dict]:
         """检查战力一致性 - 硬编码规则"""
@@ -215,12 +582,14 @@ class ConsistencyChecker:
         return issues
 
     def _load_chapters(self, chapter_numbers: List[int]) -> Dict[int, str]:
-        """加载指定章节的内容"""
         chapters = {}
         for num in chapter_numbers:
-            chapter_file = self.chapters_dir / f"chapter_{num:03d}.txt"
-            if chapter_file.exists():
-                chapters[num] = chapter_file.read_text(encoding="utf-8")
+            chapter_file_md = self.chapters_dir / f"chapter-{num:03d}.md"
+            chapter_file_txt = self.chapters_dir / f"chapter_{num:03d}.txt"
+            if chapter_file_md.exists():
+                chapters[num] = chapter_file_md.read_text(encoding="utf-8")
+            elif chapter_file_txt.exists():
+                chapters[num] = chapter_file_txt.read_text(encoding="utf-8")
         return chapters
 
     def _load_character_profiles(self) -> Dict[str, Any]:

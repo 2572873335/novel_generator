@@ -184,8 +184,16 @@ class WriterAgent:
         characters_file = os.path.join(self.project_dir, "characters.json")
         if os.path.exists(characters_file):
             with open(characters_file, "r", encoding="utf-8") as f:
-                context["characters"] = json.load(f)
-            char_count = len(context["characters"].get("characters", []))
+                chars_data = json.load(f)
+            if isinstance(chars_data, list):
+                context["characters"] = {"characters": chars_data}
+                char_count = len(chars_data)
+            elif isinstance(chars_data, dict):
+                context["characters"] = chars_data
+                char_count = len(chars_data.get("characters", []))
+            else:
+                context["characters"] = {"characters": []}
+                char_count = 0
             print(f"   Characters loaded ({char_count} chars)")
 
         # 加载章节列表
