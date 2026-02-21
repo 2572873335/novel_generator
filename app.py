@@ -204,33 +204,92 @@ def render_sidebar():
 
         st.divider()
 
-        # 当前使用的AI模型
-        st.subheader("🤖 当前AI模型")
+        # AI模型选择和切换
+        st.subheader("🤖 AI模型")
         config = load_env_file()
         current_model_id = config.get("DEFAULT_MODEL_ID", "claude-3-5-sonnet")
 
         model_manager = ModelManager()
-        model_info = model_manager.AVAILABLE_MODELS.get(current_model_id)
 
+        # 构建模型选项列表
+        model_options = []
+        model_ids = []
+
+        # 按提供商分组
+        providers = {}
+        for model_id, model in model_manager.AVAILABLE_MODELS.items():
+            provider = model.provider.value
+            if provider not in providers:
+                providers[provider] = []
+            providers[provider].append((model_id, model.display_name))
+
+        # 构建选项列表（带分组）
+        provider_names = {
+            "anthropic": "🅰️ Anthropic",
+            "openai": "🅾️ OpenAI",
+            "moonshot": "🌙 Moonshot",
+            "deepseek": "🔮 DeepSeek",
+        }
+
+        for provider, models in providers.items():
+            provider_label = provider_names.get(provider, provider)
+            for model_id, display_name in models:
+                model_options.append(f"{provider_label} - {display_name}")
+                model_ids.append(model_id)
+
+        # 添加自定义模型选项
+        model_options.append("⚙️ 自定义模型")
+        model_ids.append("custom")
+
+        # 找到当前模型的索引
+        current_index = (
+            model_ids.index(current_model_id) if current_model_id in model_ids else 0
+        )
+
+        # 显示模型选择器
+        selected_model_idx = st.selectbox(
+            "选择模型",
+            range(len(model_options)),
+            index=current_index,
+            format_func=lambda x: model_options[x],
+            key="sidebar_model_select",
+        )
+
+        selected_model_id = model_ids[selected_model_idx]
+
+        # 如果选择了不同的模型，显示保存按钮
+        if selected_model_id != current_model_id:
+            if st.button(
+                "💾 应用更改", use_container_width=True, key="sidebar_apply_model"
+            ):
+                if save_api_key("DEFAULT_MODEL_ID", selected_model_id):
+                    st.success("✅ 模型已切换！")
+                    st.info("请刷新页面使更改生效")
+                    logger = get_logger()
+                    logger.info(f"[侧边栏] 切换模型: {selected_model_id}")
+                else:
+                    st.error("❌ 保存失败")
+
+        # 显示当前模型信息
+        model_info = model_manager.AVAILABLE_MODELS.get(current_model_id)
         if model_info:
-            st.info(f"**{model_info.display_name}**\n\n{model_info.description}")
+            st.caption(f"当前: {model_info.display_name}")
         elif current_model_id == "custom":
             custom_name = config.get("CUSTOM_MODEL_NAME", "自定义模型")
-            st.info(f"**⚙️ {custom_name}**\n\n自定义模型")
-        else:
-            st.warning(f"当前模型: {current_model_id}")
+            st.caption(f"当前: ⚙️ {custom_name}")
 
         # 检查API密钥是否配置
-        api_key_env = (
-            model_info.api_key_env
-            if model_info
-            else config.get("CUSTOM_API_KEY_ENV", "CUSTOM_API_KEY")
-        )
+        if model_info:
+            api_key_env = model_info.api_key_env
+        else:
+            api_key_env = config.get("CUSTOM_API_KEY_ENV", "CUSTOM_API_KEY")
+
         current_key = get_api_key(api_key_env)
         if current_key:
-            st.success(f"✓ API已配置")
+            st.success(f"✓ API已配置", icon="🔑")
         else:
-            st.error(f"✗ API未配置")
+            st.error(f"✗ {api_key_env} 未配置", icon="⚠️")
+            st.caption("请在系统设置中配置API密钥")
 
         st.divider()
 
