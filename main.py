@@ -28,7 +28,7 @@ def load_config(config_file: str) -> dict:
 def interactive_mode():
     """交互式模式"""
     print("\n" + "="*60)
-    print("📚 全自动AI小说生成系统 - 交互模式")
+    print("[BOOK] 全自动AI小说生成系统 - 交互模式")
     print("="*60 + "\n")
     
     # 收集用户输入
@@ -88,10 +88,10 @@ def interactive_mode():
     result = create_novel(config)
     
     if result['success']:
-        print(f"\n✅ 小说生成成功！")
+        print(f"\n[OK] 小说生成成功！")
         print(f"项目位置: {result['project_dir']}")
     else:
-        print(f"\n❌ 生成失败")
+        print(f"\n[FAIL] 生成失败")
 
 
 def main():
@@ -141,7 +141,7 @@ def main():
         if progress:
             print(pm.generate_progress_report())
         else:
-            print(f"❌ 未找到项目: {args.progress}")
+            print(f"[FAIL] 未找到项目: {args.progress}")
         return
     
     # 交互式模式
@@ -152,14 +152,14 @@ def main():
     # 配置文件模式
     if args.config:
         if not os.path.exists(args.config):
-            print(f"❌ 配置文件不存在: {args.config}")
+            print(f"[FAIL] 配置文件不存在: {args.config}")
             return
         
         config = load_config(args.config)
         result = create_novel(config)
         
         if result['success']:
-            print(f"\n✅ 小说生成成功！")
+            print(f"\n[OK] 小说生成成功！")
             print(f"项目位置: {result['project_dir']}")
         return
     
@@ -176,7 +176,7 @@ def main():
         result = create_novel(config)
         
         if result['success']:
-            print(f"\n✅ 小说生成成功！")
+            print(f"\n[OK] 小说生成成功！")
             print(f"项目位置: {result['project_dir']}")
         return
     

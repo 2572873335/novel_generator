@@ -6,6 +6,7 @@ Initializer Agent
 
 import json
 import os
+import re
 from typing import Dict, List, Any, Optional
 
 
@@ -26,6 +27,54 @@ class InitializerAgent:
     def __init__(self, llm_client, project_dir: str):
         self.llm = llm_client
         self.project_dir = project_dir
+
+    def _extract_json(self, text: str) -> Any:
+        """从文本中提取JSON，支持多种格式"""
+        if not isinstance(text, str):
+            return text
+
+        text = text.strip()
+
+        # 尝试直接解析
+        try:
+            return json.loads(text)
+        except:
+            pass
+
+        # 尝试提取代码块中的JSON
+        patterns = [
+            r"```json\s*([\s\S]*?)\s*```",
+            r"```\s*([\s\S]*?)\s*```",
+            r"\[[\s\S]*\]",
+            r"\{[\s\S]*\}",
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                try:
+                    return json.loads(match)
+                except:
+                    continue
+
+        # 尝试找到第一个 [ 或 { 开始的内容
+        for start_char, end_char in [("[", "]"), ("{", "}")]:
+            start_idx = text.find(start_char)
+            if start_idx != -1:
+                # 找到匹配的结束位置
+                depth = 0
+                for i, char in enumerate(text[start_idx:], start_idx):
+                    if char == start_char:
+                        depth += 1
+                    elif char == end_char:
+                        depth -= 1
+                        if depth == 0:
+                            try:
+                                return json.loads(text[start_idx : i + 1])
+                            except:
+                                break
+
+        raise ValueError("无法从响应中提取有效的JSON")
 
     def initialize_project(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -134,8 +183,15 @@ class InitializerAgent:
 使用Markdown格式输出。"""
 
         # 这里调用LLM生成大纲
-        # 实际实现中应该调用API
-        outline = self._mock_llm_call(prompt, "outline")
+        try:
+            outline = self.llm.generate(
+                prompt=prompt,
+                temperature=0.8,
+                system_prompt="你是一位专业的小说策划师，擅长构建引人入胜的故事大纲。",
+            )
+        except Exception as e:
+            print(f"   ❌ 大纲生成失败: {e}")
+            outline = f"# {config.get('title', '未命名')} 大纲\n\n## 故事梗概\n\n等待AI生成...\n\n## 章节规划\n\n1. 第一章\n2. 第二章\n"
         return outline
 
     def _generate_characters(
@@ -171,13 +227,23 @@ class InitializerAgent:
 
 请以JSON数组格式输出。"""
 
-        characters = self._mock_llm_call(prompt, "characters")
-        # 解析JSON
+        # 调用LLM生成角色
         try:
-            if isinstance(characters, str):
-                characters = json.loads(characters)
-        except:
-            # 如果解析失败，返回默认角色
+            characters_str = self.llm.generate(
+                prompt=prompt,
+                temperature=0.8,
+                system_prompt="你是一位专业的人物设计师，擅长创造立体生动的角色。请直接以JSON数组格式输出角色设定，不要添加任何其他文字。",
+            )
+            # 使用改进的JSON提取
+            characters = self._extract_json(characters_str)
+            if not isinstance(characters, list):
+                characters = (
+                    [characters]
+                    if isinstance(characters, dict)
+                    else self._get_default_characters()
+                )
+        except Exception as e:
+            print(f"   ❌ 角色生成失败: {e}")
             characters = self._get_default_characters()
 
         return characters
@@ -220,11 +286,19 @@ class InitializerAgent:
 
 请以JSON数组格式输出。"""
 
-        chapters = self._mock_llm_call(prompt, "chapters")
+        # 调用LLM生成章节列表
         try:
-            if isinstance(chapters, str):
-                chapters = json.loads(chapters)
-        except:
+            chapters_str = self.llm.generate(
+                prompt=prompt,
+                temperature=0.8,
+                system_prompt="你是一位专业的剧情策划师，擅长设计引人入胜的章节结构。请直接以JSON数组格式输出，不要添加任何其他文字。",
+            )
+            # 使用改进的JSON提取
+            chapters = self._extract_json(chapters_str)
+            if not isinstance(chapters, list):
+                chapters = self._get_default_chapters(config.get("target_chapters", 20))
+        except Exception as e:
+            print(f"   ❌ 章节列表生成失败: {e}")
             chapters = self._get_default_chapters(config.get("target_chapters", 20))
 
         return chapters

@@ -34,7 +34,7 @@ def load_env_file(env_path: Optional[str] = None) -> Dict[str, str]:
         # 尝试查找 .env.example
         example_path = env_path.parent / ".env.example"
         if example_path.exists():
-            print(f"⚠️  未找到 {env_path}，请复制 .env.example 为 .env 并配置API密钥")
+            print(f"[WARN]️  未找到 {env_path}，请复制 .env.example 为 .env 并配置API密钥")
         return config
 
     # 读取.env文件
@@ -62,10 +62,10 @@ def load_env_file(env_path: Optional[str] = None) -> Dict[str, str]:
                     # 同时设置到环境变量
                     os.environ[key] = value
 
-        print(f"✅ 已加载配置文件: {env_path}")
+        print(f"[OK] 已加载配置文件: {env_path}")
 
     except Exception as e:
-        print(f"❌ 加载配置文件失败: {e}")
+        print(f"[FAIL] 加载配置文件失败: {e}")
 
     return config
 
@@ -206,11 +206,11 @@ def save_api_key(key_name: str, key_value: str, env_path: Optional[str] = None) 
         # 同时更新环境变量
         os.environ[key_name] = key_value
 
-        print(f"✅ 已保存 {key_name} 到 {env_path}")
+        print(f"[OK] 已保存 {key_name} 到 {env_path}")
         return True
 
     except Exception as e:
-        print(f"❌ 保存API密钥失败: {e}")
+        print(f"[FAIL] 保存API密钥失败: {e}")
         return False
 
 

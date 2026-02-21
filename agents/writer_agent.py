@@ -276,7 +276,15 @@ class WriterAgent:
 请直接输出章节内容，不要添加额外说明。"""
 
         # 调用LLM生成内容
-        content = self._mock_llm_write(prompt, chapter_info)
+        try:
+            content = self.llm.generate(
+                prompt=prompt,
+                temperature=0.85,
+                system_prompt="你是一位专业的小说作家，擅长创作情节紧凑、人物立体、文字生动的小说。你的作品注重细节描写，对话自然，能够吸引读者持续阅读。",
+            )
+        except Exception as e:
+            print(f"   ❌ LLM调用失败: {e}")
+            content = f"# 第{chapter_number}章\n\n[错误: AI生成失败 - {str(e)}]"
 
         return content
 

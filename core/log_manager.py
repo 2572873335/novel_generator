@@ -120,7 +120,7 @@ class LogManager:
             user: 操作用户
             success: 是否成功
         """
-        status = "✓ 成功" if success else "✗ 失败"
+        status = "[OK] 成功" if success else "[FAIL] 失败"
         message = f"[操作] {operation} | {status} | 用户: {user}"
         if details:
             message += f" | 详情: {details}"
