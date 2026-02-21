@@ -95,23 +95,32 @@ class ModelManager:
             description="GPT-3.5 Turbo - 快速经济",
         ),
         # Moonshot Kimi 系列
-        "kimi-2.5": ModelConfig(
-            name="kimi-k2.5",
-            display_name="Kimi 2.5",
+        "kimi-v1-8k": ModelConfig(
+            name="moonshot-v1-8k",
+            display_name="Kimi V1 8K",
             provider=ModelProvider.MOONSHOT,
             api_key_env="MOONSHOT_API_KEY",
             base_url="https://api.moonshot.cn/v1",
             max_tokens=4000,
-            description="Kimi 2.5 - Moonshot最新模型，长文本能力强",
+            description="Kimi V1 8K - Moonshot基础模型，性价比高",
         ),
-        "kimi-1.5": ModelConfig(
-            name="kimi-moonshot-v1-8k",
-            display_name="Kimi 1.5",
+        "kimi-v1-32k": ModelConfig(
+            name="moonshot-v1-32k",
+            display_name="Kimi V1 32K",
             provider=ModelProvider.MOONSHOT,
             api_key_env="MOONSHOT_API_KEY",
             base_url="https://api.moonshot.cn/v1",
             max_tokens=4000,
-            description="Kimi 1.5 - 性价比高",
+            description="Kimi V1 32K - 长文本能力强",
+        ),
+        "kimi-v1-128k": ModelConfig(
+            name="moonshot-v1-128k",
+            display_name="Kimi V1 128K",
+            provider=ModelProvider.MOONSHOT,
+            api_key_env="MOONSHOT_API_KEY",
+            base_url="https://api.moonshot.cn/v1",
+            max_tokens=4000,
+            description="Kimi V1 128K - 超长文本处理能力",
         ),
         # DeepSeek 系列
         "deepseek-v3": ModelConfig(
