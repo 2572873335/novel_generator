@@ -158,23 +158,36 @@ class NovelGenerator:
             self.llm_client = MockLLMClient()
 
     def _initialize_project(self):
-        """初始化项目"""
+        """初始化项目 - 使用完整智能体工作流"""
         print("📦 阶段1: 项目初始化\n")
 
-        # 延迟导入以避免循环依赖
         import sys
 
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-        from agents.initializer_agent import InitializerAgent
+        sys.path.insert(0, os.path.dirname(__file__))
 
-        # 初始化代理
-        self.initializer = InitializerAgent(self.llm_client, self.project_dir)
+        # 使用新的 AgentManager 运行完整工作流
+        from agent_manager import AgentManager
 
-        # 执行初始化
-        result = self.initializer.initialize_project(self.config)
+        self.agent_manager = AgentManager(self.llm_client, self.project_dir)
 
-        print(f"\n✓ 项目初始化完成")
-        print(f"  创建文件: {len(result['files_created'])}个")
+        print("正在协调专业智能体构建小说世界...")
+        print("  1. WorldBuilder - 世界观构建")
+        print("  2. GeopoliticsExpert - 地缘政治")
+        print("  3. SocietyExpert - 社会结构")
+        print("  4. CultivationDesigner - 能力体系")
+        print("  5. CharacterDesigner - 角色设计")
+        print("  6. PlotArchitect - 剧情架构")
+        print("  7. OutlineArchitect - 大纲设计")
+        print("  8. ChapterArchitect - 章纲设计")
+        print()
+
+        result = self.agent_manager.run_full_workflow(self.config)
+
+        if result["success"]:
+            print(f"\n✓ 项目初始化完成")
+            print(f"  Tracker Report 已生成")
+        else:
+            print(f"\n❌ 项目初始化失败")
 
         # 加载到管理器
         self.chapter_manager.load_chapters()

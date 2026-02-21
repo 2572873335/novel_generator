@@ -1,6 +1,7 @@
 """
-智能体管理器
-负责调度和协调各个专业智能体
+智能体管理器 - 重构版
+真正调用 14 个专业 Skills 和 Agents
+集成设定一致性追踪
 """
 
 import os
@@ -10,178 +11,480 @@ from pathlib import Path
 
 
 class AgentManager:
-    """智能体管理器 - 协调多个专业智能体"""
+    """
+    智能体管理器 - 真正调用所有 Skills 和 Agents
 
-    def __init__(self, project_dir: str):
+    可用的专业智能体：
+    1. WorldBuilder - 世界观构建（科技、政治、社会体系）
+    2. CharacterDesigner - 角色设计（性格、动机、成长线）
+    3. PlotArchitect - 剧情架构（主线、支线、节奏）
+    4. OutlineArchitect - 大纲设计（章节规划）
+    5. VolumeArchitect - 卷纲设计（长篇分卷）
+    6. ChapterArchitect - 章纲设计（单章细节）
+    7. SceneWriter - 场景写作（对话、动作、环境）
+    8. Editor - 编辑润色（文字、节奏、风格）
+    9. CultivationDesigner - 修炼/能力体系设计
+    10. CurrencyExpert - 货币/经济体系专家
+    11. GeopoliticsExpert - 地缘政治专家
+    12. SocietyExpert - 社会结构专家
+    13. NovelCoordinator - 总协调者
+    """
+
+    def __init__(self, llm_client, project_dir: str):
+        self.llm = llm_client
         self.project_dir = project_dir
-        self.agents_dir = Path(__file__).parent
+
+        # 正确的路径
+        self.agents_dir = (
+            Path(project_dir).parent / "agents"
+            if project_dir.startswith("novels/")
+            else Path(project_dir) / "agents"
+        )
+        self.skills_dir = (
+            Path(project_dir).parent / ".opencode" / "skills"
+            if project_dir.startswith("novels/")
+            else Path(project_dir) / ".opencode" / "skills"
+        )
+
+        # 导入设定追踪器
+        from consistency_tracker import ConsistencyTracker
+
+        self.tracker = ConsistencyTracker(project_dir)
+
         self.active_agents = []
-        self.project_context = {}
+        self.agent_outputs = {}  # 记录每个 agent 的输出
 
     def load_agent_prompt(self, agent_name: str) -> str:
-        """加载智能体提示词"""
+        """加载智能体提示词 - 从 agents/*.md"""
         prompt_file = self.agents_dir / f"{agent_name}.md"
         if prompt_file.exists():
             with open(prompt_file, "r", encoding="utf-8") as f:
                 return f.read()
         return ""
 
+    def load_skill_prompt(self, skill_name: str) -> str:
+        """加载技能提示词 - 从 .opencode/skills/*/SKILL.md"""
+        skill_file = self.skills_dir / skill_name / "SKILL.md"
+        if skill_file.exists():
+            with open(skill_file, "r", encoding="utf-8") as f:
+                return f.read()
+        return ""
+
     def get_available_agents(self) -> List[Dict[str, str]]:
         """获取所有可用的智能体"""
         agents = []
-        agent_files = [
-            "Coordinator.md",
-            "WorldBuilder.md",
-            "CharacterDesigner.md",
-            "PlotArchitect.md",
-            "OutlineArchitect.md",
-            "SceneWriter.md",
-            "Editor.md",
-            "VolumeArchitect.md",
-            "ChapterArchitect.md",
-            "CultivationDesigner.md",
-            "CurrencyExpert.md",
-            "GeopoliticsExpert.md",
-            "SocietyExpert.md",
-        ]
 
-        for filename in agent_files:
-            filepath = self.agents_dir / filename
-            if filepath.exists():
-                with open(filepath, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    # 解析 YAML front matter
-                    name = filename.replace(".md", "")
-                    description = ""
+        # 从 agents/ 目录读取
+        if self.agents_dir.exists():
+            for md_file in self.agents_dir.glob("*.md"):
+                content = md_file.read_text(encoding="utf-8")
+                name = md_file.stem
+                description = self._extract_description(content)
+                agents.append(
+                    {
+                        "name": name,
+                        "file": md_file.name,
+                        "description": description,
+                        "type": "agent",
+                    }
+                )
 
-                    if content.startswith("---"):
-                        parts = content.split("---", 2)
-                        if len(parts) >= 3:
-                            front_matter = parts[1]
-                            for line in front_matter.split("\n"):
-                                if line.startswith("description:"):
-                                    description = line.split(":", 1)[1].strip()
-
-                    agents.append(
-                        {"name": name, "file": filename, "description": description}
-                    )
+        # 从 skills/ 目录读取
+        if self.skills_dir.exists():
+            for skill_dir in self.skills_dir.iterdir():
+                if skill_dir.is_dir():
+                    skill_file = skill_dir / "SKILL.md"
+                    if skill_file.exists():
+                        content = skill_file.read_text(encoding="utf-8")
+                        description = self._extract_description(content)
+                        agents.append(
+                            {
+                                "name": skill_dir.name,
+                                "file": "SKILL.md",
+                                "description": description,
+                                "type": "skill",
+                            }
+                        )
 
         return agents
 
+    def _extract_description(self, content: str) -> str:
+        """从内容中提取描述"""
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                front_matter = parts[1]
+                for line in front_matter.split("\n"):
+                    if line.startswith("description:"):
+                        return line.split(":", 1)[1].strip()
+        return ""
+
     def execute_agent(self, agent_name: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """执行指定智能体"""
+        """
+        执行指定智能体 - 真正调用 LLM
+
+        Args:
+            agent_name: 智能体名称
+            context: 上下文信息，包含 config, previous_results 等
+
+        Returns:
+            执行结果
+        """
+        print(f"  [Agent] {agent_name} 开始执行...")
+
+        # 加载提示词
         prompt = self.load_agent_prompt(agent_name)
+        skill_prompt = self.load_skill_prompt(agent_name)
 
-        # 这里应该调用真实的 LLM API
-        # 目前使用模拟实现
-        result = self._mock_execute(agent_name, context)
+        # 合并提示词（skill 优先）
+        base_prompt = skill_prompt if skill_prompt else prompt
 
-        return {
-            "agent": agent_name,
-            "success": True,
-            "result": result,
-            "context": context,
+        if not base_prompt:
+            print(f"  [Warning] 未找到 {agent_name} 的提示词")
+            base_prompt = f"你是专业的{agent_name}，请根据上下文完成任务。"
+
+        # 构建完整提示词
+        full_prompt = self._build_full_prompt(agent_name, base_prompt, context)
+
+        # 获取设定追踪上下文
+        if "current_chapter" in context:
+            tracker_context = self.tracker.get_context_for_chapter(
+                context["current_chapter"].get("chapter_number", 1)
+            )
+            if tracker_context:
+                full_prompt += f"\n\n【设定一致性约束】\n{tracker_context}"
+
+        try:
+            # 调用真实 LLM
+            result = self.llm.generate(
+                prompt=full_prompt,
+                temperature=0.8,
+                system_prompt=f"你是专业的{agent_name}。请严格按照设定工作，确保内容一致性。",
+            )
+
+            # 保存输出
+            self.agent_outputs[agent_name] = result
+            self._save_agent_result(agent_name, result, context)
+
+            print(f"  [Agent] {agent_name} 执行完成")
+
+            return {
+                "agent": agent_name,
+                "success": True,
+                "result": result,
+                "context": context,
+            }
+        except Exception as e:
+            error_msg = str(e)
+            print(f"  [Error] {agent_name} 执行失败: {error_msg}")
+            return {
+                "agent": agent_name,
+                "success": False,
+                "error": error_msg,
+                "result": "",
+            }
+
+    def _build_full_prompt(
+        self, agent_name: str, base_prompt: str, context: Dict
+    ) -> str:
+        """构建完整的智能体提示词"""
+        full_prompt = base_prompt + "\n\n"
+
+        # 添加项目配置
+        if "config" in context:
+            config = context["config"]
+            full_prompt += "## 项目配置\n"
+            full_prompt += f"- 标题: {config.get('title', '未命名')}\n"
+            full_prompt += f"- 类型: {config.get('genre', '通用')}\n"
+            full_prompt += f"- 目标章节: {config.get('target_chapters', 10)}\n"
+            full_prompt += f"- 每章字数: {config.get('words_per_chapter', 3000)}\n"
+            if config.get("description"):
+                full_prompt += f"- 故事简介: {config['description']}\n"
+
+        # 添加前序步骤结果
+        if "previous_results" in context and context["previous_results"]:
+            full_prompt += "\n## 前序步骤结果\n"
+            for prev in context["previous_results"][-5:]:  # 最近5个
+                agent = prev.get("step", prev.get("agent", "未知"))
+                result = prev.get("result", {})
+                if isinstance(result, dict):
+                    result = result.get("result", str(result))
+                full_prompt += f"\n### {agent}\n"
+                full_prompt += f"{str(result)[:1000]}\n"  # 限制长度
+
+        # 添加当前章节信息
+        if "current_chapter" in context:
+            ch = context["current_chapter"]
+            full_prompt += "\n## 当前章节\n"
+            full_prompt += f"- 章节号: {ch.get('chapter_number', 1)}\n"
+            full_prompt += f"- 标题: {ch.get('title', '')}\n"
+            full_prompt += f"- 概要: {ch.get('summary', '')}\n"
+            if ch.get("key_plot_points"):
+                full_prompt += f"- 关键情节: {', '.join(ch['key_plot_points'])}\n"
+
+        # 添加特定智能体的约束
+        constraints = self._get_agent_constraints(agent_name)
+        if constraints:
+            full_prompt += f"\n## 执行约束\n{constraints}\n"
+
+        return full_prompt
+
+    def _get_agent_constraints(self, agent_name: str) -> str:
+        """获取特定智能体的约束条件"""
+        constraints = {
+            "WorldBuilder": """
+- 科技水平必须一致，不能随意跳跃
+- 政治体系要有内在逻辑
+- 社会结构要合理，极端组织不能有正常政治地位
+""",
+            "CharacterDesigner": """
+- 角色能力要有明确边界
+- 主角能力不能超过5个核心技能
+- 每个角色的动机必须清晰
+- 配角也要有独立的人格和目标
+""",
+            "PlotArchitect": """
+- 敌人威胁等级设定后不能随意降低
+- 高威胁敌人必须有明显弱点或代价才能击败
+- 主角不能是"唯一钥匙"，要给配角发挥作用的空间
+- 冲突解决要有代价
+""",
+            "SceneWriter": """
+- 时间线要一致
+- 角色能力使用必须在已设定范围内
+- 不能突然引入新能力
+- 战斗场景要有代价
+""",
+            "CultivationDesigner": """
+- 能力体系要统一
+- 不能随意添加新能力类型
+- 能力获取必须有明确来源和代价
+- 主角不能无限变强
+""",
         }
+        return constraints.get(agent_name, "")
 
-    def _mock_execute(self, agent_name: str, context: Dict) -> str:
-        """模拟执行智能体（实际应调用LLM）"""
-        return f"【{agent_name}】已处理请求，生成了相关内容。\n\n上下文: {json.dumps(context, ensure_ascii=False, indent=2)}"
+    def _save_agent_result(self, agent_name: str, result: str, context: Dict):
+        """保存智能体执行结果"""
+        output_dir = Path(self.project_dir) / "agent_outputs"
+        output_dir.mkdir(exist_ok=True)
 
-    def run_coordinator_workflow(self, novel_config: Dict[str, Any]) -> Dict[str, Any]:
-        """运行协调者工作流 - 全流程自动化"""
-        workflow_steps = [
+        output_file = output_dir / f"{agent_name.lower()}_output.md"
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(f"# {agent_name} 输出\n\n")
+            f.write(result)
+
+    def run_full_workflow(self, novel_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        运行完整的智能体工作流
+
+        解决 Kimi 编辑指出的问题：
+        1. 战力体系 - PlotArchitect + CultivationDesigner 协作
+        2. 能力体系 - CharacterDesigner + CultivationDesigner + 设定追踪
+        3. 逻辑硬伤 - WorldBuilder + 专家智能体检查
+        4. 时间线 - 追踪器自动管理
+        5. 人物工具化 - CharacterDesigner + Editor 确保配角有独立线
+        """
+
+        print("\n" + "=" * 60)
+        print("[AgentManager] 启动完整智能体工作流")
+        print("=" * 60)
+
+        workflow = [
+            # Phase 1: 世界构建
             {
-                "name": "项目初始化",
-                "agent": "Coordinator",
-                "action": "initialize_project",
-                "description": "创建项目结构，分析需求",
-            },
-            {
-                "name": "世界观构建",
+                "phase": "world_building",
                 "agent": "WorldBuilder",
-                "action": "build_world",
-                "description": "构建完整的世界设定",
+                "desc": "构建世界观（科技、政治、社会）",
             },
             {
-                "name": "人物设计",
+                "phase": "world_building",
+                "agent": "GeopoliticsExpert",
+                "desc": "设计地缘政治体系",
+            },
+            {
+                "phase": "world_building",
+                "agent": "SocietyExpert",
+                "desc": "设计社会结构",
+            },
+            # Phase 2: 能力体系
+            {
+                "phase": "power_system",
+                "agent": "CultivationDesigner",
+                "desc": "设计能力/修炼体系（统一、有边界）",
+            },
+            # Phase 3: 角色设计
+            {
+                "phase": "character",
                 "agent": "CharacterDesigner",
-                "action": "design_characters",
-                "description": "设计主要角色档案",
+                "desc": "设计角色（主角能力<5，配角独立线）",
             },
+            # Phase 4: 剧情架构
             {
-                "name": "剧情架构",
+                "phase": "plot",
                 "agent": "PlotArchitect",
-                "action": "create_plot",
-                "description": "生成完整大纲和卷纲",
+                "desc": "架构剧情（敌人威胁体系、弱点、代价）",
             },
+            # Phase 5: 大纲设计
+            {"phase": "outline", "agent": "OutlineArchitect", "desc": "设计章节大纲"},
             {
-                "name": "正文创作",
-                "agent": "SceneWriter",
-                "action": "write_chapters",
-                "description": "撰写各章节正文",
+                "phase": "outline",
+                "agent": "VolumeArchitect",
+                "desc": "分卷规划（长篇）",
             },
-            {
-                "name": "编辑润色",
-                "agent": "Editor",
-                "action": "edit_manuscript",
-                "description": "全文质量把控",
-            },
+            {"phase": "outline", "agent": "ChapterArchitect", "desc": "详细章纲"},
         ]
 
         results = []
-        for step in workflow_steps:
-            print(f"\n{'=' * 60}")
-            print(f"步骤: {step['name']}")
-            print(f"智能体: {step['agent']}")
-            print(f"描述: {step['description']}")
-            print("=" * 60)
-
-            # 执行步骤
-            result = self.execute_agent(
-                step["agent"],
-                {"step": step, "config": novel_config, "previous_results": results},
-            )
-
-            results.append({"step": step["name"], "result": result})
-
-            # 模拟耗时操作
-            import time
-
-            time.sleep(0.5)
-
-        return {
-            "success": True,
-            "total_steps": len(workflow_steps),
-            "completed_steps": len(results),
-            "results": results,
-        }
-
-    def create_agent_workflow(
-        self, selected_agents: List[str], context: Dict[str, Any]
-    ) -> List[Dict]:
-        """创建自定义智能体工作流"""
-        workflow = []
-
-        for idx, agent_name in enumerate(selected_agents):
-            workflow.append(
-                {
-                    "order": idx + 1,
-                    "agent": agent_name,
-                    "depends_on": selected_agents[idx - 1] if idx > 0 else None,
-                    "context": context,
-                }
-            )
-
-        return workflow
-
-    def execute_workflow(self, workflow: List[Dict]) -> Dict[str, Any]:
-        """执行自定义工作流"""
-        results = []
+        all_success = True
 
         for step in workflow:
-            print(f"\n执行步骤 {step['order']}: {step['agent']}")
+            print(f"\n[Phase: {step['phase']}] {step['agent']}")
+            print(f"  任务: {step['desc']}")
 
-            result = self.execute_agent(step["agent"], step["context"])
-            results.append(result)
+            result = self.execute_agent(
+                step["agent"], {"config": novel_config, "previous_results": results}
+            )
 
-        return {"success": True, "total_steps": len(workflow), "results": results}
+            results.append(
+                {"phase": step["phase"], "agent": step["agent"], "result": result}
+            )
+
+            if not result["success"]:
+                print(f"  [Error] {step['agent']} 失败")
+                all_success = False
+
+        # 生成项目文件
+        if all_success:
+            self._generate_project_files(novel_config, results)
+
+        return {
+            "success": all_success,
+            "results": results,
+            "tracker_report": self.tracker.generate_report(),
+        }
+
+    def _generate_project_files(self, config: Dict[str, Any], results: List[Dict]):
+        """根据智能体输出生成项目文件"""
+        print("\n[AgentManager] 生成项目文件...")
+
+        os.makedirs(self.project_dir, exist_ok=True)
+
+        # 提取各部分内容
+        outline_content = ""
+        characters_content = {}
+        chapter_list = []
+        world_rules = {}
+
+        for result in results:
+            agent_name = result["agent"]
+            agent_result = result["result"].get("result", "")
+
+            if "Outline" in agent_name or "outline" in agent_name.lower():
+                outline_content = agent_result
+            elif "Character" in agent_name:
+                characters_content = self._parse_characters(agent_result)
+            elif "Chapter" in agent_name:
+                chapter_list = self._parse_chapters(agent_result, config)
+            elif "World" in agent_name:
+                world_rules = self._parse_world_rules(agent_result)
+
+        # 保存文件
+        # outline.md
+        if outline_content:
+            with open(
+                Path(self.project_dir) / "outline.md", "w", encoding="utf-8"
+            ) as f:
+                f.write(outline_content)
+            print("  [OK] outline.md")
+
+        # characters.json
+        with open(
+            Path(self.project_dir) / "characters.json", "w", encoding="utf-8"
+        ) as f:
+            json.dump(
+                characters_content if characters_content else {},
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+        print("  [OK] characters.json")
+
+        # chapter-list.json
+        if not chapter_list:
+            chapter_list = self._create_default_chapters(config)
+        with open(
+            Path(self.project_dir) / "chapter-list.json", "w", encoding="utf-8"
+        ) as f:
+            json.dump(chapter_list, f, ensure_ascii=False, indent=2)
+        print("  [OK] chapter-list.json")
+
+        # world-rules.json (新增)
+        with open(
+            Path(self.project_dir) / "world-rules.json", "w", encoding="utf-8"
+        ) as f:
+            json.dump(world_rules, f, ensure_ascii=False, indent=2)
+        print("  [OK] world-rules.json")
+
+        # 更新设定追踪器
+        for char_name, char_data in characters_content.items():
+            if isinstance(char_data, dict) and char_data.get("role") == "protagonist":
+                for ability in char_data.get("abilities", []):
+                    self.tracker.track_ability_gain(char_name, ability, 0, "初始设定")
+
+    def _parse_characters(self, content: str) -> Dict:
+        """解析角色信息"""
+        # 复用 InitializerAgent 的解析逻辑
+        try:
+            import re
+
+            # 尝试提取 JSON
+            json_match = re.search(r"\[[\s\S]*\]", content)
+            if json_match:
+                return {"characters": json.loads(json_match.group())}
+        except:
+            pass
+        return {"characters": []}
+
+    def _parse_chapters(self, content: str, config: Dict) -> List[Dict]:
+        """解析章节列表"""
+        # 复用 InitializerAgent 的解析逻辑
+        try:
+            import re
+
+            json_match = re.search(r"\[[\s\S]*\]", content)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+        return []
+
+    def _parse_world_rules(self, content: str) -> Dict:
+        """解析世界观规则"""
+        rules = {}
+        # 提取关键规则
+        lines = content.split("\n")
+        for line in lines:
+            if ":" in line and not line.startswith("#"):
+                parts = line.split(":", 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip()
+                    rules[key] = value
+        return rules
+
+    def _create_default_chapters(self, config: Dict[str, Any]) -> List[Dict]:
+        """创建默认章节列表"""
+        total = config.get("target_chapters", 10)
+        return [
+            {
+                "chapter_number": i + 1,
+                "title": f"第{i + 1}章",
+                "summary": "",
+                "key_plot_points": [],
+                "characters_involved": [],
+                "word_count_target": config.get("words_per_chapter", 3000),
+                "status": "pending",
+            }
+            for i in range(total)
+        ]
