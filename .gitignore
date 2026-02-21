@@ -31,3 +31,7 @@ logs/
 # Environment variables
 .env
 .env.local
+
+# Development notes (do not commit)
+改进.md
+AGENTS补充.md

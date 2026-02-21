@@ -168,6 +168,9 @@ def render_sidebar():
             [
                 "🏠 首页",
                 "➕ 创建新项目",
+                "💬 对话创作",
+                "📚 设定库管理",
+                "📦 素材库管理",
                 "✍️ 写作控制",
                 "📊 进度监控",
                 "📖 查看章节",
@@ -201,15 +204,33 @@ def render_sidebar():
 
         st.divider()
 
-        # API密钥状态
-        st.subheader("🔑 API密钥状态")
-        api_keys_status = get_available_api_keys()
+        # 当前使用的AI模型
+        st.subheader("🤖 当前AI模型")
+        config = load_env_file()
+        current_model_id = config.get("DEFAULT_MODEL_ID", "claude-3-5-sonnet")
 
-        for name, is_configured in api_keys_status.items():
-            if is_configured:
-                st.success(f"✓ {name}")
-            else:
-                st.error(f"✗ {name}")
+        model_manager = ModelManager()
+        model_info = model_manager.AVAILABLE_MODELS.get(current_model_id)
+
+        if model_info:
+            st.info(f"**{model_info.display_name}**\n\n{model_info.description}")
+        elif current_model_id == "custom":
+            custom_name = config.get("CUSTOM_MODEL_NAME", "自定义模型")
+            st.info(f"**⚙️ {custom_name}**\n\n自定义模型")
+        else:
+            st.warning(f"当前模型: {current_model_id}")
+
+        # 检查API密钥是否配置
+        api_key_env = (
+            model_info.api_key_env
+            if model_info
+            else config.get("CUSTOM_API_KEY_ENV", "CUSTOM_API_KEY")
+        )
+        current_key = get_api_key(api_key_env)
+        if current_key:
+            st.success(f"✓ API已配置")
+        else:
+            st.error(f"✗ API未配置")
 
         st.divider()
 
@@ -905,6 +926,324 @@ def render_log_viewer():
             st.error(f"读取日志文件失败: {e}")
 
 
+def render_dialog_creation():
+    """渲染对话创作页面"""
+    st.header("💬 对话创作模式")
+    st.markdown("通过对话引导AI帮助你构建小说大纲和设定")
+
+    # 初始化对话历史
+    if "dialog_messages" not in st.session_state:
+        st.session_state.dialog_messages = []
+    if "dialog_stage" not in st.session_state:
+        st.session_state.dialog_stage = "basic_info"
+    if "dialog_config" not in st.session_state:
+        st.session_state.dialog_config = {}
+
+    # 显示对话历史
+    chat_container = st.container()
+    with chat_container:
+        for msg in st.session_state.dialog_messages:
+            if msg["role"] == "assistant":
+                st.chat_message("assistant").markdown(msg["content"])
+            else:
+                st.chat_message("user").markdown(msg["content"])
+
+    # 根据阶段显示不同的引导
+    if st.session_state.dialog_stage == "basic_info":
+        if not st.session_state.dialog_messages:
+            welcome_msg = """你好！我是你的AI创作助手。让我们通过对话来完成小说的初步设定吧！
+
+首先，请告诉我你想写什么类型的小说？比如：
+- 科幻
+- 奇幻
+- 悬疑
+- 言情
+- 武侠
+- 历史等"""
+            st.session_state.dialog_messages.append(
+                {"role": "assistant", "content": welcome_msg}
+            )
+            st.rerun()
+
+    # 用户输入
+    if prompt := st.chat_input("请输入你的回复..."):
+        st.session_state.dialog_messages.append({"role": "user", "content": prompt})
+
+        # 根据当前阶段处理用户输入
+        if st.session_state.dialog_stage == "basic_info":
+            if "类型" not in st.session_state.dialog_config:
+                st.session_state.dialog_config["类型"] = prompt
+                response = f"好的，{prompt}是个很有趣的类型！那你想给小说取什么名字呢？"
+            elif "标题" not in st.session_state.dialog_config:
+                st.session_state.dialog_config["标题"] = prompt
+                response = f"'{prompt}'是个不错的标题！能简单描述一下故事的核心构思吗？"
+            elif "构思" not in st.session_state.dialog_config:
+                st.session_state.dialog_config["构思"] = prompt
+                response = "很棒的故事构思！你计划写多少章呢？"
+            elif "章节数" not in st.session_state.dialog_config:
+                try:
+                    st.session_state.dialog_config["章节数"] = int(prompt)
+                except:
+                    st.session_state.dialog_config["章节数"] = 10
+                response = f"好的，{st.session_state.dialog_config['章节数']}章的规模。你想让故事发生在什么样的世界观背景下？"
+            elif "世界观" not in st.session_state.dialog_config:
+                st.session_state.dialog_config["世界观"] = prompt
+                response = (
+                    "很有意思的世界设定！现在让我们来讨论主要人物。主角是什么样的人？"
+                )
+            elif "主角" not in st.session_state.dialog_config:
+                st.session_state.dialog_config["主角"] = prompt
+                st.session_state.dialog_stage = "outline"
+                response = f"""很好！我们已经收集了基本信息：
+
+📌 **小说信息汇总**
+- 类型：{st.session_state.dialog_config.get("类型", "未设定")}
+- 标题：{st.session_state.dialog_config.get("标题", "未设定")}
+- 核心构思：{st.session_state.dialog_config.get("构思", "未设定")}
+- 章节数：{st.session_state.dialog_config.get("章节数", "未设定")}
+- 世界观：{st.session_state.dialog_config.get("世界观", "未设定")}
+- 主角：{st.session_state.dialog_config.get("主角", "未设定")}
+
+接下来我们可以开始构建详细大纲。你想从哪个方面开始？
+1. 故事主线规划
+2. 人物关系设计
+3. 世界观细节
+4. 章节分配
+
+请输入数字选择，或直接描述你的想法。"""
+            else:
+                response = "好的，让我们继续。你还有什么想补充的吗？"
+
+        elif st.session_state.dialog_stage == "outline":
+            response = f"好的，让我帮你思考这个方面。关于'{prompt}'，你有什么具体的想法或要求吗？"
+
+        else:
+            response = f"收到！让我继续帮你完善设定。"
+
+        st.session_state.dialog_messages.append(
+            {"role": "assistant", "content": response}
+        )
+        st.rerun()
+
+    # 操作按钮
+    st.divider()
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🔄 重新开始", use_container_width=True):
+            st.session_state.dialog_messages = []
+            st.session_state.dialog_stage = "basic_info"
+            st.session_state.dialog_config = {}
+            st.rerun()
+    with col2:
+        if st.button("📋 查看当前设定", use_container_width=True):
+            st.json(st.session_state.dialog_config)
+    with col3:
+        if st.button("✅ 完成并创建项目", use_container_width=True):
+            if st.session_state.dialog_config:
+                config = {
+                    "title": st.session_state.dialog_config.get("标题", "未命名"),
+                    "genre": st.session_state.dialog_config.get("类型", "通用"),
+                    "target_chapters": st.session_state.dialog_config.get("章节数", 10),
+                    "description": st.session_state.dialog_config.get("构思", ""),
+                }
+                st.session_state.page = "➕ 创建新项目"
+                st.session_state.prefilled_config = config
+                st.rerun()
+
+
+def render_setting_library():
+    """渲染设定库管理页面"""
+    st.header("📚 设定库管理")
+    st.markdown("管理小说的各类设定，支持多层嵌套结构")
+
+    # 初始化设定库
+    if "setting_library" not in st.session_state:
+        st.session_state.setting_library = {
+            "世界观": {},
+            "人物关系": {},
+            "组织势力": {},
+            "物品装备": {},
+        }
+
+    # 选择大类
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        categories = list(st.session_state.setting_library.keys())
+        selected_category = st.selectbox("选择设定类别", categories)
+    with col2:
+        if st.button("➕ 新建类别", use_container_width=True):
+            st.session_state.show_new_category = True
+
+    # 新建类别对话框
+    if st.session_state.get("show_new_category", False):
+        with st.form("new_category_form"):
+            new_cat_name = st.text_input("类别名称")
+            submitted = st.form_submit_button("创建")
+            if submitted and new_cat_name:
+                st.session_state.setting_library[new_cat_name] = {}
+                st.session_state.show_new_category = False
+                st.rerun()
+
+    st.divider()
+
+    # 显示当前类别的设定树
+    st.subheader(f"📖 {selected_category}")
+
+    current_settings = st.session_state.setting_library.get(selected_category, {})
+
+    # 递归显示设定树
+    def display_setting_tree(settings: dict, path: list, level: int = 0):
+        for name, content in settings.items():
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+            indent = "　" * level
+            with col1:
+                if isinstance(content, dict):
+                    with st.expander(f"{indent}📁 {name}", expanded=False):
+                        display_setting_tree(content, path + [name], level + 1)
+                else:
+                    st.markdown(
+                        f"{indent}📄 **{name}**: {content[:50]}..."
+                        if len(str(content)) > 50
+                        else f"{indent}📄 **{name}**: {content}"
+                    )
+
+    display_setting_tree(current_settings, [])
+
+    st.divider()
+
+    # 添加新设定
+    st.subheader("➕ 添加设定")
+
+    # 选择父级（可选）
+    parent_options = ["[根目录]"]
+
+    def get_all_paths(settings: dict, prefix: str = ""):
+        paths = []
+        for name, content in settings.items():
+            current_path = f"{prefix}/{name}" if prefix else name
+            paths.append(current_path)
+            if isinstance(content, dict) and content:
+                paths.extend(get_all_paths(content, current_path))
+        return paths
+
+    all_paths = get_all_paths(current_settings)
+    parent_options.extend(all_paths)
+
+    with st.form("add_setting_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            parent_path = st.selectbox("父级位置", parent_options)
+            setting_name = st.text_input("设定名称")
+        with col2:
+            setting_type = st.selectbox("设定类型", ["简单文本", "嵌套目录"])
+            setting_content = st.text_area("设定内容", height=100)
+
+        submitted = st.form_submit_button("添加设定")
+        if submitted and setting_name:
+            if setting_type == "嵌套目录":
+                new_content = {}
+            else:
+                new_content = setting_content
+
+            # 添加到正确的位置
+            if parent_path == "[根目录]":
+                current_settings[setting_name] = new_content
+            else:
+                path_parts = parent_path.split("/")
+                target = current_settings
+                for part in path_parts:
+                    if part in target and isinstance(target[part], dict):
+                        target = target[part]
+                target[setting_name] = new_content
+
+            st.session_state.setting_library[selected_category] = current_settings
+            st.success(f"✅ 已添加设定: {setting_name}")
+            st.rerun()
+
+
+def render_material_library():
+    """渲染素材库管理页面"""
+    st.header("📦 素材库管理")
+    st.markdown("管理写作素材，包括场景、对话、描写等")
+
+    # 初始化素材库
+    if "material_library" not in st.session_state:
+        st.session_state.material_library = {
+            "场景描写": [],
+            "人物对话": [],
+            "心理描写": [],
+            "动作描写": [],
+            "环境描写": [],
+        }
+
+    # 选择素材类型
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        material_types = list(st.session_state.material_library.keys())
+        selected_type = st.selectbox("选择素材类型", material_types)
+    with col2:
+        if st.button("➕ 新建类型", use_container_width=True):
+            st.session_state.show_new_material_type = True
+
+    # 新建类型对话框
+    if st.session_state.get("show_new_material_type", False):
+        with st.form("new_material_type_form"):
+            new_type_name = st.text_input("类型名称")
+            submitted = st.form_submit_button("创建")
+            if submitted and new_type_name:
+                st.session_state.material_library[new_type_name] = []
+                st.session_state.show_new_material_type = False
+                st.rerun()
+
+    st.divider()
+
+    # 显示当前类型的素材
+    st.subheader(f"📝 {selected_type}")
+    materials = st.session_state.material_library.get(selected_type, [])
+
+    if materials:
+        for idx, material in enumerate(materials):
+            with st.expander(f"素材 #{idx + 1}: {material.get('title', '未命名')}"):
+                st.markdown(f"**标签**: {', '.join(material.get('tags', []))}")
+                st.markdown(f"**内容**:")
+                st.text(material.get("content", ""))
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"✏️ 编辑", key=f"edit_{selected_type}_{idx}"):
+                        st.session_state.editing_material = (selected_type, idx)
+                with col2:
+                    if st.button(f"🗑️ 删除", key=f"del_{selected_type}_{idx}"):
+                        materials.pop(idx)
+                        st.session_state.material_library[selected_type] = materials
+                        st.rerun()
+    else:
+        st.info("暂无素材，请添加新素材")
+
+    st.divider()
+
+    # 添加新素材
+    st.subheader("➕ 添加素材")
+    with st.form("add_material_form"):
+        material_title = st.text_input("素材标题")
+        material_tags = st.text_input("标签（用逗号分隔）")
+        material_content = st.text_area("素材内容", height=150)
+
+        submitted = st.form_submit_button("添加素材")
+        if submitted and material_content:
+            new_material = {
+                "title": material_title or f"素材 {len(materials) + 1}",
+                "tags": [t.strip() for t in material_tags.split(",")]
+                if material_tags
+                else [],
+                "content": material_content,
+            }
+            materials.append(new_material)
+            st.session_state.material_library[selected_type] = materials
+            st.success("✅ 素材添加成功！")
+            st.rerun()
+
+
 def render_agent_management():
     """渲染智能体管理页面"""
     st.header("🤖 智能体管理")
@@ -1070,6 +1409,12 @@ def main():
         render_home()
     elif page == "➕ 创建新项目":
         render_create_project()
+    elif page == "💬 对话创作":
+        render_dialog_creation()
+    elif page == "📚 设定库管理":
+        render_setting_library()
+    elif page == "📦 素材库管理":
+        render_material_library()
     elif page == "✍️ 写作控制":
         render_writing_control()
     elif page == "📊 进度监控":
