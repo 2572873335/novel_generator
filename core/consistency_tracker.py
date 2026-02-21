@@ -267,16 +267,27 @@ class ConsistencyTracker:
 
         enemy = self.enemies[enemy_name]
 
-        # 检查击败方式是否合理
-        if enemy.threat_level >= 9:  # 高威胁敌人
+        if enemy.threat_level >= 6:
             if not casualties or casualties.get("deaths", 0) == 0:
-                print(
-                    f"⚠️ [Tracker严重警告] 敌人 {enemy_name} 威胁等级 {enemy.threat_level}/10"
-                )
-                print(f"   被击败方式: {method}")
-                print(f"   代价: {casualties or '无代价'}")
-                print(f"   ⚠️ 高威胁敌人被轻易击败，可能造成战力崩坏！")
-                print(f"   建议：增加代价或削弱敌人初始设定")
+                if not casualties or not any(
+                    [
+                        casualties.get("injuries"),
+                        casualties.get("resource_cost"),
+                        casualties.get("technique_sacrifice"),
+                        casualties.get("cultivation_drop"),
+                    ]
+                ):
+                    print(
+                        f"⚠️ [Tracker严重警告] 敌人 {enemy_name} 威胁等级 {enemy.threat_level}/10"
+                    )
+                    print(f"   被击败方式: {method}")
+                    print(f"   代价: {casualties or '无代价'}")
+                    print(f"   ⚠️ 高威胁敌人(>=6)被轻易击败，可能造成战力崩坏！")
+                    print(f"   建议：必须付出以下至少一项代价：")
+                    print(f"     - 重伤/死亡（deaths/injuries）")
+                    print(f"     - 大量资源消耗（resource_cost）")
+                    print(f"     - 功法牺牲（technique_sacrifice）")
+                    print(f"     - 修为倒退（cultivation_drop）")
 
         enemy.defeats.append(
             {
@@ -342,33 +353,40 @@ class ConsistencyTracker:
         issues = []
         warnings = []
 
-        # 1. 检查能力滥用
         protagonist = self._get_protagonist_name()
         if protagonist in self.characters:
             char = self.characters[protagonist]
-            if len(char.abilities) > 5:
-                warnings.append(
+            if len(char.abilities) > 4:
+                issues.append(
                     {
                         "type": "ability_bloat",
-                        "message": f"主角已有 {len(char.abilities)} 个能力: {', '.join(char.abilities)}",
-                        "suggestion": "考虑合并相似能力或删除冗余能力",
+                        "message": f"主角能力过多：{len(char.abilities)} 个（上限4个）: {', '.join(char.abilities)}",
+                        "suggestion": "必须合并相似能力或删除冗余能力，主角核心能力不能超过4个",
                     }
                 )
 
-        # 2. 检查敌人威胁变化
         for enemy_name, enemy in self.enemies.items():
-            if enemy.threat_level >= 8 and len(enemy.defeats) > 0:
+            if enemy.threat_level >= 6 and len(enemy.defeats) > 0:
                 last_defeat = enemy.defeats[-1]
-                if last_defeat.get("casualties", {}).get("deaths", 0) == 0:
+                casualties = last_defeat.get("casualties", {}) or {}
+                has_cost = any(
+                    [
+                        casualties.get("deaths", 0) > 0,
+                        casualties.get("injuries"),
+                        casualties.get("resource_cost"),
+                        casualties.get("technique_sacrifice"),
+                        casualties.get("cultivation_drop"),
+                    ]
+                )
+                if not has_cost:
                     issues.append(
                         {
                             "type": "power_scaling_issue",
-                            "message": f"高威胁敌人 {enemy_name} (威胁{enemy.threat_level}/10) 被无代价击败",
-                            "suggestion": "增加战斗代价或削弱敌人初始设定",
+                            "message": f"高威胁敌人 {enemy_name} (威胁{enemy.threat_level}/10, >=6为高威胁) 被无代价击败",
+                            "suggestion": "必须增加战斗代价或削弱敌人初始设定",
                         }
                     )
 
-        # 3. 检查未使用角色
         for name, char in self.characters.items():
             if char.last_appearance > 0 and chapter - char.last_appearance > 5:
                 warnings.append(

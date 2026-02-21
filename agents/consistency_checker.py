@@ -19,14 +19,21 @@ class ConsistencyChecker:
         self.characters_dir = self.project_dir / "characters"
         self.worldbuilding_dir = self.project_dir / "worldbuilding"
 
+        self.name_registry: Dict[str, List[int]] = {}
+        self.realm_progression: List[Dict] = []
+
     def check_chapters(self, chapter_numbers: List[int]) -> Dict[str, Any]:
         """检查指定章节的一致性"""
         chapters_content = self._load_chapters(chapter_numbers)
         if not chapters_content:
-            return {"error": "无法加载章节内容"}
+            return {"error": "无法加载章节内容", "passed": False}
 
         character_profiles = self._load_character_profiles()
         world_settings = self._load_world_settings()
+
+        hardcoded_issues = self._hardcoded_consistency_check(
+            chapters_content, character_profiles
+        )
 
         results = {
             "checked_chapters": chapter_numbers,
@@ -38,12 +45,174 @@ class ConsistencyChecker:
             "setting_consistency": self._check_setting_consistency(
                 chapters_content, world_settings
             ),
+            "hardcoded_issues": hardcoded_issues,
         }
 
         results["inconsistencies"] = self.find_inconsistencies(chapters_content)
+        results["passed"] = len(hardcoded_issues.get("critical", [])) == 0
         results["summary"] = self._generate_summary(results)
 
         return results
+
+    def _hardcoded_consistency_check(
+        self, chapters: Dict[int, str], profiles: Dict[str, Any]
+    ) -> Dict[str, List[Dict]]:
+        """硬编码一致性检查 - 不依赖LLM"""
+        issues = {"critical": [], "warnings": []}
+
+        all_text = "\n".join(chapters.values())
+
+        name_issues = self._check_name_consistency(all_text, profiles)
+        issues["critical"].extend(name_issues)
+
+        combat_issues = self._check_combat_consistency(all_text)
+        issues["warnings"].extend(combat_issues)
+
+        timeline_issues = self._check_timeline_hardcoded(all_text)
+        issues["warnings"].extend(timeline_issues)
+
+        return issues
+
+    def _check_name_consistency(
+        self, text: str, profiles: Dict[str, Any]
+    ) -> List[Dict]:
+        """检查姓名一致性 - 硬编码规则"""
+        issues = []
+
+        known_names = {}
+        char_file = self.project_dir / "characters.json"
+        if char_file.exists():
+            try:
+                with open(char_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        chars = data.get("characters", [])
+                    else:
+                        chars = data if isinstance(data, list) else []
+
+                    for char in chars:
+                        if isinstance(char, dict):
+                            name = char.get("name", "")
+                            role = char.get("role", "")
+                            if name:
+                                known_names[name] = role
+            except:
+                pass
+
+        for name in known_names:
+            surname = name[0] if len(name) >= 1 else ""
+            given_name = name[1:] if len(name) > 1 else ""
+
+            pattern = rf"{surname}[\u4e00-\u9fa5]{{1,3}}"
+            matches = re.findall(pattern, text)
+
+            variants = [m for m in matches if m != name and len(m) >= 2]
+
+            if variants:
+                unique_variants = list(set(variants))[:3]
+                for variant in unique_variants:
+                    if variant not in known_names:
+                        issues.append(
+                            {
+                                "type": "name_inconsistency",
+                                "severity": "critical",
+                                "message": f"姓名不一致：'{name}' 在文中出现变体 '{variant}'",
+                                "original_name": name,
+                                "variant": variant,
+                                "suggestion": f"统一使用 '{name}'",
+                            }
+                        )
+
+        return issues
+
+    def _check_combat_consistency(self, text: str) -> List[Dict]:
+        """检查战力一致性 - 硬编码规则"""
+        issues = []
+
+        realm_keywords = [
+            "炼气",
+            "筑基",
+            "金丹",
+            "元婴",
+            "化神",
+            "返虚",
+            "合道",
+            "渡劫",
+        ]
+        realm_order = {realm: i for i, realm in enumerate(realm_keywords)}
+
+        found_realms = {}
+        for realm in realm_keywords:
+            pattern = rf"{realm}[一二三四五六七八九十\d]*[层期前后巅峰]*"
+            matches = re.findall(pattern, text)
+            if matches:
+                found_realms[realm] = matches
+
+        if len(found_realms) > 1:
+            realm_names = list(found_realms.keys())
+            for i, r1 in enumerate(realm_names[:-1]):
+                for r2 in realm_names[i + 1 :]:
+                    diff = abs(realm_order.get(r1, 0) - realm_order.get(r2, 0))
+                    if diff > 2:
+                        issues.append(
+                            {
+                                "type": "large_realm_gap",
+                                "severity": "warning",
+                                "message": f"检测到较大境界跨度：{r1} ↔ {r2}（相差{diff}个大境界）",
+                                "realms": [r1, r2],
+                                "gap": diff,
+                            }
+                        )
+
+        battle_patterns = ["击败", "战胜", "击杀", "重创", "打退"]
+        for pattern in battle_patterns:
+            if pattern in text:
+                context_start = max(0, text.find(pattern) - 50)
+                context = text[context_start : context_start + 100]
+
+                if "筑基" in context and "炼气" in context:
+                    if "代价" not in context and "燃烧" not in context:
+                        issues.append(
+                            {
+                                "type": "unlikely_victory",
+                                "severity": "warning",
+                                "message": f"可能存在不合理越级战斗（炼气vs筑基），未提及代价",
+                            }
+                        )
+                break
+
+        return issues
+
+    def _check_timeline_hardcoded(self, text: str) -> List[Dict]:
+        """检查时间线一致性 - 硬编码规则"""
+        issues = []
+
+        year_patterns = [
+            (r"(\d+)年前", "years_ago"),
+            (r"(\d+)月前", "months_ago"),
+            (r"(\d+)日前", "days_ago"),
+        ]
+
+        time_refs = {}
+        for pattern, ref_type in year_patterns:
+            matches = re.findall(pattern, text)
+            if matches:
+                time_refs[ref_type] = [int(m) for m in matches]
+
+        if "years_ago" in time_refs:
+            years = time_refs["years_ago"]
+            if len(years) >= 2:
+                if max(years) - min(years) > 10:
+                    issues.append(
+                        {
+                            "type": "timeline_discrepancy",
+                            "severity": "warning",
+                            "message": f"时间参考不一致：{min(years)}年前 vs {max(years)}年前",
+                            "values": years,
+                        }
+                    )
+
+        return issues
 
     def _load_chapters(self, chapter_numbers: List[int]) -> Dict[int, str]:
         """加载指定章节的内容"""

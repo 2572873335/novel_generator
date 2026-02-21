@@ -34,17 +34,10 @@ class AgentManager:
         self.llm = llm_client
         self.project_dir = project_dir
 
-        # 正确的路径
-        self.agents_dir = (
-            Path(project_dir).parent / "agents"
-            if project_dir.startswith("novels/")
-            else Path(project_dir) / "agents"
-        )
-        self.skills_dir = (
-            Path(project_dir).parent / ".opencode" / "skills"
-            if project_dir.startswith("novels/")
-            else Path(project_dir) / ".opencode" / "skills"
-        )
+        novel_generator_root = Path(__file__).parent.parent
+        self.agents_dir = novel_generator_root / "agents"
+        self.skills_dir = novel_generator_root / ".opencode" / "skills"
+        Path(self.project_dir).mkdir(parents=True, exist_ok=True)
 
         # 导入设定追踪器
         try:
@@ -463,17 +456,114 @@ class AgentManager:
         return []
 
     def _parse_world_rules(self, content: str) -> Dict:
-        """解析世界观规则"""
-        rules = {}
-        # 提取关键规则
+        """解析世界观规则 - 增强版，正确提取修炼体系"""
+        import re
+
+        rules = {
+            "basic_info": {},
+            "cultivation_system": {},
+            "power_rules": {},
+            "geography": [],
+            "factions": {},
+        }
+
         lines = content.split("\n")
+        current_section = None
+        section_content = []
+
         for line in lines:
-            if ":" in line and not line.startswith("#"):
-                parts = line.split(":", 1)
+            stripped = line.strip()
+
+            if stripped.startswith("# "):
+                if current_section and section_content:
+                    self._process_section(rules, current_section, section_content)
+                current_section = stripped[2:].lower()
+                section_content = []
+            elif stripped.startswith("## "):
+                current_section = stripped[3:].lower()
+                section_content = []
+            elif current_section:
+                section_content.append(stripped)
+
+            if ":" in stripped and not stripped.startswith("#"):
+                parts = stripped.split(":", 1)
                 if len(parts) == 2:
-                    key = parts[0].strip()
+                    key = parts[0].strip().replace("**", "")
                     value = parts[1].strip()
-                    rules[key] = value
+
+                    if "境界" in key or "筑基" in key or "炼气" in key:
+                        rules["cultivation_system"][key] = value
+                    elif "越级" in key or "战力" in key or "威胁" in key:
+                        rules["power_rules"][key] = value
+                    elif "世界" in key or "大陆" in key or "区域" in key:
+                        rules["basic_info"][key] = value
+                    elif "宗门" in key or "皇朝" in key or "势力" in key:
+                        rules["factions"][key] = value
+                    else:
+                        rules["basic_info"][key] = value
+
+        if current_section and section_content:
+            self._process_section(rules, current_section, section_content)
+
+        rules["power_rules"]["越级挑战约束"] = (
+            "同境界内可越1-2小层，跨大境界必须借助外力或付出代价"
+        )
+        rules["power_rules"]["能力上限警告"] = "主角核心能力不超过5个"
+        rules["power_rules"]["高威胁定义"] = "威胁等级>=6的敌人必须有代价才能击败"
+
+        return rules
+
+    def _process_section(self, rules: Dict, section: str, content: List[str]):
+        """处理特定章节内容"""
+        section_text = "\n".join(content)
+
+        if "修炼" in section or "境界" in section or "cultivation" in section:
+            realms = self._extract_realms(section_text)
+            if realms:
+                rules["cultivation_system"]["境界列表"] = realms
+
+        elif "战力" in section or "power" in section:
+            power_rules = self._extract_power_rules(section_text)
+            rules["power_rules"].update(power_rules)
+
+        elif "地理" in section or "区域" in section or "geograph" in section:
+            areas = [
+                l.strip("- ").strip() for l in content if l.strip().startswith("-")
+            ]
+            if areas:
+                rules["geography"] = areas
+
+    def _extract_realms(self, text: str) -> List[str]:
+        """提取修炼境界列表"""
+        import re
+
+        realm_patterns = [
+            r"炼气[一二三四五六七八九十]+[层期前后巅峰]*",
+            r"筑基[一二三四五六七八九十]*[层期前后巅峰]*",
+            r"金丹[一二三四五六七八九十]*[层期前后巅峰]*",
+            r"元婴[一二三四五六七八九十]*[层期前后巅峰]*",
+            r"化神|返虚|合道|渡劫|大乘",
+        ]
+
+        realms = []
+        for pattern in realm_patterns:
+            matches = re.findall(pattern, text)
+            realms.extend(matches)
+
+        return list(set(realms))[:15]
+
+    def _extract_power_rules(self, text: str) -> Dict:
+        """提取战力规则"""
+        rules = {}
+        import re
+
+        if "越级" in text:
+            rules["允许越级"] = "是，但需代价"
+
+        threat_match = re.search(r"威胁[等级]*[：:]*\s*(\d+)", text)
+        if threat_match:
+            rules["威胁等级参考"] = threat_match.group(1)
+
         return rules
 
     def _create_default_chapters(self, config: Dict[str, Any]) -> List[Dict]:

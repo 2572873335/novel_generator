@@ -256,27 +256,48 @@ class NovelGenerator:
                     list(range(1, completed + 1))
                 )
 
-                if not check_result.get("passed", True):
-                    print("\n⚠️ 发现一致性问题：")
-                    for issue in check_result.get("issues", []):
-                        print(f"  - {issue}")
+                critical_issues = check_result.get("hardcoded_issues", {}).get(
+                    "critical", []
+                )
+                warnings = check_result.get("hardcoded_issues", {}).get("warnings", [])
 
-                    # 生成详细报告
+                if critical_issues or not check_result.get("passed", True):
+                    print(
+                        f"\n⚠️ 发现一致性问题 ({len(critical_issues)} 严重, {len(warnings)} 警告)："
+                    )
+
+                    for issue in critical_issues:
+                        print(f"  ❌ [严重] {issue.get('message', issue)}")
+
+                    for issue in warnings[:5]:
+                        print(f"  ⚠️ [警告] {issue.get('message', issue)}")
+
+                    report_dir = os.path.join(self.project_dir, "consistency_reports")
+                    os.makedirs(report_dir, exist_ok=True)
+
                     report = self.consistency_checker.generate_report(check_result)
                     report_path = os.path.join(
-                        self.project_dir,
-                        "consistency_reports",
+                        report_dir,
                         f"check_chapter_{completed}.md",
                     )
-                    os.makedirs(os.path.dirname(report_path), exist_ok=True)
                     with open(report_path, "w", encoding="utf-8") as f:
                         f.write(report)
                     print(f"  详细报告已保存: {report_path}")
 
-                    # 标记需要用户确认
                     self._flag_consistency_issue(completed, check_result)
                 else:
-                    print("✅ 一致性检查通过")
+                    print(f"✅ 一致性检查通过")
+                    if warnings:
+                        print(f"   (有 {len(warnings)} 个警告，详见报告)")
+
+                    report_dir = os.path.join(self.project_dir, "consistency_reports")
+                    os.makedirs(report_dir, exist_ok=True)
+                    report = self.consistency_checker.generate_report(check_result)
+                    report_path = os.path.join(
+                        report_dir, f"check_chapter_{completed}.md"
+                    )
+                    with open(report_path, "w", encoding="utf-8") as f:
+                        f.write(report)
 
             # 显示进度
             percentage = (completed / total_chapters) * 100

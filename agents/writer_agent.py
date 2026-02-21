@@ -299,9 +299,46 @@ class WriterAgent:
 
         # 世界观规则
         if "world_rules" in context:
+            wr = context["world_rules"]
             prompt += "\n## 世界观规则（必须遵守）\n"
-            for rule, value in context["world_rules"].items():
-                prompt += f"- {rule}: {value}\n"
+
+            if isinstance(wr, dict):
+                if "cultivation_system" in wr:
+                    cs = wr["cultivation_system"]
+                    prompt += "\n### 修炼体系\n"
+                    if isinstance(cs, dict):
+                        for key, value in cs.items():
+                            if isinstance(value, list):
+                                prompt += f"- {key}: {', '.join(str(v) for v in value[:10])}\n"
+                            else:
+                                prompt += f"- {key}: {value}\n"
+                    else:
+                        prompt += f"{cs}\n"
+
+                if "power_rules" in wr:
+                    pr = wr["power_rules"]
+                    prompt += "\n### 战力规则（重要！）\n"
+                    if isinstance(pr, dict):
+                        for key, value in pr.items():
+                            prompt += f"- {key}: {value}\n"
+                    else:
+                        prompt += f"{pr}\n"
+
+                if "basic_info" in wr:
+                    bi = wr["basic_info"]
+                    prompt += "\n### 基础设定\n"
+                    if isinstance(bi, dict):
+                        for key, value in list(bi.items())[:5]:
+                            prompt += f"- {key}: {value}\n"
+
+                if "factions" in wr:
+                    fa = wr["factions"]
+                    prompt += "\n### 势力设定\n"
+                    if isinstance(fa, dict):
+                        for key, value in list(fa.items())[:5]:
+                            prompt += f"- {key}: {value}\n"
+            else:
+                prompt += f"{wr}\n"
 
         # 设定追踪约束
         if "tracker_context" in context:
@@ -311,15 +348,16 @@ class WriterAgent:
 """
 
         prompt += """
-## 写作要求
+## 写作要求（强制遵守）
 
 1. 严格遵循大纲和设定
-2. 不能突然添加新能力或设定
-3. 高威胁敌人必须有代价才能击败
-4. 时间线要一致
-5. 角色行为符合已建立的性格
-6. 主角能力使用必须在已设定范围内
-7. 章节衔接自然
+2. 【禁止】突然添加新能力或设定 - 能力必须有明确来源
+3. 【禁止】无代价越级战斗 - 同境界最多越1-2小层，跨大境界必须借助外力/付出代价
+4. 【禁止】角色姓名变化 - 姓名必须全文一致
+5. 时间线要一致 - 年份、年龄、事件顺序不能矛盾
+6. 角色行为符合已建立的性格
+7. 主角核心能力不超过5个
+8. 章节衔接自然
 
 直接输出章节内容。
 """
