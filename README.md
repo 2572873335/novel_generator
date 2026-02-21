@@ -38,12 +38,24 @@ novel_generator/
 ├── agents/                    # 代理模块
 │   ├── initializer_agent.py  # 初始化代理
 │   ├── writer_agent.py       # 写作代理
-│   └── reviewer_agent.py     # 审查代理
+│   ├── reviewer_agent.py     # 审查代理
+│   └── *.md                  # 专业智能体提示词
+├── .opencode/skills/          # Skills技能系统
+│   ├── worldbuilder-coordinator/
+│   ├── character-designer/
+│   ├── plot-architect-coordinator/
+│   ├── scene-writer/
+│   ├── editor/
+│   └── ...                   # 更多专业技能
 ├── core/                      # 核心模块
 │   ├── novel_generator.py    # 主控制器
 │   ├── progress_manager.py   # 进度管理
 │   ├── chapter_manager.py    # 章节管理
-│   └── character_manager.py  # 角色管理
+│   ├── character_manager.py  # 角色管理
+│   ├── agent_manager.py      # 智能体调度
+│   ├── model_manager.py      # AI模型管理
+│   ├── config_manager.py     # 配置管理
+│   └── log_manager.py        # 日志系统
 ├── config/                    # 配置模块
 │   └── settings.py           # 配置设置
 ├── examples/                  # 示例
@@ -83,9 +95,23 @@ novels/{title}/
 git clone <repository-url>
 cd novel_generator
 
-# 安装依赖（实际使用时需要安装LLM客户端）
+# 安装依赖
 pip install -r requirements.txt
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，填入你的API密钥
 ```
+
+### 支持的AI模型
+
+| 提供商 | 模型 | 环境变量 |
+|--------|------|----------|
+| Anthropic | Claude 3.5 Sonnet | `ANTHROPIC_API_KEY` |
+| OpenAI | GPT-4o, GPT-4o-mini | `OPENAI_API_KEY` |
+| Moonshot | Kimi for Coding, Kimi K2.5 | `MOONSHOT_API_KEY` |
+| DeepSeek | DeepSeek Chat, DeepSeek Coder | `DEEPSEEK_API_KEY` |
+| 自定义 | 任意兼容API | `CUSTOM_API_KEY` |
 
 ## 使用方法
 
@@ -100,12 +126,17 @@ streamlit run app.py
 然后在浏览器中打开 http://localhost:8501
 
 功能包括：
-- 📚 **首页** - 项目概览和快速导航
+- 🏠 **首页** - 项目概览和快速导航
 - ➕ **创建新项目** - 填写小说配置并初始化
+- 💬 **对话创作** - 通过对话引导完成小说设定
+- 📚 **设定库管理** - 管理世界观、人物、组织等设定（支持多层嵌套）
+- 📦 **素材库管理** - 管理场景描写、对话、动作等素材
 - ✍️ **写作控制** - 启动写作、质量审查、合并导出
 - 📊 **进度监控** - 实时查看项目进度和章节状态
 - 📖 **查看章节** - 阅读已生成章节并下载
-- ⚙️ **系统设置** - 配置界面主题、AI模型等
+- 🤖 **智能体管理** - 查看和协调专业智能体
+- 📋 **日志查看** - 查看系统运行日志
+- ⚙️ **系统设置** - 配置AI模型、API密钥等
 
 ### 2. 交互式模式
 
@@ -146,6 +177,60 @@ python main.py --title "我的科幻小说" --genre "科幻" --chapters 10 --wor
 ```bash
 python main.py --progress novels/my_novel
 ```
+
+## 特色功能
+
+### 对话创作模式
+
+通过自然对话引导AI完成小说设定：
+- 🎯 类型选择 → 标题构思 → 核心创意
+- 📝 章节规划 → 世界观构建 → 人物设计
+- 💡 实时汇总设定，一键创建项目
+
+### 设定库管理
+
+支持多层嵌套的设定管理系统：
+
+```
+世界观
+├── 国家
+│   └── 大省
+│       └── 大区
+├── 势力
+│   ├── 门派A
+│   └── 门派B
+└── 体系
+    └── 修炼等级
+```
+
+### 素材库管理
+
+分类管理写作素材：
+- 🎬 场景描写
+- 💬 人物对话
+- 🧠 心理描写
+- ⚡ 动作描写
+- 🌳 环境描写
+
+### 专业智能体系统
+
+13个专业智能体协同工作：
+
+| 智能体 | 职责 |
+|--------|------|
+| WorldBuilder Coordinator | 世界观总协调 |
+| Character Designer | 人物设计 |
+| Plot Architect Coordinator | 剧情架构 |
+| Outline Architect | 大纲设计 |
+| Volume Architect | 卷纲设计 |
+| Chapter Architect | 章纲设计 |
+| Scene Writer | 场景写作 |
+| Editor | 编辑润色 |
+| Cultivation Designer | 修炼体系设计 |
+| Currency Expert | 货币经济系统 |
+| Geopolitics Expert | 地缘政治 |
+| Society Expert | 社会结构 |
+| Novel Coordinator | 整体协调 |
 
 ## 配置选项
 
@@ -234,6 +319,7 @@ Reviewer Agent 评估每个章节：
 - **Web UI** - 现代化的 Streamlit 界面，无需编程即可使用
 - **可视化进度** - 实时图表展示项目进度和章节状态
 - **一键操作** - 简化的小说生成流程
+- **多模型支持** - 支持多种AI模型，灵活切换
 
 ## 扩展开发
 
@@ -319,6 +405,13 @@ class CustomWriterAgent(WriterAgent):
 - 增加角色一致性检查
 - 在写作提示中强调角色特征
 
+### 问题：API连接失败
+
+**解决方案：**
+- 检查 .env 文件中的API密钥是否正确
+- 确认网络连接正常
+- 检查API配额是否用尽
+
 ## 技术细节
 
 ### 进度文件格式
@@ -359,10 +452,6 @@ class CustomWriterAgent(WriterAgent):
   }
 ]
 ```
-
-## 贡献
-
-欢迎提交Issue和Pull Request！
 
 ## 许可证
 
