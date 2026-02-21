@@ -836,10 +836,15 @@ def render_settings():
                 "CUSTOM_API_KEY_ENV", custom_api_key_env
             ):
                 success_count += 1
+            # 保存默认模型设置
+            save_api_key("DEFAULT_MODEL_ID", selected_model_id)
+            success_count += 1
             logger.info(f"[设置] 保存自定义模型配置: {custom_model_name}")
         else:
             # 保存默认模型设置
             save_api_key("DEFAULT_MODEL_ID", selected_model_id)
+            success_count += 1
+            st.success(f"✅ 已切换模型: {selected_model_id}")
             logger.log_model_selection(
                 selected_model_id, selected_provider, temperature, max_tokens
             )
@@ -847,16 +852,15 @@ def render_settings():
         # 保存温度和token设置
         save_api_key("DEFAULT_TEMPERATURE", str(temperature))
         save_api_key("DEFAULT_MAX_TOKENS", str(int(max_tokens)))
+        success_count += 2
 
         if success_count > 0 and not error_messages:
             st.success(f"✅ 成功保存 {success_count} 项设置！")
-            st.info("📄 配置已保存到项目根目录的 .env 文件")
+            st.info("📄 配置已保存到项目根目录的 .env 文件，刷新页面生效")
             logger.info(f"[设置] 成功保存 {success_count} 项配置")
         elif error_messages:
             st.error("❌ 部分设置保存失败：" + "; ".join(error_messages))
             logger.error(f"[设置] 部分保存失败: {'; '.join(error_messages)}")
-        else:
-            st.info("💡 没有需要保存的更改")
 
 
 def render_log_viewer():
