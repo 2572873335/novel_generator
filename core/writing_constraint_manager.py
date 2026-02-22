@@ -19,47 +19,58 @@ from dataclasses import dataclass, asdict
 
 @dataclass
 class WritingConstraints:
-    """写作约束集合"""
+    world_type: str = "xianxia"
+    faction_whitelist: List[str] = None
+    current_faction: str = ""
+    locked_names: Dict[str, str] = None
+    protagonist_name: str = ""
+    current_realm: str = ""
+    realm_hierarchy: Dict[str, int] = None
+    max_cross_realm: int = 2
+    locked_constitution: str = ""
+    allowed_constitution_changes: List[str] = None
+    cross_realm_combat: str = "forbidden"
+    required_costs: List[str] = None
+    min_minor_breakthrough_days: int = 7
+    min_major_breakthrough_days: int = 30
+    last_breakthrough_chapter: int = 0
+    current_location: str = ""
+    location_distances: Dict[str, int] = None
+    visited_scenes: List[str] = None
+    current_day: int = 1
+    max_time_jump: int = 7
+    protagonist_weapon: str = ""
+    max_power_gap: float = 1.2
+    has_cultivation: bool = True
+    cognitive_stages: List[str] = None
+    entity_rules: Dict[str, str] = None
+    introduced_factions: List[str] = None
+    faction_chapter_map: Dict[str, int] = None
 
-    # 宗门约束
-    faction_whitelist: List[str]  # 允许使用的宗门名称
-    current_faction: str  # 主角当前所在宗门
-
-    # 人物约束
-    locked_names: Dict[str, str]  # 锁定的人物姓名 {角色: 姓名}
-    protagonist_name: str
-
-    # 修为约束
-    current_realm: str  # 主角当前境界
-    realm_hierarchy: Dict[str, int]  # 境界等级映射
-    max_cross_realm: int  # 最大可越级层数
-
-    # 体质约束
-    locked_constitution: str  # 锁定的体质类型
-    allowed_constitution_changes: List[str]  # 允许的变更方式
-
-    # 战斗约束
-    cross_realm_combat: str  # forbidden/allowed_with_cost
-    required_costs: List[str]  # 跨境界必须付出的代价
-
-    # 时间约束
-    min_minor_breakthrough_days: int  # 小境界突破最少天数
-    min_major_breakthrough_days: int  # 大境界突破最少天数
-    last_breakthrough_chapter: int  # 上次突破章节
-
-    # 地理约束
-    current_location: str  # 当前地点
-    location_distances: Dict[str, int]  # 地点间距离
-
-    # 时间线约束
-    current_day: int = 1  # 故事内第几天
-    max_time_jump: int = 7  # 最大时间跳跃（天）
-
-    # 武器命名约束
-    protagonist_weapon: str = "墨渊"  # 主角武器名称（锁定）
-
-    # 战力计算约束
-    max_power_gap: float = 1.2  # 最大合理战力差距（120%）
+    def __post_init__(self):
+        """初始化空值"""
+        if self.faction_whitelist is None:
+            self.faction_whitelist = []
+        if self.locked_names is None:
+            self.locked_names = {}
+        if self.realm_hierarchy is None:
+            self.realm_hierarchy = {}
+        if self.allowed_constitution_changes is None:
+            self.allowed_constitution_changes = []
+        if self.required_costs is None:
+            self.required_costs = []
+        if self.location_distances is None:
+            self.location_distances = {}
+        if self.visited_scenes is None:
+            self.visited_scenes = []
+        if self.cognitive_stages is None:
+            self.cognitive_stages = []
+        if self.entity_rules is None:
+            self.entity_rules = {}
+        if self.introduced_factions is None:
+            self.introduced_factions = []
+        if self.faction_chapter_map is None:
+            self.faction_chapter_map = {}
 
 
 class WritingConstraintManager:
@@ -97,49 +108,55 @@ class WritingConstraintManager:
 
     def _extract_initial_constraints(self) -> WritingConstraints:
         """从项目文件中提取初始约束"""
-        # 加载角色信息
         characters = self._load_characters()
         world_rules = self._load_world_rules()
 
-        # 提取主角信息
+        world_type = world_rules.get("world_type", "xianxia")
+        has_cultivation = world_rules.get("has_cultivation", True)
+
         protagonist_name = ""
         protagonist_constitution = ""
-        for char in characters:
+        locked_names = {}
+
+        for i, char in enumerate(characters):
+            name = char.get("name", "")
+            role = char.get("role", "")
+            if name:
+                locked_names[role or f"char_{i}"] = name
             if char.get("role") == "protagonist":
-                protagonist_name = char.get("name", "")
-                # 尝试从abilities或background中提取体质
+                protagonist_name = name
                 abilities = char.get("abilities", [])
                 for ability in abilities:
                     if "骨" in ability or "体" in ability:
                         protagonist_constitution = ability
                         break
 
-        # 提取宗门信息
         factions = world_rules.get("factions", {})
         faction_names = list(factions.keys())
         current_faction = faction_names[0] if faction_names else ""
 
-        # 提取境界体系
         cultivation_system = world_rules.get("cultivation_system", {})
         realm_list = cultivation_system.get("境界列表", [])
         realm_hierarchy = {realm: i for i, realm in enumerate(realm_list)}
 
-        # 提取当前境界（从第一章或设定中）
         current_realm = self._detect_initial_realm(characters)
 
-        # 加载配置中的规则
         realm_config = self.config.get("realm_system", {})
         combat_rules = realm_config.get("combat_rules", {})
         cultivation_config = self.config.get("cultivation_speed", {})
 
+        cognitive_stages = world_rules.get("cognitive_stages", [])
+        entity_rules = world_rules.get("entity_rules", {})
+
+        introduced_factions = []
+        faction_chapter_map = {}
+
         return WritingConstraints(
+            world_type=world_type,
+            has_cultivation=has_cultivation,
             faction_whitelist=faction_names,
             current_faction=current_faction,
-            locked_names={
-                char.get("role", f"char_{i}"): char.get("name", "")
-                for i, char in enumerate(characters)
-                if char.get("name")
-            },
+            locked_names=locked_names,
             protagonist_name=protagonist_name,
             current_realm=current_realm,
             realm_hierarchy=realm_hierarchy,
@@ -159,6 +176,10 @@ class WritingConstraintManager:
             last_breakthrough_chapter=0,
             current_location="",
             location_distances={},
+            cognitive_stages=cognitive_stages,
+            entity_rules=entity_rules,
+            introduced_factions=introduced_factions,
+            faction_chapter_map=faction_chapter_map,
         )
 
     def _load_characters(self) -> List[Dict]:
@@ -280,20 +301,69 @@ class WritingConstraintManager:
 
 ### 10. 战力计算约束（防止越级秒杀）
 - 战力差距超过120%视为不合理
-- 同境界越级：最多越2层（如二层打四层）
+- 同境界越级：最多越2层
 - 越级战斗必须有合理代价
 - 主角越级获胜必须满足：对手轻敌/有帮手/利用环境/付出代价
+"""
+        if c.world_type == "backrooms":
+            prompt += f"""
+### 11. 后室世界观约束（无修炼体系）
+- 当前世界为后室(Backrooms)，没有修炼体系
+- 主角是普通人，依靠智慧和道具生存
+- 禁止出现"修炼"、"境界"、"灵气"、"法力"等修仙词汇
+- 禁止出现"认知深化阶段"、"Stage 1-5"等境界设定
+- 主角的能力来源：记忆更多规则、获得更多道具、团队协作
 
+### 12. 实体规则约束
+- 实体杀人规则是绝对的，不能违反
+- 笑魇：黑暗中直视超过3秒即死
+- 派对客：接受邀请即被同化
+- 悲尸：听到声音会被吸引
+- 禁止"直视实体只是掉SAN值但可以逃跑"的描写
+
+### 13. 势力利用约束
+- 已引入的势力：{", ".join(c.introduced_factions) if c.introduced_factions else "（无）"}
+- 势力一旦引入，必须在后续章节中持续出现并发挥作用
+- 禁止：建立势力后就不再提及
+- 禁止：势力没有实际作用
+
+### 14. 场景重复约束
+- 已访问的具体场景：{", ".join(c.visited_scenes) if c.visited_scenes else "（无）"}
+- 同一章节标题不能重复（如"锅炉房"出现两次）
+- 同一场景不能重复描写（如两次"办公室与照片"）
+- 新场景必须有新内容，不能只是换皮重复
+"""
+        if c.cognitive_stages:
+            prompt += f"""
+### 15. 认知阶段说明（如有）
+- 注意：本世界有认知深化体系，但主角仍是普通人
+- 认知深化 = 更多知识/经验，不是修仙升级
+- Stage描述：{", ".join(c.cognitive_stages)}
+- 禁止将"认知深化"写成修仙升级！
+"""
+
+        prompt += f"""
 ---
 
 **违规示例（严禁出现）：**
-❌ "林尘来到青云剑宗"（青云剑宗不在白名单中）
+"""
+        if c.world_type == "backrooms":
+            prompt += """❌ "陆明哲运转灵气，形成护盾"（后室世界无灵气）
+❌ "他突破了Stage 2，获得了'规则辨识'技能"（认知深化不是修仙）
+❌ "直视笑魇三秒后，他觉得头晕"（规则是绝对的直视即死）
+❌ "M.E.G.在第三章出现后就消失了"（势力必须持续出现）
+❌ "第7章锅炉房，第10章又是锅炉房"（场景不能简单重复）
+"""
+        else:
+            prompt += """❌ "林尘来到青云剑宗"（青云剑宗不在白名单中）
 ❌ "苏清雪改名为叶清雪"（人物姓名锁定）
 ❌ "剑气境三层击败剑心境"（跨大境界战斗）
 ❌ "三天后突破到剑气境五层"（修炼速度过快）
 ❌ "九玄剑骨变成了混沌剑骨"（体质无理由变更）
 ❌ "赵锋在剑冢深处伏击"（未说明如何进入禁地）
+"""
 
+        prompt += """
 **请严格检查写作内容，确保不违反以上任何约束！**
 """
         return prompt
@@ -306,37 +376,54 @@ class WritingConstraintManager:
         detected_location: Optional[str] = None,
         detected_faction: Optional[str] = None,
     ):
-        """
-        章节写作完成后，更新约束
+        """章节写作完成后，更新约束"""
+        import re
 
-        Args:
-            chapter_number: 章节号
-            chapter_content: 章节内容
-            detected_realm: 检测到的境界变化
-            detected_location: 检测到的位置变化
-            detected_faction: 检测到的宗门变化
-        """
         updated = False
+        c = self.constraints
 
-        # 更新境界
-        if detected_realm and detected_realm != self.constraints.current_realm:
-            self.constraints.current_realm = detected_realm
-            self.constraints.last_breakthrough_chapter = chapter_number
+        if detected_realm and detected_realm != c.current_realm:
+            c.current_realm = detected_realm
+            c.last_breakthrough_chapter = chapter_number
             updated = True
 
-        # 更新位置
-        if detected_location and detected_location != self.constraints.current_location:
-            self.constraints.current_location = detected_location
+        if detected_location and detected_location != c.current_location:
+            c.current_location = detected_location
             updated = True
 
-        # 更新宗门
-        if detected_faction and detected_faction in self.constraints.faction_whitelist:
-            if detected_faction != self.constraints.current_faction:
-                self.constraints.current_faction = detected_faction
+        if detected_faction and detected_faction in c.faction_whitelist:
+            if detected_faction != c.current_faction:
+                c.current_faction = detected_faction
                 updated = True
 
+        if c.world_type == "backrooms":
+            title_match = re.search(r"#\s*(.+?)(?:\n|$)", chapter_content)
+            if title_match:
+                chapter_title = title_match.group(1).strip()
+                if chapter_title and chapter_title not in c.visited_scenes:
+                    c.visited_scenes.append(chapter_title)
+                    updated = True
+
+            faction_patterns = [
+                r"(M\.E\.G\.|主要探索者集团)",
+                r"(B\.N\.T\.G\.|流浪者)",
+                r"(基金会|Foundation)",
+                r"(破碎之神|Church of the Broken God)",
+                r"(雇佣兵)",
+            ]
+            for pattern in faction_patterns:
+                matches = re.findall(pattern, chapter_content)
+                for match in matches:
+                    faction_name = match if len(match) > 2 else "Unknown"
+                    if faction_name not in c.introduced_factions:
+                        c.introduced_factions.append(faction_name)
+                        c.faction_chapter_map[faction_name] = chapter_number
+                        updated = True
+                    else:
+                        c.faction_chapter_map[faction_name] = chapter_number
+
         if updated:
-            self._save_constraints(self.constraints)
+            self._save_constraints(c)
 
     def validate_chapter(
         self, chapter_number: int, chapter_content: str
@@ -526,6 +613,63 @@ class WritingConstraintManager:
                                     "suggestion": "为反派添加合理的动机（复仇、野心、嫉妒、理念冲突等）",
                                 }
                             )
+
+        if c.world_type == "backrooms":
+            cultivation_words = [
+                "修炼",
+                "灵气",
+                "法力",
+                "真元",
+                "金丹",
+                "元婴",
+                "境界",
+                "功法",
+                "秘籍",
+                "经脉",
+                "灵根",
+                "天材地宝",
+                "灵草",
+                "灵石",
+            ]
+            for word in cultivation_words:
+                if word in chapter_content:
+                    violations.append(
+                        {
+                            "type": "cultivation_in_backrooms",
+                            "message": f"检测到修仙词汇：'{word}'",
+                            "severity": "critical",
+                            "details": "后室世界没有修炼体系，禁止出现修仙词汇",
+                            "suggestion": f"将'{word}'改为后室世界观中的对应概念",
+                        }
+                    )
+
+            title_match = re.search(r"#\s*(.+?)(?:\n|$)", chapter_content)
+            if title_match:
+                chapter_title = title_match.group(1).strip()
+                if chapter_title in c.visited_scenes and chapter_number > 1:
+                    violations.append(
+                        {
+                            "type": "scene_repetition",
+                            "message": f"章节标题重复：'{chapter_title}'",
+                            "severity": "critical",
+                            "details": f"此标题已在第{c.visited_scenes.index(chapter_title) + 1}章出现过",
+                            "suggestion": "修改章节标题，避免与已有章节重复",
+                        }
+                    )
+
+            for faction in c.introduced_factions:
+                if faction in c.faction_chapter_map:
+                    last_chapter = c.faction_chapter_map[faction]
+                    if chapter_number - last_chapter > 5:
+                        violations.append(
+                            {
+                                "type": "faction_unused",
+                                "message": f"势力'{faction}'已{chapter_number - last_chapter}章未出现",
+                                "severity": "warning",
+                                "details": f"势力在第{last_chapter}章出现后，长时间未登场",
+                                "suggestion": f"让{faction}重新登场或说明其去向",
+                            }
+                        )
 
         return violations
 
