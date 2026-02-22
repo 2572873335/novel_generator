@@ -9,6 +9,16 @@ import re
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from pathlib import Path
+from enum import Enum
+
+
+class ChapterType(Enum):
+    """章节类型枚举"""
+    ACTION = "action"      # 战斗冲突型
+    EMOTIONAL = "emotional"  # 情感表达型
+    SETUP = "setup"        # 铺垫设定型
+    TRANSITION = "transition"  # 过渡转型型
+
 from datetime import datetime
 
 
@@ -391,8 +401,52 @@ class SeniorEditorAgent:
             strengths=strengths,
         )
 
+    def _detect_chapter_type(self, content: str) -> ChapterType:
+        """
+        检测章节类型：ACTION/EMOTIONAL/SETUP/TRANSITION
+        
+        基于关键词密度进行软判断
+        """
+        action_keywords = ["战斗", "杀", "死", "敌人", "危机", "冲突", "击败", "修炼", "突破", "法宝", "功法"]
+        emotional_keywords = ["悲伤", "愤怒", "喜悦", "感动", "泪", "心碎", "爱", "恨", "思念", "回忆", "痛苦"]
+        setup_keywords = ["原来", "设定", "介绍", "说明", "讲解", "传说", "历史", "规则", "境界", "势力"]
+        transition_keywords = ["然而", "但是", "不过", "因此", "所以", "接着", "随后", "第二", "很快", "不久"]
+        
+        action_count = sum(content.count(kw) for kw in action_keywords)
+        emotional_count = sum(content.count(kw) for kw in emotional_keywords)
+        setup_count = sum(content.count(kw) for kw in setup_keywords)
+        transition_count = sum(content.count(kw) for kw in transition_keywords)
+        
+        counts = {
+            ChapterType.ACTION: action_count,
+            ChapterType.EMOTIONAL: emotional_count,
+            ChapterType.SETUP: setup_count,
+            ChapterType.TRANSITION: transition_count,
+        }
+        
+        return max(counts, key=counts.get)
+    
+    def _analyze_emotion_curve(self, content: str) -> float:
+        """
+        分析情绪曲线，返回-1到1之间的值
+        -1表示全程压抑，1表示全程释放
+        0表示平稳
+        """
+        suppress_keywords = ["压抑", "痛苦", "悲伤", "困境", "危机", "危险", "恐惧", "担心", "焦虑", "绝望", "失败", "受伤", "重伤", "死亡"]
+        release_keywords = ["突破", "胜利", "成功", "喜悦", "兴奋", "爽快", "扬眉吐气", "打脸", "装逼", "震撼", "惊喜", "获得", "得到", "觉醒"]
+        
+        suppress_count = sum(content.count(kw) for kw in suppress_keywords)
+        release_count = sum(content.count(kw) for kw in release_keywords)
+        
+        total = suppress_count + release_count
+        if total == 0:
+            return 0.0
+        
+        # 返回-1到1之间的曲线值
+        return (release_count - suppress_count) / max(total, 1)
+    
     def _evaluate_satisfaction(self, chapters: Dict[int, str]) -> ReviewDimension:
-        """评估爽感设计"""
+        """评估爽感设计 - 使用章节类型感知和情绪曲线分析"""
         issues = []
         strengths = []
         score = 8.0
@@ -400,17 +454,60 @@ class SeniorEditorAgent:
         all_text = "\n".join(chapters.values())
         total_words = len(all_text)
 
+        # 分析章节类型分布
+        chapter_types = {ch_type: 0 for ch_type in ChapterType}
+        for ch_num, content in chapters.items():
+            ch_type = self._detect_chapter_type(content)
+            chapter_types[ch_type] += 1
+
+        # 分析整体情绪曲线
+        emotion_curve = self._analyze_emotion_curve(all_text)
+        
+        # 计算抑制释放比 (7:3 为理想值)
+        suppress_keywords = ["压抑", "痛苦", "悲伤", "困境", "危机", "危险", "恐惧", "担心", "焦虑", "绝望"]
+        release_keywords = ["突破", "胜利", "成功", "喜悦", "兴奋", "爽快", "扬眉吐气", "打脸", "装逼"]
+        suppress_count = sum(all_text.count(kw) for kw in suppress_keywords)
+        release_count = sum(all_text.count(kw) for kw in release_keywords)
+        total_suppress_release = suppress_count + release_count
+        
+        if total_suppress_release > 0:
+            release_ratio = release_count / total_suppress_release
+            # 记录抑制释放比作为信息指标
+            strengths.append(f"抑制释放比: {release_ratio:.1%}(目标70%)")
+            # 软性检查：如果释放比低于30%才警告
+            if release_ratio < 0.3:
+                issues.append({"type": "warning", "message": f"情绪释放不足，抑制释放比仅{release_ratio:.1%}"})
+                score -= 0.5
+        
+        # 章节类型感知的冲突检查
         conflict_keywords = ["冲突", "战斗", "危机", "困境", "击败", "胜利", "突破"]
         conflict_count = sum(all_text.count(kw) for kw in conflict_keywords)
-
-        expected_conflicts = total_words / 3000
-        if conflict_count < expected_conflicts:
+        
+        # 软性指南：根据章节类型调整期望
+        action_chapters = chapter_types[ChapterType.ACTION]
+        emotional_chapters = chapter_types[ChapterType.EMOTIONAL]
+        setup_chapters = chapter_types[ChapterType.SETUP]
+        
+        # 动态计算期望冲突数
+        expected_conflicts = (total_words / 3000) * 0.7  # 软性目标
+        if action_chapters > emotional_chapters + setup_chapters:
+            # 战斗章节多，可以提高期望
+            expected_conflicts = expected_conflicts * 1.2
+        elif emotional_chapters > action_chapters:
+            # 情感章节多，降低期望
+            expected_conflicts = expected_conflicts * 0.5
+        elif setup_chapters > action_chapters:
+            # 铺垫章节多，大幅降低期望
+            expected_conflicts = expected_conflicts * 0.3
+        
+        # 软性检查：只有当冲突数远低于期望时才警告
+        if conflict_count < expected_conflicts * 0.5:
             issues.append(
-                {"type": "warning", "message": f"爽点密度不足，每3000字应有一个小爽点"}
+                {"type": "warning", "message": f"爽点密度偏低(类型感知)，当前{conflict_count}个，参考值{expected_conflicts:.1f}"}
             )
-            score -= 1.0
-        else:
-            strengths.append(f"冲突/爽点密度充足")
+            score -= 0.5  # 降低扣分
+        elif conflict_count >= expected_conflicts:
+            strengths.append(f"冲突/爽点密度良好")
 
         satisfaction_keywords = [
             "爽",
@@ -422,9 +519,9 @@ class SeniorEditorAgent:
             "惊艳",
         ]
         satisfaction_count = sum(all_text.count(kw) for kw in satisfaction_keywords)
-        if satisfaction_count < len(chapters):
-            issues.append({"type": "minor", "message": "情绪宣泄不足，读者缺乏快感"})
-            score -= 0.5
+        if satisfaction_count < len(chapters) * 0.5:  # 软性检查
+            issues.append({"type": "minor", "message": "情绪宣泄场景偏少，建议增加"})
+            score -= 0.3  # 降低扣分
 
         return ReviewDimension(
             name="爽感设计",
