@@ -1,12 +1,19 @@
 ---
 name: geopolitics-expert
-description: 设计小说世界的政治格局和势力分布，包括国家/势力设定、领土分布、政治体制、国际关系、军事冲突等。当需要构建国家/势力、设计政治冲突、规划地图势力范围时触发。
+version: "1.0"
+description: 设计小说世界的政治格局和势力分布，包括国家设定、领土分布、政治体制、国际关系、军事冲突
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: worldbuilding
   language: zh-cn
+  level: expert
+  triggers:
+    - 地缘政治
+    - geopolitics
+    - faction-design
+  parent: worldbuilder-coordinator
 ---
 
 # 地缘政治专家

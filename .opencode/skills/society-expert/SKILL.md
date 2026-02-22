@@ -1,12 +1,19 @@
 ---
 name: society-expert
-description: 设计小说世界的社会结构和文化体系，包括社会阶层、职业体系、宗教信仰、风俗习惯、道德观念等。当需要构建社会阶层、设计宗教文化、规划风俗习惯时触发。
+version: "1.0"
+description: 设计小说世界的社会结构和文化体系，包括社会阶层、职业体系、宗教信仰、风俗习惯、道德观念
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: worldbuilding
   language: zh-cn
+  level: expert
+  triggers:
+    - 社会结构
+    - society-structure
+    - culture-design
+  parent: worldbuilder-coordinator
 ---
 
 # 社会制度专家

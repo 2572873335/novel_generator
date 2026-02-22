@@ -1,12 +1,23 @@
 ---
 name: worldbuilder-coordinator
-description: 统筹小说世界观构建全流程，根据小说类型（玄幻/科幻/修仙/西幻/高武/都市）调度各专业子专家，整合输出完整的世界观文档体系。当用户需要构建小说世界观、设计架空世界、完善世界设定时触发。
+version: "1.0"
+description: 统筹小说世界观构建全流程，根据小说类型调度各专业子专家，整合输出完整的世界观文档体系
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: worldbuilding
   language: zh-cn
+  level: coordinator
+  triggers:
+    - 世界观总控
+    - world-coord
+    - worldbuilding
+  subordinates:
+    - currency-expert
+    - geopolitics-expert
+    - society-expert
+    - cultivation-designer
 ---
 
 # 世界观构建总协调员

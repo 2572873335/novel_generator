@@ -1,12 +1,18 @@
 ---
 name: character-designer
-description: 创造立体的人物形象，设计人物档案、关系网、成长轨迹、对话风格。运用心理学工具（MBTI、九型人格、荣格原型）设计人物性格。当需要设计角色、完善人物设定、构建人物关系时触发。
+version: "1.0"
+description: 创造立体的人物形象，设计人物档案、关系网、成长轨迹、对话风格，运用心理学工具设计人物性格
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: character
   language: zh-cn
+  level: architect
+  triggers:
+    - 人物设计
+    - character-design
+    - cast-design
 ---
 
 # 人物设计师

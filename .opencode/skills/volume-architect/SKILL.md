@@ -1,12 +1,19 @@
 ---
 name: volume-architect
-description: 将故事大纲分解为各卷内容，设计每卷的结构、节奏、高潮和卷间衔接。当需要规划分卷、设计卷内结构、安排卷间过渡时触发。
+version: "1.0"
+description: 将故事大纲分解为各卷内容，设计每卷的结构、节奏、高潮和卷间衔接
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: plot
   language: zh-cn
+  level: architect
+  triggers:
+    - 卷纲
+    - volume-structure
+    - book-division
+  parent: plot-architect-coordinator
 ---
 
 # 卷纲架构师

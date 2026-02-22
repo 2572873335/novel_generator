@@ -1,12 +1,22 @@
 ---
 name: plot-architect-coordinator
-description: 统筹剧情架构全流程，协调大纲架构师、卷纲架构师、章纲架构师三层架构师，将故事概念转化为从宏观到微观的完整情节框架。当需要设计故事结构、规划剧情发展、构建情节框架时触发。
+version: "1.0"
+description: 统筹剧情架构全流程，协调大纲/卷纲/章纲三层架构师，将故事概念转化为完整情节框架
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: plot
   language: zh-cn
+  level: coordinator
+  triggers:
+    - 剧情总控
+    - plot-coord
+    - story-structure
+  subordinates:
+    - outline-architect
+    - volume-architect
+    - chapter-architect
 ---
 
 # 剧情架构总控协调员

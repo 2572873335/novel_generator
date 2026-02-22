@@ -370,18 +370,164 @@ python main.py --config test_config.json
 
 ---
 
+## 批次执行详情（方案B - 保守式）
+
+### ✅ 批次1完成：Phase 1（已提交 `12ff0ad`）
+- 删除13个agents/*.md文件
+- 验证AgentManager从.opencode/skills/加载
+- 系统运行正常
+
+---
+
+### 批次2：Phase 2-4（准备执行）
+
+#### 步骤2.1：更新Coordinator级别Skills
+
+**文件1**: `.opencode/skills/worldbuilder-coordinator/SKILL.md`
+```yaml
+---
+name: worldbuilder-coordinator
+version: "1.0"
+description: 统筹小说世界观构建全流程，根据小说类型调度各专业子专家
+license: MIT
+compatibility: opencode
+metadata:
+  category: novel-writing
+  subcategory: worldbuilding
+  language: zh-cn
+  level: coordinator
+  triggers:
+    - 世界观总控
+    - world-coord
+    - worldbuilding
+  subordinates:
+    - currency-expert
+    - geopolitics-expert
+    - society-expert
+    - cultivation-designer
+---
+```
+
+**文件2**: `.opencode/skills/plot-architect-coordinator/SKILL.md`
+```yaml
+---
+name: plot-architect-coordinator
+version: "1.0"
+description: 统筹剧情架构全流程，协调大纲/卷纲/章纲三层架构师
+license: MIT
+compatibility: opencode
+metadata:
+  category: novel-writing
+  subcategory: plot
+  language: zh-cn
+  level: coordinator
+  triggers:
+    - 剧情总控
+    - plot-coord
+    - story-structure
+  subordinates:
+    - outline-architect
+    - volume-architect
+    - chapter-architect
+---
+```
+
+**文件3**: `.opencode/skills/novel-coordinator/SKILL.md`
+```yaml
+---
+name: novel-coordinator
+version: "1.0"
+description: 统筹小说创作全流程，管理项目进度和智能体调度
+license: MIT
+compatibility: opencode
+metadata:
+  category: novel-writing
+  subcategory: coordination
+  language: zh-cn
+  level: coordinator
+  triggers:
+    - 项目协调
+    - project-manage
+    - workflow
+---
+```
+
+#### 步骤2.2：更新Architect级别Skills
+
+**文件4**: `.opencode/skills/outline-architect/SKILL.md`
+- level: architect
+- triggers: [故事大纲, outline-design, plot-skeleton]
+
+**文件5**: `.opencode/skills/volume-architect/SKILL.md`
+- level: architect
+- triggers: [卷纲, volume-structure, book-division]
+
+**文件6**: `.opencode/skills/chapter-architect/SKILL.md`
+- level: architect
+- triggers: [章纲, scene-breakdown, chapter-outline]
+
+**文件7**: `.opencode/skills/character-designer/SKILL.md`
+- level: architect
+- triggers: [人物设计, character-design, cast-design]
+
+**文件8**: `.opencode/skills/rhythm-designer/SKILL.md` (新增)
+- level: architect
+- triggers: [节奏设计, pacing-chart, rhythm-design]
+
+#### 步骤2.3：更新Expert级别Skills
+
+**文件9**: `.opencode/skills/scene-writer/SKILL.md`
+- level: expert
+- triggers: [正文, scene-writing, draft-chapter]
+
+**文件10**: `.opencode/skills/cultivation-designer/SKILL.md`
+- level: expert
+- parent: worldbuilder-coordinator
+- triggers: [修炼体系, cultivation-sys, power-system]
+
+**文件11**: `.opencode/skills/currency-expert/SKILL.md`
+- level: expert
+- parent: worldbuilder-coordinator
+- triggers: [货币体系, currency-sys, economy-design]
+
+**文件12**: `.opencode/skills/geopolitics-expert/SKILL.md`
+- level: expert
+- parent: worldbuilder-coordinator
+- triggers: [地缘政治, geopolitics, faction-design]
+
+**文件13**: `.opencode/skills/society-expert/SKILL.md`
+- level: expert
+- parent: worldbuilder-coordinator
+- triggers: [社会结构, society-structure, culture-design]
+
+#### 步骤2.4：更新Auditor级别Skills
+
+**文件14**: `.opencode/skills/editor/SKILL.md`
+- level: auditor
+- triggers: [润色, line-editing, polish-text]
+
+**文件15**: `.opencode/skills/senior-editor/SKILL.md`
+- level: auditor
+- triggers: [审稿, senior-review, sharp-eval]
+
+**文件16**: `.opencode/skills/opening-diagnostician/SKILL.md` (新增)
+- level: auditor
+- triggers: [开篇诊断, gold-chapter, opening-check]
+
+---
+
 ## 执行顺序建议
 
 ### 方案A：激进式（一次性完成）
 适合：有完整测试环境，可以rollback
 1. Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7 → Phase 8
 
-### 方案B：保守式（分批次）
+### 方案B：保守式（分批次）✅ 当前方案
 适合：生产环境，需要逐步验证
-1. **批次1**: Phase 1 + Phase 8（验证删除agents后系统正常）
-2. **批次2**: Phase 2 + Phase 3 + Phase 4 + Phase 8（验证格式统一）
-3. **批次3**: Phase 5 + Phase 6 + Phase 8（验证新增skill）
-4. **批次4**: Phase 7 + Phase 8（验证AgentManager更新）
+1. ✅ **批次1**: Phase 1 + Phase 8（验证删除agents后系统正常）- 已完成
+2. ⏳ **批次2**: Phase 2 + Phase 3 + Phase 4 + Phase 8（验证格式统一）- 准备中
+3. ⏳ **批次3**: Phase 5 + Phase 6 + Phase 8（验证新增skill）- 待执行
+4. ⏳ **批次4**: Phase 7 + Phase 8（验证AgentManager更新）- 待执行
 
 ### 方案C：迭代式（推荐）
 1. **Sprint 1**: Phase 1（清理重复源）

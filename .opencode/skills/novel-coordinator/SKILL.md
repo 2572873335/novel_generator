@@ -1,12 +1,18 @@
 ---
 name: novel-coordinator
-description: 统筹小说创作全流程，管理各智能体协作和任务分配，维护项目状态和文档版本。当开始新小说项目、需要协调多个环节、管理创作进度时触发。
+version: "1.0"
+description: 统筹小说创作全流程，管理各智能体协作和任务分配，维护项目状态和文档版本
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
-  subcategory: management
+  subcategory: coordination
   language: zh-cn
+  level: coordinator
+  triggers:
+    - 项目协调
+    - project-manage
+    - workflow
 ---
 
 # 小说创作协调管理员

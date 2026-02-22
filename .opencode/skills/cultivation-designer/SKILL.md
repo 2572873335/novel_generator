@@ -1,12 +1,19 @@
 ---
 name: cultivation-designer
-description: 设计玄幻/修仙/高武小说的力量体系和修炼境界，包括境界划分、突破机制、战力对比、功法体系、天劫/瓶颈设计等。当需要构建修炼体系、设计境界划分、规划力量层次时触发。
+version: "1.0"
+description: 设计玄幻/修仙/高武小说的力量体系和修炼境界，包括境界划分、突破机制、战力对比、功法体系、天劫设计
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: worldbuilding
   language: zh-cn
+  level: expert
+  triggers:
+    - 修炼体系
+    - cultivation-sys
+    - power-system
+  parent: worldbuilder-coordinator
 ---
 
 # 修炼境界设计师

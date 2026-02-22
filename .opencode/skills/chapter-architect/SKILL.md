@@ -1,12 +1,19 @@
 ---
 name: chapter-architect
-description: 将卷纲细化为章节大纲，设计每章的具体内容、场景安排、情节推进和章末钩子。当需要规划章节、设计章内结构、安排场景时触发。
+version: "1.0"
+description: 将卷纲细化为章节大纲，设计每章的具体内容、场景安排、情节推进和章末钩子
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: plot
   language: zh-cn
+  level: architect
+  triggers:
+    - 章纲
+    - scene-breakdown
+    - chapter-outline
+  parent: plot-architect-coordinator
 ---
 
 # 章纲架构师

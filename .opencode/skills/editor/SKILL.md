@@ -1,12 +1,18 @@
 ---
 name: editor
-description: 对小说文本进行优化和质量把控，检查文风统一性、逻辑一致性、节奏、语法，检测敏感内容。提升稿件整体质量，确保阅读体验。当需要修改稿件、统一文风、检查质量时触发。
+version: "1.0"
+description: 对小说文本进行优化和质量把控，检查文风统一性、逻辑一致性、节奏、语法，检测敏感内容
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: editing
   language: zh-cn
+  level: auditor
+  triggers:
+    - 润色
+    - line-editing
+    - polish-text
 ---
 
 # 编辑润色师

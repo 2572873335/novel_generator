@@ -1,33 +1,41 @@
 """
 智能体管理器 - 重构版
-真正调用 14 个专业 Skills 和 Agents
+真正调用 15 个专业 Skills 和 Agents
 集成设定一致性追踪
+支持层级架构和触发词冲突检测
 """
 
 import os
 import json
-from typing import Dict, List, Any, Optional
+import yaml
+from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
+from dataclasses import dataclass, field
+
+
+@dataclass
+class SkillMetadata:
+    """Skill 元数据"""
+
+    name: str
+    level: str = "expert"  # coordinator, architect, expert, auditor
+    triggers: List[str] = field(default_factory=list)
+    category: str = ""
+    subcategory: str = ""
+    parent: Optional[str] = None
+    subordinates: List[str] = field(default_factory=list)
+    description: str = ""
 
 
 class AgentManager:
     """
     智能体管理器 - 真正调用所有 Skills 和 Agents
 
-    可用的专业智能体：
-    1. WorldBuilder - 世界观构建（科技、政治、社会体系）
-    2. CharacterDesigner - 角色设计（性格、动机、成长线）
-    3. PlotArchitect - 剧情架构（主线、支线、节奏）
-    4. OutlineArchitect - 大纲设计（章节规划）
-    5. VolumeArchitect - 卷纲设计（长篇分卷）
-    6. ChapterArchitect - 章纲设计（单章细节）
-    7. SceneWriter - 场景写作（对话、动作、环境）
-    8. Editor - 编辑润色（文字、节奏、风格）
-    9. CultivationDesigner - 修炼/能力体系设计
-    10. CurrencyExpert - 货币/经济体系专家
-    11. GeopoliticsExpert - 地缘政治专家
-    12. SocietyExpert - 社会结构专家
-    13. NovelCoordinator - 总协调者
+    层级架构：
+    - Level 1 (Coordinator): worldbuilder-coordinator, plot-architect-coordinator, novel-coordinator
+    - Level 2 (Architect): outline-architect, volume-architect, chapter-architect, character-designer, rhythm-designer
+    - Level 3 (Expert): scene-writer, cultivation-designer, currency-expert, geopolitics-expert, society-expert
+    - Level 4 (Auditor): opening-diagnostician, senior-editor, editor
     """
 
     def __init__(self, llm_client, project_dir: str):
@@ -49,9 +57,109 @@ class AgentManager:
 
         self.active_agents = []
         self.agent_outputs = {}  # 记录每个 agent 的输出
+        self.skills_metadata: Dict[str, SkillMetadata] = {}  # Skill 元数据缓存
+        self._trigger_index: Dict[str, str] = {}  # 触发词 -> skill 映射
+
+        # 初始化时加载所有 skills 元数据
+        self._load_all_skills_metadata()
+
+    def _load_all_skills_metadata(self):
+        """加载所有 skills 的元数据"""
+        if not self.skills_dir.exists():
+            return
+
+        for skill_dir in self.skills_dir.iterdir():
+            if skill_dir.is_dir():
+                skill_file = skill_dir / "SKILL.md"
+                if skill_file.exists():
+                    metadata = self._parse_skill_metadata(skill_file)
+                    if metadata:
+                        self.skills_metadata[skill_dir.name] = metadata
+                        # 建立触发词索引
+                        for trigger in metadata.triggers:
+                            self._trigger_index[trigger.lower()] = skill_dir.name
+
+        # 验证触发词冲突
+        self._validate_triggers()
+
+    def _parse_skill_metadata(self, skill_file: Path) -> Optional[SkillMetadata]:
+        """解析 SKILL.md 的 YAML frontmatter"""
+        try:
+            content = skill_file.read_text(encoding="utf-8")
+            if not content.startswith("---"):
+                return None
+
+            parts = content.split("---", 2)
+            if len(parts) < 3:
+                return None
+
+            front_matter = yaml.safe_load(parts[1])
+            if not front_matter:
+                return None
+
+            metadata_dict = front_matter.get("metadata", {})
+            return SkillMetadata(
+                name=front_matter.get("name", skill_file.parent.name),
+                level=metadata_dict.get("level", "expert"),
+                triggers=metadata_dict.get("triggers", []),
+                category=metadata_dict.get("category", ""),
+                subcategory=metadata_dict.get("subcategory", ""),
+                parent=metadata_dict.get("parent"),
+                subordinates=metadata_dict.get("subordinates", []),
+                description=front_matter.get("description", ""),
+            )
+        except Exception as e:
+            print(f"[Warning] 解析 {skill_file} 元数据失败: {e}")
+            return None
+
+    def _validate_triggers(self):
+        """
+        验证触发词是否唯一
+        如果有冲突，打印警告但不会抛出异常
+        """
+        trigger_map: Dict[str, List[str]] = {}
+        for skill_name, metadata in self.skills_metadata.items():
+            for trigger in metadata.triggers:
+                trigger_lower = trigger.lower()
+                if trigger_lower not in trigger_map:
+                    trigger_map[trigger_lower] = []
+                trigger_map[trigger_lower].append(skill_name)
+
+        conflicts = {t: skills for t, skills in trigger_map.items() if len(skills) > 1}
+        if conflicts:
+            print("\n[Warning] 触发词冲突检测:")
+            for trigger, skills in conflicts.items():
+                print(f"  - '{trigger}' 被 {skills} 同时使用")
+            print("建议修改触发词以确保唯一性\n")
+
+    def get_skill_by_trigger(self, trigger: str) -> Optional[str]:
+        """根据触发词查找对应的 skill"""
+        return self._trigger_index.get(trigger.lower())
+
+    def get_skills_by_level(self, level: str) -> List[str]:
+        """获取指定层级的所有 skills"""
+        return [
+            name for name, meta in self.skills_metadata.items() if meta.level == level
+        ]
+
+    def get_skill_hierarchy(self) -> Dict[str, Any]:
+        """获取 skill 层级结构"""
+        hierarchy = {"coordinator": [], "architect": [], "expert": [], "auditor": []}
+        for name, meta in self.skills_metadata.items():
+            level = meta.level
+            if level in hierarchy:
+                hierarchy[level].append(
+                    {
+                        "name": name,
+                        "triggers": meta.triggers,
+                        "subordinates": meta.subordinates,
+                        "parent": meta.parent,
+                    }
+                )
+        return hierarchy
 
     def load_agent_prompt(self, agent_name: str) -> str:
-        """加载智能体提示词 - 从 agents/*.md"""
+        """加载智能体提示词 - 从 agents/*.md（已弃用，保留兼容）"""
         prompt_file = self.agents_dir / f"{agent_name}.md"
         if prompt_file.exists():
             with open(prompt_file, "r", encoding="utf-8") as f:
@@ -67,38 +175,24 @@ class AgentManager:
         return ""
 
     def get_available_agents(self) -> List[Dict[str, str]]:
-        """获取所有可用的智能体"""
+        """获取所有可用的智能体 - 优先从 skills 读取（单源维护）"""
         agents = []
 
-        # 从 agents/ 目录读取
-        if self.agents_dir.exists():
-            for md_file in self.agents_dir.glob("*.md"):
-                content = md_file.read_text(encoding="utf-8")
-                name = md_file.stem
-                description = self._extract_description(content)
-                agents.append(
-                    {
-                        "name": name,
-                        "file": md_file.name,
-                        "description": description,
-                        "type": "agent",
-                    }
-                )
-
-        # 从 skills/ 目录读取
+        # 优先从 skills/ 目录读取
         if self.skills_dir.exists():
             for skill_dir in self.skills_dir.iterdir():
                 if skill_dir.is_dir():
                     skill_file = skill_dir / "SKILL.md"
                     if skill_file.exists():
-                        content = skill_file.read_text(encoding="utf-8")
-                        description = self._extract_description(content)
+                        metadata = self.skills_metadata.get(skill_dir.name)
                         agents.append(
                             {
                                 "name": skill_dir.name,
                                 "file": "SKILL.md",
-                                "description": description,
+                                "description": metadata.description if metadata else "",
                                 "type": "skill",
+                                "level": metadata.level if metadata else "expert",
+                                "triggers": metadata.triggers if metadata else [],
                             }
                         )
 

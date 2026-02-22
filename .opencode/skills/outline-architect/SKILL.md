@@ -1,12 +1,19 @@
 ---
 name: outline-architect
-description: 设计故事的整体骨架和主要情节点，包括主线走向、核心冲突、人物弧光、主题表达。当需要构建故事主线、设计核心冲突、规划人物成长时触发。
+version: "1.0"
+description: 设计故事的整体骨架和主要情节点，包括主线走向、核心冲突、人物弧光、主题表达
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: plot
   language: zh-cn
+  level: architect
+  triggers:
+    - 故事大纲
+    - outline-design
+    - plot-skeleton
+  parent: plot-architect-coordinator
 ---
 
 # 大纲架构师

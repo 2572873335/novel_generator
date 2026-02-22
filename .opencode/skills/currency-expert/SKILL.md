@@ -1,12 +1,19 @@
 ---
 name: currency-expert
-description: 设计小说世界的货币体系和经济规则，包括货币形式、价值尺度、通货膨胀机制、贫富差距表现等。当需要构建经济系统、设计货币制度、规划贸易体系时触发。
+version: "1.0"
+description: 设计小说世界的货币体系和经济规则，包括货币形式、价值尺度、通货膨胀机制、贫富差距表现
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: worldbuilding
   language: zh-cn
+  level: expert
+  triggers:
+    - 货币体系
+    - currency-sys
+    - economy-design
+  parent: worldbuilder-coordinator
 ---
 
 # 货币专家

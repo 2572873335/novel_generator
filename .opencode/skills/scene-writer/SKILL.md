@@ -1,12 +1,18 @@
 ---
 name: scene-writer
-description: 将章节大纲转化为具体场景文字，进行环境描写、动作编排、对话写作、心理描写。运用五感渲染和视角控制创作有画面感和感染力的场景。当需要撰写章节正文、描写场景、创作对话时触发。
+version: "1.0"
+description: 将章节大纲转化为具体场景文字，进行环境描写、动作编排、对话写作、心理描写，运用五感渲染创作有画面感的场景
 license: MIT
 compatibility: opencode
 metadata:
   category: novel-writing
   subcategory: writing
   language: zh-cn
+  level: expert
+  triggers:
+    - 正文
+    - scene-writing
+    - draft-chapter
 ---
 
 # 场景描写师
