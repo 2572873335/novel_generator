@@ -5,17 +5,26 @@
 realm_system:
   # 境界等级定义（数值越大越强）
   hierarchy:
-    "无剑者": 0
-    "剑气境一层": 10
-    "剑气境二层": 11
-    "剑气境三层": 12
-    "剑气境四层": 13
-    "剑气境五层": 14
-    "剑气境六层": 15
-    "剑气境七层": 16
-    "剑气境八层": 17
-    "剑气境九层": 18
-    "剑气境巅峰": 19
+    "无剑者一层": 1
+    "无剑者二层": 2
+    "无剑者三层": 3
+    "无剑者四层": 4
+    "无剑者五层": 5
+    "无剑者六层": 6
+    "无剑者七层": 7
+    "无剑者八层": 8
+    "无剑者九层": 9
+    "无剑者巅峰": 10
+    "剑气境一层": 11
+    "剑气境二层": 12
+    "剑气境三层": 13
+    "剑气境四层": 14
+    "剑气境五层": 15
+    "剑气境六层": 16
+    "剑气境七层": 17
+    "剑气境八层": 18
+    "剑气境九层": 19
+    "剑气境巅峰": 20
     "剑心境初期": 30
     "剑心境中期": 32
     "剑心境后期": 34
@@ -40,6 +49,8 @@ realm_system:
     cross_realm_combat: "forbidden"  # forbidden/allowed_with_cost
     # 跨大境界必须付出的代价类型
     required_costs: ["燃烧寿元", "损伤根基", "消耗底牌", "前辈相助", "阵法加持", "符篆之力"]
+    # 战力差距阈值（超过此差距视为不合理）
+    max_reasonable_gap: 1.2  # 战胜方战力不应超过战败方120%
 
 # 2. 修炼速度限制
 cultivation_speed:
@@ -102,12 +113,52 @@ constitution_lock:
 
 # 6. 时间线验证
 timeline_validation:
+  # 启用时间戳强制检查
+  enforce_timestamp: true
+  # 章节间最大时间跳跃（天）
+  max_time_jump: 7
+  # 前期（1-10章）最大时间跳跃
+  early_chapter_max_jump: 3
+  # 每章必须标注"Day X"
+  require_day_marker: true
   # 验证消息传递时间
   message_travel:
     # 消息传递速度（里/天）
     speed: 500
     # 最大合理延迟（天）
     max_delay: 3
+  # 时间线一致性检查
+  consistency_check:
+    # 禁止时间倒流
+    forbid_time_backwards: true
+    # 禁止时间循环（7天后又是7天）
+    forbid_time_loop: true
+
+# 6.1 武器命名锁定（防止精神分裂）
+weapon_naming:
+  # 启用武器命名锁定
+  enforce_unique_names: true
+  # 禁止别名（如"墨渊"不能突然叫"无锋"）
+  forbid_aliases: true
+  # 允许的状态描述（不视为改名）
+  allowed_descriptions:
+    - "残剑"
+    - "断剑"
+    - "受损"
+    - "修复"
+    - "认主"
+    - "解封"
+  # 第一次提及后必须锁定
+  lock_after_first_mention: true
+
+# 6.2 物品清单追踪
+item_tracking:
+  # 重要物品清单
+  track_important_items: true
+  # 物品状态变更必须记录
+  require_state_change_log: true
+  # 禁止物品数量穿越（如1把剑变成2把）
+  forbid_quantity_穿越: true
   
   # 地理距离验证
   geography:

@@ -208,6 +208,67 @@ class FactionState:
         }
 
 
+@dataclass
+class TemporalState:
+    """时间线状态追踪"""
+
+    current_day: int = 1
+    chapter_timestamps: Dict[int, int] = field(default_factory=dict)
+
+    def update_day(self, new_day: int, chapter: int):
+        if new_day < self.current_day:
+            print(f"[Tracker警告] 时间倒流：从第{self.current_day}天到第{new_day}天")
+            return False
+        if new_day - self.current_day > 7 and chapter < 10:
+            print(
+                f"[Tracker警告] 前期时间跳跃过大：从第{self.current_day}天跳到第{new_day}天"
+            )
+        self.chapter_timestamps[chapter] = new_day
+        self.current_day = new_day
+        return True
+
+    def to_dict(self) -> Dict:
+        return {
+            "current_day": self.current_day,
+            "chapter_timestamps": self.chapter_timestamps,
+        }
+
+
+@dataclass
+class ItemState:
+    """物品状态追踪"""
+
+    item_name: str
+    current_holder: str
+    name_variants: List[str] = field(default_factory=list)
+    state_changes: List[Dict] = field(default_factory=list)
+
+    def record_name_variant(self, variant: str, chapter: int):
+        if variant not in self.name_variants and variant != self.item_name:
+            self.name_variants.append(variant)
+            print(
+                f"[Tracker警告] 物品{self.item_name}出现新名称：'{variant}'（章节{chapter}）"
+            )
+
+    def record_state_change(self, new_state: str, chapter: int, reason: str = ""):
+        self.state_changes.append(
+            {
+                "to_state": new_state,
+                "chapter": chapter,
+                "reason": reason,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "item_name": self.item_name,
+            "current_holder": self.current_holder,
+            "name_variants": self.name_variants,
+            "state_changes": self.state_changes,
+        }
+
+
 class ConsistencyTracker:
     """
     设定一致性追踪器
@@ -235,6 +296,8 @@ class ConsistencyTracker:
         self.constitution_state: Optional[ConstitutionState] = None  # 体质追踪
         self.location_state: Optional[LocationState] = None  # 地点追踪
         self.faction_state: Optional[FactionState] = None  # 宗门追踪
+        self.temporal_state: TemporalState = TemporalState()  # 时间线追踪
+        self.item_states: Dict[str, ItemState] = {}  # 物品追踪
 
         # 加载已有数据
         self._load()

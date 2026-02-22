@@ -51,6 +51,16 @@ class WritingConstraints:
     current_location: str  # 当前地点
     location_distances: Dict[str, int]  # 地点间距离
 
+    # 时间线约束
+    current_day: int = 1  # 故事内第几天
+    max_time_jump: int = 7  # 最大时间跳跃（天）
+
+    # 武器命名约束
+    protagonist_weapon: str = "墨渊"  # 主角武器名称（锁定）
+
+    # 战力计算约束
+    max_power_gap: float = 1.2  # 最大合理战力差距（120%）
+
 
 class WritingConstraintManager:
     """
@@ -254,6 +264,25 @@ class WritingConstraintManager:
 - 主角当前位置：{c.current_location if c.current_location else "（请在写作中明确）"}
 - 地点间移动需要合理时间
 - 禁地（如剑冢、古地）进出必须有明确许可或解释
+
+### 8. 时间线约束（防止时间混乱）
+- 故事当前时间：第{c.current_day}天
+- 本章必须标注"Day X"时间戳
+- 章节间时间跳跃不能超过7天
+- 严禁时间倒流（不能今天变成昨天）
+- 严禁时间循环（不能"七天后"连续出现两次）
+
+### 9. 武器命名锁定（防止精神分裂）
+- 主角武器名称：{c.protagonist_weapon if hasattr(c, "protagonist_weapon") else "墨渊"}（锁定，禁止改名）
+- 第一次提及后必须统一使用此名称
+- 允许的状态描述：残剑、断剑、受损、修复、认主、解封（不算改名）
+- 严禁使用别名
+
+### 10. 战力计算约束（防止越级秒杀）
+- 战力差距超过120%视为不合理
+- 同境界越级：最多越2层（如二层打四层）
+- 越级战斗必须有合理代价
+- 主角越级获胜必须满足：对手轻敌/有帮手/利用环境/付出代价
 
 ---
 

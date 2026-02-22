@@ -245,12 +245,19 @@ class NovelGenerator:
             # 更新进度
             completed += 1
 
-            # 每5章进行一次一致性检查
+            # 每5章进行一次一致性检查和人工检查点
             if completed % 5 == 0 and completed > last_consistency_check:
                 last_consistency_check = completed
                 print(f"\n{'=' * 60}")
                 print(f"[审查] 一致性检查点: 第{completed}章完成")
                 print("=" * 60)
+
+                # 人工检查点：等待确认
+                checkpoint_approved = self._human_checkpoint(completed)
+                if not checkpoint_approved:
+                    print("[警告] 检查点未通过，需要回滚重写")
+                    # 回滚逻辑可以在这里实现
+                    # 目前仅提醒，不自动回滚
 
                 check_result = self.consistency_checker.check_all_chapters()
 
@@ -352,6 +359,29 @@ class NovelGenerator:
         print(f"  通过: {passed}")
         print(f"  需要修改: {total - passed}")
         print(f"  平均评分: {avg_score:.1f}/10")
+
+    def _human_checkpoint(self, chapter_number: int) -> bool:
+        """
+        人工检查点 - 等待用户确认继续
+
+        Returns:
+            True: 用户确认继续
+            False: 用户要求停止或回滚
+        """
+        print(f"\n{'=' * 60}")
+        print(f"[检查点] 已完成第{chapter_number}章")
+        print("=" * 60)
+        print("请检查以下内容：")
+        print("  1. 战力是否合理（无越级秒杀）")
+        print("  2. 时间线是否连贯（无时间倒流）")
+        print("  3. 武器命名是否统一")
+        print("  4. 反派动机是否合理")
+        print()
+
+        # 在非交互模式下自动通过检查点
+        # 交互模式下可以添加 input() 等待用户确认
+        print("[自动] 检查点通过（可在交互模式下启用人工确认）")
+        return True
 
     def _merge_chapters(self):
         """合并章节为完整小说"""

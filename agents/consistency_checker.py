@@ -150,6 +150,14 @@ class ConsistencyChecker:
         plot_violations = self._check_plot_logic(chapter_number, content)
         violations.extend(plot_violations)
 
+        # 7. 时间线检查（新增）
+        timeline_violations = self._check_timeline_consistency(chapter_number, content)
+        violations.extend(timeline_violations)
+
+        # 8. 武器命名检查（新增）
+        weapon_violations = self._check_weapon_naming(chapter_number, content)
+        violations.extend(weapon_violations)
+
         return {
             "chapter": chapter_number,
             "violations": violations,
@@ -637,6 +645,126 @@ class ConsistencyChecker:
                                 "suggestion": f"提前在前文铺垫{relation}的存在，或说明为何之前未提及",
                             }
                         )
+
+        return violations
+
+    def _check_timeline_consistency(
+        self, chapter_number: int, content: str
+    ) -> List[Dict]:
+        """检查时间线一致性"""
+        violations = []
+
+        timeline_config = self.config.get("timeline_validation", {})
+        if not timeline_config.get("enforce_timestamp", False):
+            return violations
+
+        # 检测"Day X"时间戳
+        day_pattern = r"[Dd]ay\s*(\d+)|第(\d+)天"
+        matches = re.findall(day_pattern, content)
+
+        if matches:
+            days_found = []
+            for match in matches:
+                day = int(match[0] or match[1])
+                days_found.append(day)
+
+            if days_found:
+                current_day = max(days_found)
+                # 检查时间跳跃
+                max_jump = timeline_config.get("max_time_jump", 7)
+
+                # 获取上一章的时间
+                prev_day = self._get_previous_chapter_day(chapter_number)
+                if prev_day is not None:
+                    jump = current_day - prev_day
+
+                    if jump < 0:
+                        violations.append(
+                            {
+                                "type": "time_backwards",
+                                "severity": "critical",
+                                "message": f"时间倒流：从第{prev_day}天到第{current_day}天",
+                                "chapter": chapter_number,
+                                "details": "时间不能倒退",
+                                "suggestion": "修正时间线",
+                            }
+                        )
+                    elif jump > max_jump:
+                        violations.append(
+                            {
+                                "type": "excessive_time_jump",
+                                "severity": "warning",
+                                "message": f"时间跳跃过大：从第{prev_day}天到第{current_day}天（跳跃{jump}天）",
+                                "chapter": chapter_number,
+                                "details": f"最大允许跳跃{max_jump}天",
+                                "suggestion": "添加过渡情节或修正时间",
+                            }
+                        )
+
+        return violations
+
+    def _get_previous_chapter_day(self, chapter_number: int) -> Optional[int]:
+        """获取上一章的时间"""
+        if chapter_number <= 1:
+            return 1
+
+        prev_content = self._load_chapter_content(chapter_number - 1)
+        if not prev_content:
+            return None
+
+        day_pattern = r"[Dd]ay\s*(\d+)|第(\d+)天"
+        matches = re.findall(day_pattern, prev_content)
+
+        if matches:
+            return max(int(m[0] or m[1]) for m in matches)
+        return None
+
+    def _check_weapon_naming(self, chapter_number: int, content: str) -> List[Dict]:
+        """检查武器命名一致性"""
+        violations = []
+
+        weapon_config = self.config.get("weapon_naming", {})
+        if not weapon_config.get("enforce_unique_names", False):
+            return violations
+
+        # 获取锁定的武器名称
+        protagonist_weapon = self.constraints.get("protagonist_weapon", "")
+        if not protagonist_weapon:
+            return violations
+
+        # 允许的状态描述（不算改名）
+        allowed_descriptions = weapon_config.get(
+            "allowed_descriptions", ["残剑", "断剑", "受损", "修复", "认主", "解封"]
+        )
+
+        # 检测所有可能的武器名称
+        weapon_mentions = []
+        for match in re.finditer(r"[\u4e00-\u9fa5]{1,4}(?:剑|刀|枪|戟|斧)", content):
+            weapon_mentions.append(match.group())
+
+        # 检查是否有其他名称
+        found_weapons = set(weapon_mentions)
+
+        for weapon in found_weapons:
+            if weapon != protagonist_weapon:
+                # 检查是否是允许的状态描述
+                is_allowed = False
+                for allowed in allowed_descriptions:
+                    if allowed in weapon:
+                        is_allowed = True
+                        break
+
+                if not is_allowed and weapon not in ["剑", "武器", "兵器"]:
+                    violations.append(
+                        {
+                            "type": "weapon_name_inconsistency",
+                            "severity": "warning",
+                            "message": f"武器名称不一致：'{protagonist_weapon}' vs '{weapon}'",
+                            "chapter": chapter_number,
+                            "details": f"武器应统一使用'{protagonist_weapon}'",
+                            "suggestion": f"统一武器名称，或添加'{weapon}'为'{protagonist_weapon}'的描述性称呼",
+                        }
+                    )
 
         return violations
 

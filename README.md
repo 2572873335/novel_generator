@@ -97,7 +97,7 @@ novels/{title}/
 
 ```bash
 # 克隆仓库
-git clone <repository-url>
+git clone https://github.com/2572873335/novel_generator.git
 cd novel_generator
 
 # 安装依赖
