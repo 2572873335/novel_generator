@@ -31,6 +31,11 @@
 - **characters.json**: 角色设定
 - **outline.md**: 小说大纲
 
+### 5. 一致性防御系统
+- **WritingConstraintManager**: 写作时注入约束，防止违规内容生成
+- **ConsistencyTracker**: 实时追踪境界、体质、地点、宗门变化
+- **ConsistencyChecker**: 严格检测6大类一致性问题
+
 ## 系统架构
 
 ```

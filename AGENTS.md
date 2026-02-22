@@ -32,6 +32,43 @@ Coding agent instructions for the Novel Generator AI system.
 - 情节紧凑，节奏流畅
 - 文字生动，画面感强
 
+## 四层防御一致性系统
+
+基于起点编辑审稿意见，系统内置严格的一致性检查，防止常见致命缺陷：
+
+### 1. WritingConstraintManager (core/writing_constraint_manager.py)
+写作时注入约束，防止生成违规内容：
+- 宗门名称白名单锁定
+- 人物姓名锁定
+- 战力体系规则（禁止跨大境界战斗）
+- 修炼速度限制（小境界7天，大境界30天）
+- 体质设定锁定
+
+### 2. ConsistencyTracker (core/consistency_tracker.py)
+实时追踪状态变化：
+- RealmState - 境界突破时间线
+- ConstitutionState - 体质变更记录
+- LocationState - 地点移动历史
+- FactionState - 宗门变更记录
+
+### 3. ConsistencyChecker (agents/consistency_checker.py)
+严格检测6大类问题：
+1. 宗门名称一致性（防止精神分裂）
+2. 人物姓名一致性（防止姓名混乱）
+3. 战力体系一致性（防止战力崩坏）
+4. 修为进度一致性（防止坐火箭）
+5. 体质设定一致性（防止设定变更）
+6. 情节逻辑一致性（防止逻辑硬伤）
+
+### 4. WriterAgent 集成
+写作流程中自动验证：
+- 加载上下文时获取约束提示
+- 写作完成后验证章节内容
+- 自动检测境界/地点/宗门变化
+
+### 配置文件
+- `config/consistency_rules.yaml` - 验证规则
+
 ## Build & Test Commands
 
 ```bash
