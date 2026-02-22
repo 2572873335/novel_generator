@@ -38,6 +38,11 @@ This system implements the **long-running agent** solution proposed by Anthropic
 - **ConsistencyTracker**: Real-time tracking of realm, constitution, location, faction changes
 - **ConsistencyChecker**: Strictly detects 6 major categories of consistency issues
 
+### 6. V7 System (Genre-Aware)
+ **GenreDetector**: Auto-detects 6 genre types (scifi, xianxia, urban, suspense, game, historical)
+ **ConstraintTemplateManager**: Genre-specific constraint templates
+ **ConstraintArbiter**: Style conflict detection and temporal continuity checking
+
 ---
 
 ## System Architecture
