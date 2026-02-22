@@ -75,7 +75,7 @@ class NovelGenerator:
         self.reviewer = None
 
         print("=" * 60)
-        print("📚 全自动AI小说生成系统")
+        print("全自动AI小说生成系统")
         print("=" * 60)
         print(f"项目: {config.get('title', '未命名')}")
         print(f"类型: {config.get('genre', '通用')}")
@@ -92,13 +92,13 @@ class NovelGenerator:
         """
         start_time = time.time()
 
-        print("\n🚀 开始小说生成流程\n")
+        print("\n[开始] 小说生成流程\n")
 
         # 阶段1: 初始化
         if not self._is_initialized():
             self._initialize_project()
         else:
-            print("✓ 项目已初始化，跳过初始化阶段")
+            print("[OK] 项目已初始化，跳过初始化阶段")
 
         # 阶段2: 写作
         self._write_novel()
@@ -114,7 +114,7 @@ class NovelGenerator:
         report = self._generate_final_report(elapsed_time)
 
         print("\n" + "=" * 60)
-        print("✅ 小说生成完成！")
+        print("[完成] 小说生成完成！")
         print("=" * 60)
         print(report)
 
@@ -159,7 +159,7 @@ class NovelGenerator:
 
     def _initialize_project(self):
         """初始化项目 - 使用完整智能体工作流"""
-        print("📦 阶段1: 项目初始化\n")
+        print("[阶段1] 项目初始化\n")
 
         import sys
 
@@ -184,7 +184,7 @@ class NovelGenerator:
         result = self.agent_manager.run_full_workflow(self.config)
 
         if result["success"]:
-            print(f"\n✓ 项目初始化完成")
+            print(f"\n[OK] 项目初始化完成")
             print(f"  Tracker Report 已生成")
         else:
             print(f"\n❌ 项目初始化失败")
@@ -196,7 +196,7 @@ class NovelGenerator:
     def _write_novel(self):
         """写作阶段"""
         print("\n" + "=" * 60)
-        print("✍️ 阶段2: 小说写作")
+        print("[阶段2] 小说写作")
         print("=" * 60)
 
         import sys
@@ -206,12 +206,12 @@ class NovelGenerator:
         from agents.consistency_checker import ConsistencyChecker
 
         self.writer = WriterAgent(self.llm_client, self.project_dir)
-        self.consistency_checker = ConsistencyChecker(self.llm_client, self.project_dir)
+        self.consistency_checker = ConsistencyChecker(self.project_dir, self.llm_client)
 
         # 加载进度
         progress = self.progress_manager.load_progress()
         if not progress:
-            print("❌ 错误: 无法加载进度文件")
+            print("[错误] 无法加载进度文件")
             return
 
         total_chapters = progress.total_chapters
@@ -236,7 +236,7 @@ class NovelGenerator:
 
             if not result["success"]:
                 if result.get("status") == "completed":
-                    print("✅ 所有章节已完成")
+                    print("[完成] 所有章节已完成")
                     break
                 else:
                     print(f"❌ 写作失败: {result.get('error', '未知错误')}")
@@ -249,12 +249,10 @@ class NovelGenerator:
             if completed % 5 == 0 and completed > last_consistency_check:
                 last_consistency_check = completed
                 print(f"\n{'=' * 60}")
-                print(f"🔍 一致性检查点: 第{completed}章完成")
+                print(f"[审查] 一致性检查点: 第{completed}章完成")
                 print("=" * 60)
 
-                check_result = self.consistency_checker.check_chapters(
-                    list(range(1, completed + 1))
-                )
+                check_result = self.consistency_checker.check_all_chapters()
 
                 critical_issues = check_result.get("hardcoded_issues", {}).get(
                     "critical", []
@@ -263,14 +261,14 @@ class NovelGenerator:
 
                 if critical_issues or not check_result.get("passed", True):
                     print(
-                        f"\n⚠️ 发现一致性问题 ({len(critical_issues)} 严重, {len(warnings)} 警告)："
+                        f"\n[警告] 发现一致性问题 ({len(critical_issues)} 严重, {len(warnings)} 警告)："
                     )
 
                     for issue in critical_issues:
                         print(f"  ❌ [严重] {issue.get('message', issue)}")
 
                     for issue in warnings[:5]:
-                        print(f"  ⚠️ [警告] {issue.get('message', issue)}")
+                        print(f"  [警告] [警告] {issue.get('message', issue)}")
 
                     report_dir = os.path.join(self.project_dir, "consistency_reports")
                     os.makedirs(report_dir, exist_ok=True)
@@ -286,7 +284,7 @@ class NovelGenerator:
 
                     self._flag_consistency_issue(completed, check_result)
                 else:
-                    print(f"✅ 一致性检查通过")
+                    print(f"[完成] 一致性检查通过")
                     if warnings:
                         print(f"   (有 {len(warnings)} 个警告，详见报告)")
 
@@ -306,7 +304,7 @@ class NovelGenerator:
             # 短暂暂停（实际系统中可以配置）
             time.sleep(0.5)
 
-        print(f"\n✓ 写作阶段完成，共完成 {completed} 章")
+        print(f"\n[OK] 写作阶段完成，共完成 {completed} 章")
 
     def _flag_consistency_issue(self, chapter: int, check_result: Dict):
         """标记一致性问题，等待用户确认"""
@@ -331,7 +329,7 @@ class NovelGenerator:
     def _review_novel(self):
         """审查阶段"""
         print("\n" + "=" * 60)
-        print("🔍 阶段3: 质量审查")
+        print("[审查] 阶段3: 质量审查")
         print("=" * 60)
 
         import sys
@@ -358,7 +356,7 @@ class NovelGenerator:
     def _merge_chapters(self):
         """合并章节为完整小说"""
         print("\n" + "=" * 60)
-        print("📖 阶段4: 合并章节")
+        print("[合并] 阶段4: 合并章节")
         print("=" * 60)
 
         chapters_dir = os.path.join(self.project_dir, "chapters")
@@ -407,7 +405,7 @@ class NovelGenerator:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(merged_content)
 
-        print(f"✓ 合并完成")
+        print(f"[OK] 合并完成")
         print(f"  章节数: {len(chapter_files)}")
         print(f"  总字数: {total_word_count:,}")
         print(f"  输出文件: novel-complete.md")

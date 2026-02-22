@@ -1,1072 +1,816 @@
 """
-一致性检查器模块
-用于检查小说的角色行为、情节连贯性、时间线和设定一致性
+Consistency Checker - 严格一致性检查器
+基于起点编辑审稿意见重写，检测6大类致命缺陷
+
+检测类别：
+1. 宗门名称一致性（防止精神分裂）
+2. 人物姓名一致性（防止姓名混乱）
+3. 战力体系一致性（防止战力崩坏）
+4. 修为进度一致性（防止坐火箭）
+5. 体质设定一致性（防止设定变更）
+6. 情节逻辑一致性（防止逻辑硬伤）
 """
 
 import json
 import re
+import yaml
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+
+
+@dataclass
+class ConsistencyViolation:
+    """一致性违规记录"""
+
+    type: str
+    severity: str  # critical, warning, info
+    message: str
+    chapter: int
+    details: str
+    suggestion: str
 
 
 class ConsistencyChecker:
-    """一致性检查器，检查小说各章节的一致性"""
+    """
+    严格一致性检查器
 
-    def __init__(self, llm_client, project_dir: str):
-        self.llm = llm_client
+    设计原则：宁可误报，不可漏报
+    对于可疑内容一律标记为警告，由人工最终确认
+    """
+
+    def __init__(self, project_dir: str, llm_client=None):
         self.project_dir = Path(project_dir)
+        self.llm = llm_client  # 保留以兼容旧代码
         self.chapters_dir = self.project_dir / "chapters"
-        self.characters_dir = self.project_dir / "characters"
-        self.worldbuilding_dir = self.project_dir / "worldbuilding"
+        self.config_file = Path("config/consistency_rules.yaml")
 
-        self.name_registry: Dict[str, List[int]] = {}
-        self.realm_progression: List[Dict] = []
+        # 加载配置
+        self.config = self._load_config()
 
-    def check_chapters(self, chapter_numbers: List[int]) -> Dict[str, Any]:
-        """检查指定章节的一致性"""
-        chapters_content = self._load_chapters(chapter_numbers)
-        if not chapters_content:
-            return {"error": "无法加载章节内容", "passed": False}
+        # 加载约束
+        self.constraints_file = self.project_dir / "writing_constraints.json"
+        self.constraints = self._load_constraints()
 
-        character_profiles = self._load_character_profiles()
-        world_settings = self._load_world_settings()
+        # 加载所有章节索引
+        self.chapter_index = self._build_chapter_index()
 
-        hardcoded_issues = self._hardcoded_consistency_check(
-            chapters_content, character_profiles
-        )
+    def _load_config(self) -> Dict:
+        """加载配置文件"""
+        if self.config_file.exists():
+            with open(self.config_file, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+        return {}
 
-        results = {
-            "checked_chapters": chapter_numbers,
-            "character_consistency": self._check_character_consistency(
-                chapters_content, character_profiles
-            ),
-            "plot_consistency": self._check_plot_consistency(chapters_content),
-            "timeline_consistency": self._check_timeline_consistency(chapters_content),
-            "setting_consistency": self._check_setting_consistency(
-                chapters_content, world_settings
-            ),
-            "hardcoded_issues": hardcoded_issues,
-        }
+    def _load_constraints(self) -> Dict:
+        """加载写作约束"""
+        if self.constraints_file.exists():
+            with open(self.constraints_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {}
 
-        results["inconsistencies"] = self.find_inconsistencies(chapters_content)
-        results["passed"] = len(hardcoded_issues.get("critical", [])) == 0
-        results["summary"] = self._generate_summary(results)
-
-        return results
-
-    def _hardcoded_consistency_check(
-        self, chapters: Dict[int, str], profiles: Dict[str, Any]
-    ) -> Dict[str, List[Dict]]:
-        """硬编码一致性检查 - 不依赖LLM"""
-        issues = {"critical": [], "warnings": []}
-
-        all_text = "\n".join(chapters.values())
-
-        name_issues = self._check_name_consistency(all_text, profiles)
-        issues["critical"].extend(name_issues)
-
-        combat_issues = self._check_combat_consistency(all_text)
-        issues["warnings"].extend(combat_issues)
-
-        timeline_issues = self._check_timeline_hardcoded(all_text)
-        issues["warnings"].extend(timeline_issues)
-
-        return issues
-
-    def _check_name_consistency(
-        self, text: str, profiles: Dict[str, Any]
-    ) -> List[Dict]:
-        issues = []
-
-        COMPOUND_SURNAMES = [
-            "欧阳",
-            "司马",
-            "上官",
-            "慕容",
-            "东方",
-            "独孤",
-            "皇甫",
-            "公孙",
-            "令狐",
-            "夏侯",
-            "诸葛",
-            "南宫",
-            "北冥",
-            "轩辕",
-            "端木",
-        ]
-        EXCLUDED_SUFFIXES = [
-            "一",
-            "二",
-            "三",
-            "四",
-            "五",
-            "六",
-            "七",
-            "八",
-            "九",
-            "十",
-            "之",
-            "的",
-            "与",
-            "和",
-            "或",
-            "及",
-            "在",
-            "有",
-            "无",
-            "不",
-            "是",
-            "为",
-            "以",
-            "于",
-            "从",
-            "到",
-            "向",
-            "往",
-            "被",
-            "把",
-            "让",
-            "给",
-            "同",
-            "跟",
-            "比",
-            "像",
-            "按",
-            "照",
-            "按",
-            "据",
-            "依",
-            "因",
-            "由",
-            "为",
-            "所",
-            "而",
-            "且",
-            "但",
-            "却",
-            "只",
-            "才",
-            "就",
-            "也",
-            "还",
-            "又",
-            "再",
-            "已",
-            "曾",
-            "将",
-            "要",
-            "能",
-            "会",
-            "可",
-            "应",
-            "该",
-            "须",
-            "必",
-            "敢",
-            "肯",
-            "愿",
-            "想",
-            "要",
-            "当",
-            "应",
-            "须",
-            "得",
-            "着",
-            "了",
-            "过",
-            "起",
-            "来",
-            "去",
-            "进",
-            "出",
-            "上",
-            "下",
-            "前",
-            "后",
-            "左",
-            "右",
-            "里",
-            "外",
-            "中",
-            "内",
-            "间",
-            "旁",
-            "边",
-            "处",
-            "地",
-            "时",
-            "人",
-            "事",
-            "物",
-            "情",
-            "理",
-            "法",
-            "道",
-            "心",
-            "意",
-            "性",
-            "命",
-            "身",
-            "手",
-            "眼",
-            "口",
-            "头",
-            "面",
-            "身",
-            "体",
-            "力",
-            "气",
-            "声",
-            "光",
-            "影",
-            "色",
-            "形",
-            "状",
-            "样",
-            "般",
-            "种",
-            "类",
-            "些",
-            "个",
-            "次",
-            "回",
-            "遍",
-            "番",
-            "趟",
-            "场",
-            "局",
-            "段",
-            "节",
-            "章",
-            "篇",
-            "首",
-            "句",
-            "字",
-            "词",
-            "语",
-            "文",
-            "书",
-            "信",
-            "件",
-            "份",
-            "本",
-            "册",
-            "页",
-            "行",
-            "列",
-            "排",
-            "层",
-            "级",
-            "阶",
-            "步",
-            "尺",
-            "寸",
-            "分",
-            "秒",
-            "年",
-            "月",
-            "日",
-            "时",
-            "刻",
-            "钟",
-            "点",
-            "期",
-            "季",
-            "周",
-            "天",
-            "夜",
-            "晨",
-            "昏",
-            "暮",
-            "晚",
-            "早",
-            "午",
-            "晚",
-        ]
-        COMMON_WORDS = [
-            "一起",
-            "一字",
-            "一句",
-            "一声",
-            "一下",
-            "一直",
-            "一样",
-            "一般",
-            "一切",
-            "一时",
-            "有些",
-            "有点",
-            "有种",
-            "有个",
-            "所谓",
-            "自己",
-            "他人",
-            "此时",
-            "此刻",
-            "当日",
-            "当年",
-            "原本",
-            "本来",
-            "忽然",
-            "突然",
-            "竟然",
-            "居然",
-            "果然",
-            "仍然",
-            "依然",
-            "当然",
-            "虽然",
-            "即使",
-            "如果",
-            "只要",
-            "无论",
-            "不管",
-            "尽管",
-            "哪怕",
-            "宁可",
-            "与其",
-            "不如",
-            "而且",
-            "并且",
-            "或者",
-            "还是",
-            "不是",
-            "没有",
-            "不会",
-            "不能",
-            "不要",
-            "不必",
-            "不用",
-            "难以",
-            "无法",
-            "未曾",
-            "早已",
-            "已经",
-            "正在",
-            "将要",
-            "即将",
-            "终于",
-            "最后",
-            "首先",
-            "起初",
-            "最初",
-            "开始",
-            "结束",
-            "结果",
-            "原来",
-            "其实",
-            "实际上",
-            "事实上",
-            "确实",
-            "的确",
-            "真的",
-            "真是",
-            "正好",
-            "恰好",
-            "刚好",
-            "只是",
-            "就是",
-            "还是",
-            "也是",
-            "都是",
-            "也是",
-            "全是",
-            "倒是",
-            "反是",
-            "总是",
-            "老是",
-            "常是",
-            "总是",
-        ]
-
-        known_names = {}
-        nicknames = {}
-        char_file = self.project_dir / "characters.json"
-        if char_file.exists():
-            try:
-                with open(char_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, dict):
-                        chars = data.get("characters", [])
-                    else:
-                        chars = data if isinstance(data, list) else []
-
-                    for char in chars:
-                        if isinstance(char, dict):
-                            name = char.get("name", "")
-                            role = char.get("role", "")
-                            if name:
-                                known_names[name] = role
-                                surname = self._extract_surname(name, COMPOUND_SURNAMES)
-                                if surname and surname != name:
-                                    nicknames[f"老{surname[-1]}"] = name
-                                    nicknames[f"小{surname[-1]}"] = name
-            except:
-                pass
-
-        all_known = set(known_names.keys()) | set(nicknames.keys())
-
-        for name in known_names:
-            surname = self._extract_surname(name, COMPOUND_SURNAMES)
-            given_name = name[len(surname) :] if len(name) > len(surname) else ""
-
-            for i in range(len(surname), len(surname) + 3):
-                if i >= len(name):
-                    break
-                pattern = (
-                    rf"{surname}[^\s{{}}()（）「」『』【】《》<>\"''"
-                    " ]{{0,{i-len(surname)+1}}}"
-                )
-
-            full_name_pattern = rf"\b{name}\b|[^\u4e00-\u9fa5]{name}[^\u4e00-\u9fa5]"
-            if re.search(full_name_pattern, text):
-                continue
-
-            variant_pattern = rf"{re.escape(surname)}[\u4e00-\u9fa5]{{1,{len(name) - len(surname) + 1}}}"
-            matches = re.findall(variant_pattern, text)
-
-            true_variants = []
-            for match in matches:
-                if match == name:
-                    continue
-                if match in all_known:
-                    continue
-                if len(match) < 2:
-                    continue
-
-                is_false_positive = False
-
-                for word in COMMON_WORDS:
-                    if match in word or word.startswith(match):
-                        context = self._find_context(text, match, 10)
-                        if word in context:
-                            is_false_positive = True
-                            break
-
-                if not is_false_positive:
-                    for suffix in EXCLUDED_SUFFIXES:
-                        if match.endswith(suffix) and len(match) > len(surname) + 1:
-                            context = self._find_context(text, match, 5)
-                            if context and not any(
-                                c in context for c in ["，", "。", "！", "？", "、"]
-                            ):
-                                is_false_positive = True
-                                break
-
-                if not is_false_positive:
-                    name_pattern = rf"{re.escape(name)}"
-                    if re.search(name_pattern, text):
-                        name_count = len(re.findall(name_pattern, text))
-                        variant_count = len(re.findall(re.escape(match), text))
-                        if variant_count > name_count * 2:
-                            true_variants.append(match)
-
-            if true_variants:
-                unique_variants = list(set(true_variants))[:2]
-                for variant in unique_variants:
-                    issues.append(
-                        {
-                            "type": "name_inconsistency",
-                            "severity": "warning",
-                            "message": f"疑似姓名变体：'{name}' → '{variant}'（请人工确认）",
-                            "original_name": name,
-                            "variant": variant,
-                            "suggestion": f"检查'{variant}'是否为'{name}'的误写",
-                        }
-                    )
-
-        return issues
-
-    def _extract_surname(self, name: str, compound_surnames: List[str]) -> str:
-        for cs in compound_surnames:
-            if name.startswith(cs):
-                return cs
-        return name[0] if name else ""
-
-    def _find_context(self, text: str, match: str, radius: int) -> str:
-        idx = text.find(match)
-        if idx == -1:
-            return ""
-        start = max(0, idx - radius)
-        end = min(len(text), idx + len(match) + radius)
-        return text[start:end]
-
-    def _check_combat_consistency(self, text: str) -> List[Dict]:
-        """检查战力一致性 - 硬编码规则"""
-        issues = []
-
-        realm_keywords = [
-            "炼气",
-            "筑基",
-            "金丹",
-            "元婴",
-            "化神",
-            "返虚",
-            "合道",
-            "渡劫",
-        ]
-        realm_order = {realm: i for i, realm in enumerate(realm_keywords)}
-
-        found_realms = {}
-        for realm in realm_keywords:
-            pattern = rf"{realm}[一二三四五六七八九十\d]*[层期前后巅峰]*"
-            matches = re.findall(pattern, text)
-            if matches:
-                found_realms[realm] = matches
-
-        if len(found_realms) > 1:
-            realm_names = list(found_realms.keys())
-            for i, r1 in enumerate(realm_names[:-1]):
-                for r2 in realm_names[i + 1 :]:
-                    diff = abs(realm_order.get(r1, 0) - realm_order.get(r2, 0))
-                    if diff > 2:
-                        issues.append(
-                            {
-                                "type": "large_realm_gap",
-                                "severity": "warning",
-                                "message": f"检测到较大境界跨度：{r1} ↔ {r2}（相差{diff}个大境界）",
-                                "realms": [r1, r2],
-                                "gap": diff,
-                            }
-                        )
-
-        battle_patterns = ["击败", "战胜", "击杀", "重创", "打退"]
-        for pattern in battle_patterns:
-            if pattern in text:
-                context_start = max(0, text.find(pattern) - 50)
-                context = text[context_start : context_start + 100]
-
-                if "筑基" in context and "炼气" in context:
-                    if "代价" not in context and "燃烧" not in context:
-                        issues.append(
-                            {
-                                "type": "unlikely_victory",
-                                "severity": "warning",
-                                "message": f"可能存在不合理越级战斗（炼气vs筑基），未提及代价",
-                            }
-                        )
-                break
-
-        return issues
-
-    def _check_timeline_hardcoded(self, text: str) -> List[Dict]:
-        """检查时间线一致性 - 硬编码规则"""
-        issues = []
-
-        year_patterns = [
-            (r"(\d+)年前", "years_ago"),
-            (r"(\d+)月前", "months_ago"),
-            (r"(\d+)日前", "days_ago"),
-        ]
-
-        time_refs = {}
-        for pattern, ref_type in year_patterns:
-            matches = re.findall(pattern, text)
-            if matches:
-                time_refs[ref_type] = [int(m) for m in matches]
-
-        if "years_ago" in time_refs:
-            years = time_refs["years_ago"]
-            if len(years) >= 2:
-                if max(years) - min(years) > 10:
-                    issues.append(
-                        {
-                            "type": "timeline_discrepancy",
-                            "severity": "warning",
-                            "message": f"时间参考不一致：{min(years)}年前 vs {max(years)}年前",
-                            "values": years,
-                        }
-                    )
-
-        return issues
-
-    def _load_chapters(self, chapter_numbers: List[int]) -> Dict[int, str]:
-        chapters = {}
-        for num in chapter_numbers:
-            chapter_file_md = self.chapters_dir / f"chapter-{num:03d}.md"
-            chapter_file_txt = self.chapters_dir / f"chapter_{num:03d}.txt"
-            if chapter_file_md.exists():
-                chapters[num] = chapter_file_md.read_text(encoding="utf-8")
-            elif chapter_file_txt.exists():
-                chapters[num] = chapter_file_txt.read_text(encoding="utf-8")
-        return chapters
-
-    def _load_character_profiles(self) -> Dict[str, Any]:
-        """加载角色档案"""
-        profiles = {}
-        if self.characters_dir.exists():
-            for file in self.characters_dir.glob("*.json"):
+    def _build_chapter_index(self) -> Dict[int, Path]:
+        """构建章节索引"""
+        index = {}
+        if self.chapters_dir.exists():
+            for file in self.chapters_dir.glob("chapter-*.md"):
                 try:
-                    data = json.loads(file.read_text(encoding="utf-8"))
-                    profiles[data.get("name", file.stem)] = data
-                except (json.JSONDecodeError, KeyError):
+                    num = int(file.stem.split("-")[1])
+                    index[num] = file
+                except (IndexError, ValueError):
                     continue
-        return profiles
+        return index
 
-    def _load_world_settings(self) -> Dict[str, Any]:
-        """加载世界观设定"""
-        settings = {}
-        if self.worldbuilding_dir.exists():
-            for file in self.worldbuilding_dir.glob("*.json"):
-                try:
-                    settings[file.stem] = json.loads(file.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
-                    continue
-        return settings
+    def check_all_chapters(self) -> Dict[str, Any]:
+        """检查所有章节的一致性"""
+        all_violations = []
+        chapter_results = {}
 
-    def _check_character_consistency(
-        self, chapters: Dict[int, str], profiles: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """检查角色行为一致性"""
-        prompt = self._build_character_check_prompt(chapters, profiles)
-        response = self.llm.chat(prompt)
+        for chapter_num in sorted(self.chapter_index.keys()):
+            result = self.check_single_chapter(chapter_num)
+            chapter_results[chapter_num] = result
+            all_violations.extend(result.get("violations", []))
 
-        return self._parse_llm_response(response, "character")
-
-    def _check_plot_consistency(self, chapters: Dict[int, str]) -> Dict[str, Any]:
-        """检查情节连贯性"""
-        prompt = self._build_plot_check_prompt(chapters)
-        response = self.llm.chat(prompt)
-
-        return self._parse_llm_response(response, "plot")
-
-    def _check_timeline_consistency(self, chapters: Dict[int, str]) -> Dict[str, Any]:
-        """检查时间线一致性"""
-        prompt = self._build_timeline_check_prompt(chapters)
-        response = self.llm.chat(prompt)
-
-        return self._parse_llm_response(response, "timeline")
-
-    def _check_setting_consistency(
-        self, chapters: Dict[int, str], settings: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """检查设定一致性"""
-        prompt = self._build_setting_check_prompt(chapters, settings)
-        response = self.llm.chat(prompt)
-
-        return self._parse_llm_response(response, "setting")
-
-    def _build_character_check_prompt(
-        self, chapters: Dict[int, str], profiles: Dict[str, Any]
-    ) -> str:
-        """构建角色一致性检查提示词"""
-        chapters_text = "\n\n".join(
-            [f"【第{num}章】\n{content[:2000]}" for num, content in chapters.items()]
-        )
-
-        profiles_text = "\n".join(
-            [
-                f"- {name}: 性格={p.get('personality', '未知')}, 特点={p.get('traits', [])}"
-                for name, p in profiles.items()
-            ]
-        )
-
-        return f"""请检查以下章节中角色行为的一致性。
-
-【角色档案】
-{profiles_text if profiles_text else "无角色档案"}
-
-【章节内容】
-{chapters_text}
-
-请分析：
-1. 角色性格是否有突变或不合理的行为
-2. 角色之间的关系发展是否自然
-3. 角色的能力表现是否前后一致
-4. 角色的语言风格是否保持一致
-
-请以JSON格式返回结果：
-{{
-    "issues": [
-        {{
-            "character": "角色名",
-            "issue_type": "问题类型",
-            "description": "问题描述",
-            "chapter": 章节号,
-            "location": "大致位置描述",
-            "severity": "high/medium/low",
-            "suggestion": "修改建议"
-        }}
-    ],
-    "overall_score": 1-10分,
-    "summary": "总体评价"
-}}"""
-
-    def _build_plot_check_prompt(self, chapters: Dict[int, str]) -> str:
-        """构建情节连贯性检查提示词"""
-        chapters_text = "\n\n".join(
-            [f"【第{num}章】\n{content}" for num, content in chapters.items()]
-        )
-
-        return f"""请检查以下章节的情节连贯性。
-
-【章节内容】
-{chapters_text}
-
-请分析：
-1. 前后章节的情节是否有矛盾
-2. 伏笔是否有呼应或遗漏
-3. 事件的发展逻辑是否合理
-4. 是否有未解释的情节跳跃
-
-请以JSON格式返回结果：
-{{
-    "issues": [
-        {{
-            "issue_type": "矛盾类型",
-            "description": "问题描述",
-            "chapters": [涉及章节号],
-            "severity": "high/medium/low",
-            "suggestion": "修改建议"
-        }}
-    ],
-    "overall_score": 1-10分,
-    "summary": "总体评价"
-}}"""
-
-    def _build_timeline_check_prompt(self, chapters: Dict[int, str]) -> str:
-        """构建时间线一致性检查提示词"""
-        chapters_text = "\n\n".join(
-            [f"【第{num}章】\n{content[:2000]}" for num, content in chapters.items()]
-        )
-
-        return f"""请检查以下章节的时间线一致性。
-
-【章节内容】
-{chapters_text}
-
-请分析：
-1. 事件的时间顺序是否合理
-2. 时间跨度是否有矛盾
-3. 季节/天气等时间元素是否一致
-4. 角色的年龄/成长是否合理
-
-请以JSON格式返回结果：
-{{
-    "issues": [
-        {{
-            "issue_type": "时间线问题类型",
-            "description": "问题描述",
-            "chapter": 章节号,
-            "severity": "high/medium/low",
-            "suggestion": "修改建议"
-        }}
-    ],
-    "overall_score": 1-10分,
-    "summary": "总体评价"
-}}"""
-
-    def _build_setting_check_prompt(
-        self, chapters: Dict[int, str], settings: Dict[str, Any]
-    ) -> str:
-        """构建设定一致性检查提示词"""
-        chapters_text = "\n\n".join(
-            [f"【第{num}章】\n{content[:2000]}" for num, content in chapters.items()]
-        )
-
-        settings_text = json.dumps(settings, ensure_ascii=False, indent=2)
-
-        return f"""请检查以下章节与世界设定的的一致性。
-
-【世界设定】
-{settings_text if settings_text else "无设定文件"}
-
-【章节内容】
-{chapters_text}
-
-请分析：
-1. 世界观元素是否与设定一致
-2. 魔法/能力体系是否合理
-3. 地理/环境描述是否一致
-4. 社会/文化设定是否有矛盾
-
-请以JSON格式返回结果：
-{{
-    "issues": [
-        {{
-            "setting_element": "设定元素",
-            "issue_type": "问题类型",
-            "description": "问题描述",
-            "chapter": 章节号,
-            "severity": "high/medium/low",
-            "suggestion": "修改建议"
-        }}
-    ],
-    "overall_score": 1-10分,
-    "summary": "总体评价"
-}}"""
-
-    def _parse_llm_response(self, response: str, check_type: str) -> Dict[str, Any]:
-        """解析LLM响应"""
-        try:
-            json_match = re.search(r"\{[\s\S]*\}", response)
-            if json_match:
-                return json.loads(json_match.group())
-        except json.JSONDecodeError:
-            pass
+        # 跨章节检查
+        cross_chapter_violations = self._check_cross_chapter_consistency()
+        all_violations.extend(cross_chapter_violations)
 
         return {
-            "issues": [],
-            "overall_score": 0,
-            "summary": f"无法解析{check_type}检查结果",
-            "raw_response": response,
-        }
-
-    def find_inconsistencies(self, chapters: List[str]) -> List[Dict]:
-        """找出具体的不一致之处"""
-        if isinstance(chapters, dict):
-            chapters = list(chapters.values())
-
-        prompt = f"""请详细分析以下章节内容，找出所有不一致之处。
-
-【章节内容】
-{chr(10).join([f"第{i + 1}部分: {c[:1500]}" for i, c in enumerate(chapters)])}
-
-请仔细检查并列出所有发现的问题，包括：
-1. 数值不一致（如修为等级、人物数量等）
-2. 名称不一致（地名、人名、物品名等）
-3. 能力不一致（角色能力前后矛盾）
-4. 关系不一致（人物关系前后矛盾）
-5. 细节不一致（服装、外貌、习惯等）
-
-请以JSON格式返回：
-{{
-    "inconsistencies": [
-        {{
-            "type": "不一致类型",
-            "location_1": "第一次出现的位置（章节号和描述）",
-            "content_1": "第一次出现的内容",
-            "location_2": "第二次出现的位置",
-            "content_2": "第二次出现的内容",
-            "description": "不一致说明",
-            "severity": "high/medium/low",
-            "suggestion": "修改建议"
-        }}
-    ]
-}}"""
-
-        response = self.llm.chat(prompt)
-        result = self._parse_llm_response(response, "inconsistency")
-        return result.get("inconsistencies", [])
-
-    def generate_report(self, results: Dict) -> str:
-        """生成一致性检查报告"""
-        report_lines = [
-            "=" * 60,
-            "小说一致性检查报告",
-            "=" * 60,
-            f"检查章节: {results.get('checked_chapters', [])}",
-            "",
-        ]
-
-        summary = results.get("summary", {})
-        report_lines.extend(
-            [
-                "-" * 40,
-                "检查摘要",
-                "-" * 40,
-                f"总分: {summary.get('overall_score', 'N/A')}/10",
-                f"问题总数: {summary.get('total_issues', 'N/A')}",
-                "",
-            ]
-        )
-
-        report_lines.extend(
-            self._format_section("角色一致性", results.get("character_consistency", {}))
-        )
-        report_lines.extend(
-            self._format_section("情节连贯性", results.get("plot_consistency", {}))
-        )
-        report_lines.extend(
-            self._format_section(
-                "时间线一致性", results.get("timeline_consistency", {})
-            )
-        )
-        report_lines.extend(
-            self._format_section("设定一致性", results.get("setting_consistency", {}))
-        )
-
-        inconsistencies = results.get("inconsistencies", [])
-        if inconsistencies:
-            report_lines.extend(
-                [
-                    "-" * 40,
-                    "发现的不一致问题",
-                    "-" * 40,
-                ]
-            )
-            for i, issue in enumerate(inconsistencies, 1):
-                report_lines.extend(
-                    [
-                        f"\n问题 {i}:",
-                        f"  类型: {issue.get('type', '未知')}",
-                        f"  严重程度: {issue.get('severity', '未知')}",
-                        f"  描述: {issue.get('description', '无描述')}",
-                    ]
-                )
-                if issue.get("location_1"):
-                    report_lines.append(f"  位置1: {issue.get('location_1')}")
-                if issue.get("content_1"):
-                    report_lines.append(f"  内容1: {issue.get('content_1')}")
-                if issue.get("location_2"):
-                    report_lines.append(f"  位置2: {issue.get('location_2')}")
-                if issue.get("content_2"):
-                    report_lines.append(f"  内容2: {issue.get('content_2')}")
-                if issue.get("suggestion"):
-                    report_lines.append(f"  建议: {issue.get('suggestion')}")
-
-        report_lines.extend(
-            [
-                "",
-                "=" * 60,
-                "报告生成完成",
-                "=" * 60,
-            ]
-        )
-
-        return "\n".join(report_lines)
-
-    def _format_section(self, title: str, data: Dict) -> List[str]:
-        """格式化检查报告的各个部分"""
-        lines = [
-            "-" * 40,
-            title,
-            "-" * 40,
-            f"评分: {data.get('overall_score', 'N/A')}/10",
-            f"评价: {data.get('summary', '无评价')}",
-        ]
-
-        issues = data.get("issues", [])
-        if issues:
-            lines.append(f"\n发现问题 ({len(issues)}个):")
-            for i, issue in enumerate(issues, 1):
-                lines.extend(
-                    [
-                        f"\n  [{i}] {issue.get('issue_type', '未知问题')}",
-                        f"      描述: {issue.get('description', '无描述')}",
-                    ]
-                )
-                if issue.get("chapter"):
-                    lines.append(f"      章节: 第{issue.get('chapter')}章")
-                if issue.get("location"):
-                    lines.append(f"      位置: {issue.get('location')}")
-                if issue.get("severity"):
-                    lines.append(f"      严重程度: {issue.get('severity')}")
-                if issue.get("suggestion"):
-                    lines.append(f"      建议: {issue.get('suggestion')}")
-
-        return lines
-
-    def _generate_summary(self, results: Dict) -> Dict[str, Any]:
-        """生成检查摘要"""
-        all_issues = []
-        scores = []
-
-        for key in [
-            "character_consistency",
-            "plot_consistency",
-            "timeline_consistency",
-            "setting_consistency",
-        ]:
-            data = results.get(key, {})
-            issues = data.get("issues", [])
-            all_issues.extend(issues)
-            score = data.get("overall_score", 0)
-            if isinstance(score, (int, float)):
-                scores.append(score)
-
-        inconsistencies = results.get("inconsistencies", [])
-        total_issues = len(all_issues) + len(inconsistencies)
-
-        avg_score = sum(scores) / len(scores) if scores else 0
-
-        return {
-            "overall_score": round(avg_score, 1),
-            "total_issues": total_issues,
-            "character_issues": len(
-                results.get("character_consistency", {}).get("issues", [])
+            "total_chapters_checked": len(self.chapter_index),
+            "violations": all_violations,
+            "critical_count": len(
+                [v for v in all_violations if v["severity"] == "critical"]
             ),
-            "plot_issues": len(results.get("plot_consistency", {}).get("issues", [])),
-            "timeline_issues": len(
-                results.get("timeline_consistency", {}).get("issues", [])
+            "warning_count": len(
+                [v for v in all_violations if v["severity"] == "warning"]
             ),
-            "setting_issues": len(
-                results.get("setting_consistency", {}).get("issues", [])
-            ),
-            "inconsistency_count": len(inconsistencies),
+            "chapter_results": chapter_results,
+            "passed": len([v for v in all_violations if v["severity"] == "critical"])
+            == 0,
         }
 
     def check_single_chapter(self, chapter_number: int) -> Dict[str, Any]:
-        """检查单个章节的内部一致性"""
-        chapters = self._load_chapters([chapter_number])
-        if not chapters:
-            return {"error": f"无法加载第{chapter_number}章"}
+        """检查单个章节的严格一致性"""
+        violations = []
 
-        content = chapters[chapter_number]
+        # 加载章节内容
+        content = self._load_chapter_content(chapter_number)
+        if not content:
+            return {
+                "chapter": chapter_number,
+                "violations": [],
+                "error": "无法加载章节内容",
+            }
 
-        prompt = f"""请检查以下章节的内部一致性。
+        # 1. 宗门名称检查
+        faction_violations = self._check_faction_consistency(chapter_number, content)
+        violations.extend(faction_violations)
 
-【章节内容】
-{content}
+        # 2. 人物姓名检查
+        name_violations = self._check_name_consistency(chapter_number, content)
+        violations.extend(name_violations)
 
-请检查：
-1. 人物描写是否前后一致
-2. 时间描述是否有矛盾
-3. 场景描述是否有矛盾
-4. 对话和行为是否合理
-5. 数值和设定是否有冲突
+        # 3. 战力体系检查
+        combat_violations = self._check_combat_consistency(chapter_number, content)
+        violations.extend(combat_violations)
 
-请以JSON格式返回结果：
-{{
-    "issues": [
-        {{
-            "issue_type": "问题类型",
-            "description": "问题描述",
-            "location": "问题位置",
-            "severity": "high/medium/low",
-            "suggestion": "修改建议"
-        }}
-    ],
-    "overall_score": 1-10分,
-    "summary": "总体评价"
-}}"""
+        # 4. 修为进度检查
+        cultivation_violations = self._check_cultivation_consistency(
+            chapter_number, content
+        )
+        violations.extend(cultivation_violations)
 
-        response = self.llm.chat(prompt)
-        result = self._parse_llm_response(response, "single_chapter")
-        result["chapter"] = chapter_number
-        return result
+        # 5. 体质设定检查
+        constitution_violations = self._check_constitution_consistency(
+            chapter_number, content
+        )
+        violations.extend(constitution_violations)
 
-    def get_character_timeline(
-        self, character_name: str, chapters: List[int]
-    ) -> Dict[str, Any]:
-        """获取角色在指定章节中的时间线"""
-        chapters_content = self._load_chapters(chapters)
+        # 6. 情节逻辑检查
+        plot_violations = self._check_plot_logic(chapter_number, content)
+        violations.extend(plot_violations)
 
-        prompt = f"""请分析角色"{character_name}"在以下章节中的时间线。
+        return {
+            "chapter": chapter_number,
+            "violations": violations,
+            "violation_count": len(violations),
+            "critical_count": len(
+                [v for v in violations if v["severity"] == "critical"]
+            ),
+            "passed": len([v for v in violations if v["severity"] == "critical"]) == 0,
+        }
 
-【章节内容】
-{chr(10).join([f"第{num}章: {content[:2000]}" for num, content in chapters_content.items()])}
+    def _load_chapter_content(self, chapter_number: int) -> str:
+        """加载章节内容"""
+        file_path = self.chapter_index.get(chapter_number)
+        if file_path and file_path.exists():
+            return file_path.read_text(encoding="utf-8")
+        return ""
 
-请提取：
-1. 角色的主要活动
-2. 角色的状态变化
-3. 角色的关系变化
-4. 时间节点
+    def _check_faction_consistency(
+        self, chapter_number: int, content: str
+    ) -> List[Dict]:
+        """
+        检查宗门名称一致性
+        问题：宗门名称精神分裂（天剑宗↔青云剑宗）
+        """
+        violations = []
 
-请以JSON格式返回：
-{{
-    "character": "{character_name}",
-    "timeline": [
-        {{
-            "chapter": 章节号,
-            "events": ["事件1", "事件2"],
-            "state": "角色状态",
-            "relationships": ["关系变化"]
-        }}
-    ],
-    "consistency_issues": ["一致性问题"]
-}}"""
+        # 从约束中获取白名单
+        whitelist = self.constraints.get("faction_whitelist", [])
+        if not whitelist:
+            return violations
 
-        response = self.llm.chat(prompt)
-        return self._parse_llm_response(response, "character_timeline")
+        # 检测所有可能的宗门名称
+        faction_pattern = (
+            r"[\u4e00-\u9fa5]{2,6}(?:宗|派|阁|门|宫|殿|院|府|山|谷|岛|盟|会)"
+        )
+        found_factions = set(re.findall(faction_pattern, content))
+
+        for faction in found_factions:
+            if faction not in whitelist:
+                # 检查是否是相似名称（可能是变体）
+                similar = self._find_similar_faction(faction, whitelist)
+                if similar:
+                    violations.append(
+                        {
+                            "type": "faction_name_variant",
+                            "severity": "critical",
+                            "message": f"检测到宗门名称变体：'{faction}'（应为'{similar}'）",
+                            "chapter": chapter_number,
+                            "details": f"文中使用'{faction}'，但白名单中只有'{similar}'",
+                            "suggestion": f"将'{faction}'统一改为'{similar}'",
+                        }
+                    )
+                else:
+                    violations.append(
+                        {
+                            "type": "undefined_faction",
+                            "severity": "critical",
+                            "message": f"检测到未定义的宗门：'{faction}'",
+                            "chapter": chapter_number,
+                            "details": f"该宗门不在允许使用的白名单中",
+                            "suggestion": f"使用白名单中的宗门：{', '.join(whitelist[:5])}...",
+                        }
+                    )
+
+        return violations
+
+    def _find_similar_faction(
+        self, faction: str, whitelist: List[str]
+    ) -> Optional[str]:
+        """查找相似的宗门名称"""
+        # 简单相似度检查
+        for valid_faction in whitelist:
+            # 检查是否有共同后缀
+            if faction[-1] == valid_faction[-1]:  # 都以"宗"/"派"等结尾
+                # 检查前缀相似度
+                common_prefix = ""
+                for i, (c1, c2) in enumerate(zip(faction, valid_faction)):
+                    if c1 == c2:
+                        common_prefix += c1
+                    else:
+                        break
+                if len(common_prefix) >= 1:  # 至少有一个共同字
+                    return valid_faction
+        return None
+
+    def _check_name_consistency(self, chapter_number: int, content: str) -> List[Dict]:
+        """
+        检查人物姓名一致性
+        问题：苏清雪↔叶清雪（姓名变更）
+        """
+        violations = []
+
+        locked_names = self.constraints.get("locked_names", {})
+        if not locked_names:
+            return violations
+
+        # 检查每个人物的姓名
+        for role, name in locked_names.items():
+            if not name or len(name) < 2:
+                continue
+
+            # 提取姓氏
+            surname = name[0] if len(name) == 2 else name[:2]
+            given_name = name[len(surname) :]
+
+            # 检测同姓不同名的变体
+            variant_pattern = (
+                rf"{re.escape(surname)}[\u4e00-\u9fa5]{{1,{len(given_name) + 1}}}"
+            )
+            variants = re.findall(variant_pattern, content)
+
+            for variant in set(variants):
+                if variant != name and variant not in locked_names.values():
+                    # 排除常见词
+                    common_words = [
+                        "一些",
+                        "一样",
+                        "一直",
+                        "一起",
+                        "所谓",
+                        "自己",
+                        "他人",
+                        "此时",
+                    ]
+                    if variant in common_words:
+                        continue
+
+                    # 可能是姓名变体
+                    violations.append(
+                        {
+                            "type": "name_variant",
+                            "severity": "warning",
+                            "message": f"疑似姓名变体：'{name}' vs '{variant}'",
+                            "chapter": chapter_number,
+                            "details": f"角色'{role}'设定姓名为'{name}'，但文中出现'{variant}'",
+                            "suggestion": f"确认'{variant}'是否为'{name}'的误写，或是否为新角色",
+                        }
+                    )
+
+        return violations
+
+    def _check_combat_consistency(
+        self, chapter_number: int, content: str
+    ) -> List[Dict]:
+        """
+        检查战力体系一致性
+        问题：剑气境击败剑心境（跨境界战斗）
+        """
+        violations = []
+
+        combat_rules = self.config.get("realm_system", {}).get("combat_rules", {})
+        realm_hierarchy = self.constraints.get("realm_hierarchy", {})
+        current_realm = self.constraints.get("current_realm", "")
+
+        if not realm_hierarchy or combat_rules.get("cross_realm_combat") != "forbidden":
+            return violations
+
+        # 检测战斗描述
+        battle_keywords = ["击败", "战胜", "击杀", "重创", "打退", "斩杀", "击溃"]
+        current_level = realm_hierarchy.get(current_realm, 0)
+        max_cross = combat_rules.get("max_cross_within_realm", 2)
+
+        for keyword in battle_keywords:
+            # 找到所有战斗描述的位置
+            for match in re.finditer(keyword, content):
+                context_start = max(0, match.start() - 150)
+                context_end = min(len(content), match.end() + 150)
+                context = content[context_start:context_end]
+
+                # 检查是否涉及境界描述
+                for realm, level in realm_hierarchy.items():
+                    if realm in context:
+                        level_diff = level - current_level
+
+                        # 检查是否跨大境界
+                        if level_diff > max_cross:
+                            # 检查是否有代价描述
+                            cost_keywords = [
+                                "代价",
+                                "燃烧",
+                                "牺牲",
+                                "重伤",
+                                "陨落",
+                                "自爆",
+                                "禁术",
+                                "秘法",
+                                "底牌",
+                            ]
+                            has_cost = any(cost in context for cost in cost_keywords)
+
+                            if not has_cost:
+                                violations.append(
+                                    {
+                                        "type": "cross_realm_combat",
+                                        "severity": "critical",
+                                        "message": f"跨境界战斗未提及代价：{current_realm} vs {realm}",
+                                        "chapter": chapter_number,
+                                        "details": f"主角{current_realm}（等级{current_level}）击败{realm}（等级{level}），相差{level_diff}级",
+                                        "suggestion": "跨境界战斗必须付出沉重代价（燃烧生命、牺牲同伴、使用禁术等）",
+                                    }
+                                )
+
+        return violations
+
+    def _check_cultivation_consistency(
+        self, chapter_number: int, content: str
+    ) -> List[Dict]:
+        """
+        检查修为进度一致性
+        问题：4天从废人到剑气境三层（修炼速度过快）
+        """
+        violations = []
+
+        cultivation_config = self.config.get("cultivation_speed", {})
+        minor_config = cultivation_config.get("minor_breakthrough", {})
+        major_config = cultivation_config.get("major_breakthrough", {})
+
+        min_minor_days = minor_config.get("min_days", 7)
+        min_major_days = major_config.get("min_days", 30)
+
+        # 检测时间描述
+        time_patterns = [
+            (rf"(\d+)天[后内]?", "day", 1),
+            (rf"(\d+)日[后内]?", "day", 1),
+            (rf"(\d+)个?月[后内]?", "month", 30),
+            (rf"(\d+)年[后内]?", "year", 365),
+        ]
+
+        # 检测突破描述
+        breakthrough_patterns = ["突破", "晋级", "晋升", "突破到", "晋升到", "达到"]
+
+        for pattern, unit, multiplier in time_patterns:
+            for match in re.finditer(pattern, content):
+                days = int(match.group(1)) * multiplier
+
+                # 获取上下文
+                context_start = max(0, match.start() - 100)
+                context_end = min(len(content), match.end() + 100)
+                context = content[context_start:context_end]
+
+                # 检查是否有突破描述
+                has_breakthrough = any(bp in context for bp in breakthrough_patterns)
+
+                if has_breakthrough:
+                    # 检查突破类型
+                    realm_change_keywords = ["境", "重天", "阶"]
+                    is_major = any(kw in context for kw in realm_change_keywords)
+
+                    if is_major and days < min_major_days:
+                        violations.append(
+                            {
+                                "type": "major_breakthrough_too_fast",
+                                "severity": "critical",
+                                "message": f"大境界突破速度过快：{match.group(1)}{unit}",
+                                "chapter": chapter_number,
+                                "details": f"大境界突破至少需要{min_major_days}天，但文中仅用{days}天",
+                                "suggestion": f"延长修炼时间至至少{min_major_days}天，或添加详细修炼过程",
+                            }
+                        )
+                    elif not is_major and days < min_minor_days:
+                        violations.append(
+                            {
+                                "type": "minor_breakthrough_too_fast",
+                                "severity": "critical",
+                                "message": f"小境界突破速度过快：{match.group(1)}{unit}",
+                                "chapter": chapter_number,
+                                "details": f"小境界突破至少需要{min_minor_days}天，但文中仅用{days}天",
+                                "suggestion": f"延长修炼时间至至少{min_minor_days}天",
+                            }
+                        )
+
+        return violations
+
+    def _check_constitution_consistency(
+        self, chapter_number: int, content: str
+    ) -> List[Dict]:
+        """
+        检查体质设定一致性
+        问题：九玄剑骨→混沌剑骨（体质无理由变更）
+        """
+        violations = []
+
+        locked_constitution = self.constraints.get("locked_constitution", "")
+        allowed_changes = self.constraints.get("allowed_constitution_changes", [])
+
+        if not locked_constitution:
+            return violations
+
+        # 检测体质变更关键词
+        change_keywords = [
+            "变成",
+            "变为",
+            "化作",
+            "觉醒为",
+            "进化为",
+            "变异为",
+            "转化为",
+            "蜕变为",
+        ]
+        constitution_keywords = ["体质", "剑骨", "灵根", "血脉", "神体", "圣体", "道体"]
+
+        for change_kw in change_keywords:
+            if change_kw in content:
+                # 获取上下文
+                idx = content.find(change_kw)
+                context_start = max(0, idx - 100)
+                context_end = min(len(content), idx + 100)
+                context = content[context_start:context_end]
+
+                # 检查是否涉及体质
+                if any(ck in context for ck in constitution_keywords):
+                    # 检查是否有允许的变更类型
+                    if not any(allowed in context for allowed in allowed_changes):
+                        violations.append(
+                            {
+                                "type": "unauthorized_constitution_change",
+                                "severity": "critical",
+                                "message": f"检测到未授权的体质变更",
+                                "chapter": chapter_number,
+                                "details": f"主角体质锁定为'{locked_constitution}'，但文中出现变更描述",
+                                "suggestion": f"如需变更体质，必须是以下方式之一：{', '.join(allowed_changes)}，并有充分铺垫",
+                            }
+                        )
+
+        return violations
+
+    def _check_plot_logic(self, chapter_number: int, content: str) -> List[Dict]:
+        """
+        检查情节逻辑一致性
+        问题：反派降智、未铺垫的禁术、缺失的章节逻辑
+        """
+        violations = []
+
+        # 1. 检查反派行为动机
+        villain_indicators = [
+            "反派",
+            "敌人",
+            "对手",
+            "冷笑",
+            "阴笑",
+            "狞笑",
+            "杀意",
+            "敌意",
+        ]
+        motivation_keywords = [
+            "因为",
+            "为了",
+            "由于",
+            "想要",
+            "计划",
+            "目的",
+            "意图",
+            "图谋",
+        ]
+
+        for indicator in villain_indicators:
+            if indicator in content:
+                # 获取反派相关段落
+                idx = content.find(indicator)
+                context_start = max(0, idx - 200)
+                context_end = min(len(content), idx + 200)
+                context = content[context_start:context_end]
+
+                # 检查是否有动机描述
+                has_motivation = any(mot in context for mot in motivation_keywords)
+
+                if not has_motivation and len(context) < 300:
+                    violations.append(
+                        {
+                            "type": "villain_no_motivation",
+                            "severity": "warning",
+                            "message": "反派行为缺乏明确动机",
+                            "chapter": chapter_number,
+                            "details": f"检测到反派行为（{indicator}），但未说明其行为动机",
+                            "suggestion": "为反派添加合理的动机（复仇、野心、嫉妒、理念冲突等），避免'因为是反派所以坏'",
+                        }
+                    )
+                break  # 每个章节只报告一次
+
+        # 2. 检查突然出现的禁术/底牌
+        sudden_power_keywords = [
+            "禁术",
+            "秘法",
+            "底牌",
+            "绝招",
+            "绝学",
+            "秘技",
+            "杀手锏",
+        ]
+        foreshadowing_keywords = [
+            "曾经",
+            "之前",
+            "早已",
+            "准备",
+            "修炼",
+            "习得",
+            "掌握",
+        ]
+
+        for power_kw in sudden_power_keywords:
+            if power_kw in content:
+                # 获取上下文
+                idx = content.find(power_kw)
+                context_start = max(0, idx - 150)
+                context_end = min(len(content), idx + 50)
+                context = content[context_start:context_end]
+
+                # 检查是否有铺垫
+                has_foreshadowing = any(fs in context for fs in foreshadowing_keywords)
+
+                if not has_foreshadowing:
+                    violations.append(
+                        {
+                            "type": "sudden_power_no_foreshadowing",
+                            "severity": "warning",
+                            "message": f"突然出现的{power_kw}缺乏铺垫",
+                            "chapter": chapter_number,
+                            "details": f"文中突然使用{power_kw}，但之前未提及角色掌握此技能",
+                            "suggestion": f"提前在前文铺垫此{power_kw}的存在（修炼过程、偶然获得、师门传承等）",
+                        }
+                    )
+
+        # 3. 检查禁地/特殊地点的逻辑
+        forbidden_keywords = ["禁地", "剑冢", "古地", "秘境", "遗迹", "圣地"]
+        access_keywords = [
+            "许可",
+            "批准",
+            "允许",
+            "令牌",
+            "钥匙",
+            "资格",
+            "考验",
+            "机缘",
+        ]
+
+        for forbidden in forbidden_keywords:
+            if forbidden in content:
+                # 检查进入/出现在禁地
+                enter_keywords = ["进入", "来到", "出现在", "抵达", "到达"]
+                if any(ek in content for ek in enter_keywords):
+                    # 检查是否有进入许可的描述
+                    has_access = any(acc in content for acc in access_keywords)
+
+                    if not has_access:
+                        violations.append(
+                            {
+                                "type": "forbidden_area_no_access",
+                                "severity": "warning",
+                                "message": f"角色进入{forbidden}缺乏合理解释",
+                                "chapter": chapter_number,
+                                "details": f"角色进入{forbidden}，但未说明如何获得进入许可",
+                                "suggestion": f"添加进入{forbidden}的合理解释（持令牌、通过考验、特殊机缘等）",
+                            }
+                        )
+
+        # 4. 检查突然出现的亲属关系（如第19章突然出现的姐姐）
+        if chapter_number > 3:  # 只有在前几章之后才检查
+            relation_keywords = [
+                "姐姐",
+                "妹妹",
+                "哥哥",
+                "弟弟",
+                "父亲",
+                "母亲",
+                "师父",
+                "师兄",
+                "师姐",
+            ]
+            for relation in relation_keywords:
+                if relation in content:
+                    # 检查是否是第一次出现
+                    prev_chapters = [
+                        self._load_chapter_content(i) for i in range(1, chapter_number)
+                    ]
+                    prev_content = "\n".join(prev_chapters)
+
+                    if relation not in prev_content:
+                        violations.append(
+                            {
+                                "type": "sudden_relationship",
+                                "severity": "warning",
+                                "message": f"突然出现的亲属关系：{relation}",
+                                "chapter": chapter_number,
+                                "details": f"{relation}在第{chapter_number}章首次出现，但之前未提及",
+                                "suggestion": f"提前在前文铺垫{relation}的存在，或说明为何之前未提及",
+                            }
+                        )
+
+        return violations
+
+    def _check_cross_chapter_consistency(self) -> List[Dict]:
+        """检查跨章节的一致性"""
+        violations = []
+
+        # 加载所有章节
+        all_chapters = {}
+        for num in sorted(self.chapter_index.keys()):
+            all_chapters[num] = self._load_chapter_content(num)
+
+        # 1. 检查境界变化是否合理
+        realm_progression = self._extract_realm_progression(all_chapters)
+        for i in range(1, len(realm_progression)):
+            prev = realm_progression[i - 1]
+            curr = realm_progression[i]
+
+            if curr["chapter"] - prev["chapter"] < 3:  # 3章内连续突破
+                violations.append(
+                    {
+                        "type": "rapid_realm_progression",
+                        "severity": "warning",
+                        "message": f"境界提升过快：第{prev['chapter']}章到第{curr['chapter']}章",
+                        "chapter": curr["chapter"],
+                        "details": f"从{prev['realm']}提升到{curr['realm']}仅用了{curr['chapter'] - prev['chapter']}章",
+                        "suggestion": "增加修炼过程描写，或延长突破间隔",
+                    }
+                )
+
+        # 2. 检查地点跳跃是否合理
+        location_progression = self._extract_location_progression(all_chapters)
+        for i in range(1, len(location_progression)):
+            prev = location_progression[i - 1]
+            curr = location_progression[i]
+
+            if prev["location"] != curr["location"]:
+                # 检查是否有移动过程的描述
+                if curr["chapter"] - prev["chapter"] == 1:
+                    # 相邻章节突然换地点，需要检查距离
+                    violations.append(
+                        {
+                            "type": "sudden_location_change",
+                            "severity": "info",
+                            "message": f"地点突然变更：{prev['location']} → {curr['location']}",
+                            "chapter": curr["chapter"],
+                            "details": f"第{prev['chapter']}章在{prev['location']}，第{curr['chapter']}章突然在{curr['location']}",
+                            "suggestion": "添加地点转移的过程描述",
+                        }
+                    )
+
+        return violations
+
+    def _extract_realm_progression(self, chapters: Dict[int, str]) -> List[Dict]:
+        """提取境界变化时间线"""
+        progression = []
+        realm_hierarchy = self.constraints.get("realm_hierarchy", {})
+
+        for chapter_num, content in sorted(chapters.items()):
+            for realm in realm_hierarchy.keys():
+                if realm in content:
+                    progression.append({"chapter": chapter_num, "realm": realm})
+                    break
+
+        return progression
+
+    def _extract_location_progression(self, chapters: Dict[int, str]) -> List[Dict]:
+        """提取地点变化时间线"""
+        progression = []
+
+        # 常见地点关键词
+        location_keywords = [
+            "宗门",
+            "门派",
+            "剑冢",
+            "后山",
+            "修炼室",
+            "大殿",
+            "广场",
+            "城镇",
+            "市集",
+            "客栈",
+            "山",
+            "谷",
+            "林",
+            "洞府",
+        ]
+
+        for chapter_num, content in sorted(chapters.items()):
+            for location in location_keywords:
+                if location in content:
+                    progression.append({"chapter": chapter_num, "location": location})
+                    break
+            else:
+                progression.append({"chapter": chapter_num, "location": "未知"})
+
+        return progression
+
+    def generate_report(self, results: Dict[str, Any]) -> str:
+        """生成详细的一致性检查报告"""
+        lines = [
+            "=" * 80,
+            "小说一致性检查报告",
+            "=" * 80,
+            "",
+            f"检查章节数：{results.get('total_chapters_checked', 0)}",
+            f"严重错误数：{results.get('critical_count', 0)}",
+            f"警告数：{results.get('warning_count', 0)}",
+            f"检查结果：{'通过' if results.get('passed') else '未通过'}",
+            "",
+            "-" * 80,
+        ]
+
+        violations = results.get("violations", [])
+
+        if violations:
+            # 按严重程度分组
+            critical = [v for v in violations if v.get("severity") == "critical"]
+            warnings = [v for v in violations if v.get("severity") == "warning"]
+            info = [v for v in violations if v.get("severity") == "info"]
+
+            if critical:
+                lines.extend(["", "【严重错误】必须修复", "-" * 80])
+                for i, v in enumerate(critical, 1):
+                    lines.extend(self._format_violation(i, v))
+
+            if warnings:
+                lines.extend(["", "【警告】建议修复", "-" * 80])
+                for i, v in enumerate(warnings, 1):
+                    lines.extend(self._format_violation(i, v))
+
+            if info:
+                lines.extend(["", "【提示】仅供参考", "-" * 80])
+                for i, v in enumerate(info, 1):
+                    lines.extend(self._format_violation(i, v))
+        else:
+            lines.extend(["", "恭喜！未发现一致性问题。", ""])
+
+        lines.extend(
+            [
+                "",
+                "=" * 80,
+                "报告生成完成",
+                "=" * 80,
+            ]
+        )
+
+        return "\n".join(lines)
+
+    def _format_violation(self, index: int, violation: Dict) -> List[str]:
+        """格式化单个违规记录"""
+        return [
+            f"",
+            f"[{index}] {violation.get('type', '未知类型')}",
+            f"  位置：第{violation.get('chapter', '?')}章",
+            f"  问题：{violation.get('message', '')}",
+            f"  详情：{violation.get('details', '')}",
+            f"  建议：{violation.get('suggestion', '')}",
+        ]
+
+    def export_violations_to_json(self, results: Dict[str, Any], output_path: str):
+        """导出违规记录到JSON"""
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+
+
+# 便捷函数
+def check_novel_consistency(project_dir: str) -> Dict[str, Any]:
+    """检查小说一致性的便捷函数"""
+    checker = ConsistencyChecker(project_dir)
+    return checker.check_all_chapters()
+
+
+def check_single_chapter(project_dir: str, chapter_number: int) -> Dict[str, Any]:
+    """检查单个章节的便捷函数"""
+    checker = ConsistencyChecker(project_dir)
+    return checker.check_single_chapter(chapter_number)

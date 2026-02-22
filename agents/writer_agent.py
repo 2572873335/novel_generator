@@ -33,8 +33,12 @@ class WriterAgent:
         if sys_path not in os.sys.path:
             os.sys.path.insert(0, sys_path)
         from core.consistency_tracker import ConsistencyTracker
+        from core.writing_constraint_manager import WritingConstraintManager
 
         self.tracker = ConsistencyTracker(project_dir)
+
+        # 初始化写作约束管理器（解决编辑指出的6大问题）
+        self.constraint_manager = WritingConstraintManager(project_dir)
 
         os.makedirs(self.chapters_dir, exist_ok=True)
 
@@ -113,7 +117,19 @@ class WriterAgent:
         # 更新设定追踪器
         self._update_tracker(chapter_number, chapter_content, context)
 
-        # 9. Git commit
+        # 9. 使用约束管理器验证和更新
+        violations = self.constraint_manager.validate_chapter(
+            chapter_number, chapter_content
+        )
+        if violations:
+            print(f"   [Constraint] 发现 {len(violations)} 个违规:")
+            for v in violations[:3]:  # 只显示前3个
+                print(f"      - {v['type']}: {v['message']}")
+
+        # 尝试自动检测境界/地点/宗门变化并更新约束
+        self._auto_update_constraints(chapter_number, chapter_content)
+
+        # 10. Git commit
         self._git_commit(chapter_number, chapter_info["title"])
 
         print("\n" + "=" * 60)
@@ -355,6 +371,16 @@ class WriterAgent:
 {context["tracker_context"]}
 """
 
+        # 写作约束管理器约束（解决编辑指出的6大问题）
+        constraint_prompt = self.constraint_manager.get_constraint_prompt(
+            chapter_number
+        )
+        if constraint_prompt:
+            prompt += f"""
+## 严格写作约束（必须遵守！违反将导致设定崩坏）
+{constraint_prompt}
+"""
+
         prompt += """
 ## 写作要求（强制遵守）
 
@@ -518,6 +544,49 @@ class WriterAgent:
             "chapter_written",
             f"第{chapter_number}章: {chapter_info.get('title', '')} ({len(content)}字)",
         )
+
+    def _auto_update_constraints(self, chapter_number: int, content: str):
+        """
+        自动检测并更新约束
+
+        尝试从章节内容中提取境界、地点、宗门的变化
+        """
+        import re
+
+        detected_realm = None
+        detected_location = None
+        detected_faction = None
+
+        # 尝试检测境界变化
+        realm_hierarchy = self.constraint_manager.constraints.realm_hierarchy
+        for realm in realm_hierarchy.keys():
+            if realm in content:
+                detected_realm = realm
+                break
+
+        # 尝试检测地点变化（简化处理）
+        location_keywords = ["宗门", "门派", "剑冢", "后山", "大殿", "市集", "城镇"]
+        for loc in location_keywords:
+            if loc in content:
+                detected_location = loc
+                break
+
+        # 尝试检测宗门变化
+        faction_whitelist = self.constraint_manager.constraints.faction_whitelist
+        for faction in faction_whitelist:
+            if faction in content:
+                detected_faction = faction
+                break
+
+        # 更新约束
+        if detected_realm or detected_location or detected_faction:
+            self.constraint_manager.update_constraints_after_chapter(
+                chapter_number=chapter_number,
+                chapter_content=content,
+                detected_realm=detected_realm,
+                detected_location=detected_location,
+                detected_faction=detected_faction,
+            )
 
     def _git_commit(self, chapter_number: int, chapter_title: str):
         """Git 提交"""
