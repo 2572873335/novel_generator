@@ -81,6 +81,133 @@ class TimelineEvent:
         }
 
 
+@dataclass
+class RealmState:
+    """境界状态追踪"""
+
+    current_realm: str
+    first_appearance: int
+    last_breakthrough_chapter: int
+    breakthrough_history: List[Dict] = field(default_factory=list)
+
+    def record_breakthrough(
+        self, new_realm: str, chapter: int, days_spent: int, method: str = ""
+    ):
+        self.breakthrough_history.append(
+            {
+                "from_realm": self.current_realm,
+                "to_realm": new_realm,
+                "chapter": chapter,
+                "days_spent": days_spent,
+                "method": method,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+        self.current_realm = new_realm
+        self.last_breakthrough_chapter = chapter
+
+    def to_dict(self) -> Dict:
+        return {
+            "current_realm": self.current_realm,
+            "first_appearance": self.first_appearance,
+            "last_breakthrough_chapter": self.last_breakthrough_chapter,
+            "breakthrough_history": self.breakthrough_history,
+        }
+
+
+@dataclass
+class ConstitutionState:
+    """体质状态追踪"""
+
+    current_constitution: str
+    original_constitution: str
+    changes: List[Dict] = field(default_factory=list)
+
+    def record_change(
+        self, new_constitution: str, chapter: int, reason: str, method: str
+    ):
+        self.changes.append(
+            {
+                "from": self.current_constitution,
+                "to": new_constitution,
+                "chapter": chapter,
+                "reason": reason,
+                "method": method,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+        self.current_constitution = new_constitution
+
+    def to_dict(self) -> Dict:
+        return {
+            "current_constitution": self.current_constitution,
+            "original_constitution": self.original_constitution,
+            "changes": self.changes,
+        }
+
+
+@dataclass
+class LocationState:
+    """地点状态追踪"""
+
+    current_location: str
+    location_history: List[Dict] = field(default_factory=list)
+
+    def record_movement(
+        self,
+        new_location: str,
+        chapter: int,
+        travel_method: str = "",
+        duration: str = "",
+    ):
+        self.location_history.append(
+            {
+                "from": self.current_location,
+                "to": new_location,
+                "chapter": chapter,
+                "travel_method": travel_method,
+                "duration": duration,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+        self.current_location = new_location
+
+    def to_dict(self) -> Dict:
+        return {
+            "current_location": self.current_location,
+            "location_history": self.location_history,
+        }
+
+
+@dataclass
+class FactionState:
+    """宗门/势力状态追踪"""
+
+    current_faction: str
+    faction_history: List[Dict] = field(default_factory=list)
+
+    def record_faction_change(
+        self, new_faction: str, chapter: int, reason: str, method: str = ""
+    ):
+        self.faction_history.append(
+            {
+                "from": self.current_faction,
+                "to": new_faction,
+                "chapter": chapter,
+                "reason": reason,
+                "method": method,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+        self.current_faction = new_faction
+
+    def to_dict(self) -> Dict:
+        return {
+            "current_faction": self.current_faction,
+            "faction_history": self.faction_history,
+        }
+
+
 class ConsistencyTracker:
     """
     设定一致性追踪器
@@ -102,6 +229,12 @@ class ConsistencyTracker:
         self.timeline: List[TimelineEvent] = []
         self.world_rules: Dict[str, Any] = {}  # 世界观规则
         self.protagonist_abilities: List[Dict] = []  # 主角能力日志
+
+        # 新增追踪数据（解决编辑指出的问题）
+        self.realm_state: Optional[RealmState] = None  # 境界追踪
+        self.constitution_state: Optional[ConstitutionState] = None  # 体质追踪
+        self.location_state: Optional[LocationState] = None  # 地点追踪
+        self.faction_state: Optional[FactionState] = None  # 宗门追踪
 
         # 加载已有数据
         self._load()
@@ -342,6 +475,293 @@ class ConsistencyTracker:
             "set_at_time": datetime.now().isoformat(),
         }
         self._save()
+
+    # 新增追踪方法（解决编辑指出的问题）
+
+    def init_realm_tracking(self, initial_realm: str, chapter: int = 0):
+        """
+        初始化境界追踪
+
+        解决问题：修炼速度坐火箭
+        - 记录初始境界
+        - 追踪每次突破
+        """
+        self.realm_state = RealmState(
+            current_realm=initial_realm,
+            first_appearance=chapter,
+            last_breakthrough_chapter=chapter,
+            breakthrough_history=[],
+        )
+        self._save()
+        print(f"[Tracker] 初始化境界追踪: {initial_realm}")
+
+    def track_realm_breakthrough(
+        self,
+        new_realm: str,
+        chapter: int,
+        days_spent: int,
+        method: str = "",
+    ):
+        """
+        追踪境界突破
+
+        解决问题：修炼速度不合理
+        - 记录突破所用时间
+        - 检查是否突破过快
+        """
+        if not self.realm_state:
+            self.init_realm_tracking(new_realm, chapter)
+            return
+
+        # 检查突破速度
+        min_minor_days = 7
+        min_major_days = 30
+
+        if days_spent < min_minor_days:
+            print(
+                f"⚠️ [Tracker警告] 境界突破过快: {self.realm_state.current_realm} -> {new_realm}"
+            )
+            print(f"   仅用 {days_spent} 天，建议至少 {min_minor_days} 天")
+        elif days_spent < min_major_days and self._is_major_realm_change(
+            self.realm_state.current_realm, new_realm
+        ):
+            print(
+                f"⚠️ [Tracker警告] 大境界突破过快: {self.realm_state.current_realm} -> {new_realm}"
+            )
+            print(f"   仅用 {days_spent} 天，大境界建议至少 {min_major_days} 天")
+
+        self.realm_state.record_breakthrough(new_realm, chapter, days_spent, method)
+        self._save()
+        print(
+            f"[Tracker] 第{chapter}章: {self.realm_state.current_realm} -> {new_realm}"
+        )
+
+    def _is_major_realm_change(self, old_realm: str, new_realm: str) -> bool:
+        """判断是否为大境界变化"""
+        # 简化判断：如果境界名称的"境"前部分不同，则认为是大境界变化
+        old_major = old_realm.split("境")[0] if "境" in old_realm else old_realm
+        new_major = new_realm.split("境")[0] if "境" in new_realm else new_realm
+        return old_major != new_major
+
+    def init_constitution_tracking(self, initial_constitution: str, chapter: int = 0):
+        """
+        初始化体质追踪
+
+        解决问题：体质无理由变更（九玄剑骨→混沌剑骨）
+        - 记录初始体质
+        - 追踪体质变化
+        """
+        self.constitution_state = ConstitutionState(
+            current_constitution=initial_constitution,
+            original_constitution=initial_constitution,
+            changes=[],
+        )
+        self._save()
+        print(f"[Tracker] 初始化体质追踪: {initial_constitution}")
+
+    def track_constitution_change(
+        self,
+        new_constitution: str,
+        chapter: int,
+        reason: str,
+        method: str,
+    ):
+        """
+        追踪体质变化
+
+        解决问题：体质变更缺乏铺垫
+        - 必须提供变更原因
+        - 必须提供变更方式
+        """
+        if not self.constitution_state:
+            self.init_constitution_tracking(new_constitution, chapter)
+            return
+
+        if not reason:
+            print(
+                f"⚠️ [Tracker严重警告] 体质变更缺乏原因: {self.constitution_state.current_constitution} -> {new_constitution}"
+            )
+            print(f"   必须提供体质变更的合理解释！")
+
+        if not method:
+            print(
+                f"⚠️ [Tracker警告] 体质变更缺乏方式说明: {self.constitution_state.current_constitution} -> {new_constitution}"
+            )
+
+        self.constitution_state.record_change(new_constitution, chapter, reason, method)
+        self._save()
+        print(
+            f"[Tracker] 第{chapter}章: 体质变更 {self.constitution_state.current_constitution}"
+        )
+
+    def init_location_tracking(self, initial_location: str, chapter: int = 0):
+        """
+        初始化地点追踪
+
+        解决问题：地点跳跃不合理
+        - 记录当前地点
+        - 追踪移动过程
+        """
+        self.location_state = LocationState(
+            current_location=initial_location, location_history=[]
+        )
+        self._save()
+        print(f"[Tracker] 初始化地点追踪: {initial_location}")
+
+    def track_location_change(
+        self,
+        new_location: str,
+        chapter: int,
+        travel_method: str = "",
+        duration: str = "",
+    ):
+        """
+        追踪地点变化
+
+        解决问题：地点突然变更
+        - 记录移动方式
+        - 记录移动时间
+        """
+        if not self.location_state:
+            self.init_location_tracking(new_location, chapter)
+            return
+
+        if self.location_state.current_location == new_location:
+            return
+
+        if not travel_method:
+            print(
+                f"⚠️ [Tracker提示] 地点变更未说明方式: {self.location_state.current_location} -> {new_location}"
+            )
+
+        if not duration:
+            print(
+                f"⚠️ [Tracker提示] 地点变更未说明时间: {self.location_state.current_location} -> {new_location}"
+            )
+
+        self.location_state.record_movement(
+            new_location, chapter, travel_method, duration
+        )
+        self._save()
+        print(
+            f"[Tracker] 第{chapter}章: 地点变更 {self.location_state.current_location}"
+        )
+
+    def init_faction_tracking(self, initial_faction: str, chapter: int = 0):
+        """
+        初始化宗门追踪
+
+        解决问题：宗门名称精神分裂
+        - 记录当前宗门
+        - 追踪宗门变更
+        """
+        self.faction_state = FactionState(
+            current_faction=initial_faction, faction_history=[]
+        )
+        self._save()
+        print(f"[Tracker] 初始化宗门追踪: {initial_faction}")
+
+    def track_faction_change(
+        self, new_faction: str, chapter: int, reason: str, method: str = ""
+    ):
+        """
+        追踪宗门变化
+
+        解决问题：宗门突然变更
+        - 必须提供变更原因
+        - 必须提供变更方式
+        """
+        if not self.faction_state:
+            self.init_faction_tracking(new_faction, chapter)
+            return
+
+        if self.faction_state.current_faction == new_faction:
+            return
+
+        if not reason:
+            print(
+                f"⚠️ [Tracker严重警告] 宗门变更缺乏原因: {self.faction_state.current_faction} -> {new_faction}"
+            )
+            print(f"   必须提供宗门变更的合理解释！")
+
+        self.faction_state.record_faction_change(new_faction, chapter, reason, method)
+        self._save()
+        print(f"[Tracker] 第{chapter}章: 宗门变更 {self.faction_state.current_faction}")
+
+    def get_realm_progression_report(self) -> str:
+        """生成境界进度报告"""
+        if not self.realm_state:
+            return "境界追踪未初始化"
+
+        lines = [
+            f"当前境界: {self.realm_state.current_realm}",
+            f"首次出现: 第{self.realm_state.first_appearance}章",
+            f"突破次数: {len(self.realm_state.breakthrough_history)}",
+            "\n突破历史:",
+        ]
+
+        for record in self.realm_state.breakthrough_history:
+            lines.append(
+                f"  第{record['chapter']}章: {record['from_realm']} -> {record['to_realm']} "
+                f"(用时{record['days_spent']}天)"
+            )
+
+        return "\n".join(lines)
+
+    def get_constitution_change_report(self) -> str:
+        """生成体质变更报告"""
+        if not self.constitution_state:
+            return "体质追踪未初始化"
+
+        lines = [
+            f"原始体质: {self.constitution_state.original_constitution}",
+            f"当前体质: {self.constitution_state.current_constitution}",
+            f"变更次数: {len(self.constitution_state.changes)}",
+            "\n变更历史:",
+        ]
+
+        for change in self.constitution_state.changes:
+            lines.append(
+                f"  第{change['chapter']}章: {change['from']} -> {change['to']}\n"
+                f"    原因: {change['reason']}\n    方式: {change['method']}"
+            )
+
+        return "\n".join(lines)
+
+    def get_full_tracking_report(self) -> str:
+        """生成完整追踪报告"""
+        lines = ["=" * 60, "完整设定追踪报告", "=" * 60]
+
+        # 境界
+        if self.realm_state:
+            lines.extend(["\n【境界追踪】", self.get_realm_progression_report()])
+
+        # 体质
+        if self.constitution_state:
+            lines.extend(["\n【体质追踪】", self.get_constitution_change_report()])
+
+        # 地点
+        if self.location_state:
+            lines.extend(
+                [
+                    "\n【地点追踪】",
+                    f"当前地点: {self.location_state.current_location}",
+                    f"移动次数: {len(self.location_state.location_history)}",
+                ]
+            )
+
+        # 宗门
+        if self.faction_state:
+            lines.extend(
+                [
+                    "\n【宗门追踪】",
+                    f"当前宗门: {self.faction_state.current_faction}",
+                    f"变更次数: {len(self.faction_state.faction_history)}",
+                ]
+            )
+
+        lines.append("\n" + "=" * 60)
+        return "\n".join(lines)
 
     def check_consistency(self, chapter: int, content: str) -> Dict[str, Any]:
         """

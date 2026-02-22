@@ -1,0 +1,151 @@
+# 小说一致性检测配置
+# 基于起点编辑审稿意见制定
+
+# 1. 境界体系配置
+realm_system:
+  # 境界等级定义（数值越大越强）
+  hierarchy:
+    "无剑者": 0
+    "剑气境一层": 10
+    "剑气境二层": 11
+    "剑气境三层": 12
+    "剑气境四层": 13
+    "剑气境五层": 14
+    "剑气境六层": 15
+    "剑气境七层": 16
+    "剑气境八层": 17
+    "剑气境九层": 18
+    "剑气境巅峰": 19
+    "剑心境初期": 30
+    "剑心境中期": 32
+    "剑心境后期": 34
+    "剑心境巅峰": 36
+    "剑意境初期": 50
+    "剑意境中期": 52
+    "剑意境后期": 54
+    "剑意境巅峰": 56
+    "剑域境初期": 70
+    "剑域境中期": 72
+    "剑域境后期": 74
+    "剑域境巅峰": 76
+    "剑宗境": 90
+    "剑尊境": 100
+    "剑帝境": 120
+
+  # 战力差距规则
+  combat_rules:
+    # 同境界内可越级上限（小层）
+    max_cross_within_realm: 2
+    # 跨大境界战斗规则
+    cross_realm_combat: "forbidden"  # forbidden/allowed_with_cost
+    # 跨大境界必须付出的代价类型
+    required_costs: ["燃烧寿元", "损伤根基", "消耗底牌", "前辈相助", "阵法加持", "符篆之力"]
+
+# 2. 修炼速度限制
+cultivation_speed:
+  # 小境界突破（如剑气境一层→二层）
+  minor_breakthrough:
+    min_days: 7
+    max_reasonable_days: 30
+  
+  # 大境界突破（如剑气境→剑心境）
+  major_breakthrough:
+    min_days: 30
+    max_reasonable_days: 90
+    # 必须有的准备
+    required_preparation: ["积累", "打磨", "感悟", "资源准备"]
+
+# 3. 宗门/势力锁定
+faction_lock:
+  # 是否锁定宗门名称
+  lock_faction_names: true
+  # 宗门名称白名单（项目初始化时确定）
+  whitelist: []
+  # 允许的名称变更（需要有明确剧情）
+  allowed_changes:
+    - pattern: "加入"
+      description: "主角加入新宗门"
+    - pattern: "离开.*前往"
+      description: "主角转场到另一个宗门"
+
+# 4. 人物姓名锁定
+character_name_lock:
+  # 是否锁定人物姓名
+  lock_names: true
+  # 主角姓名（绝对不能变）
+  protagonist_names: []
+  # 重要配角姓名（不能变）
+  supporting_names: []
+  # 允许的昵称映射
+  nickname_mapping: {}
+
+# 5. 特殊体质锁定
+constitution_lock:
+  # 是否锁定体质类型
+  lock_constitution: true
+  # 体质类型白名单
+  valid_types:
+    - "九玄剑骨"
+    - "混沌剑骨"
+    - "天剑体"
+    - "血剑体"
+    - "剑心通明"
+    - "无上剑体"
+  # 允许体质变更的条件
+  allowed_transformation:
+    - "觉醒"
+    - "返祖"
+    - "重塑"
+    - "进化"
+  # 体质变更必须在说明书中记录
+  require_documentation: true
+
+# 6. 时间线验证
+timeline_validation:
+  # 验证消息传递时间
+  message_travel:
+    # 消息传递速度（里/天）
+    speed: 500
+    # 最大合理延迟（天）
+    max_delay: 3
+  
+  # 地理距离验证
+  geography:
+    # 地点间距离（里）
+    distances:
+      "青岚城-葬剑古地": 300
+      "葬剑古地深处-外围": 50
+    # 人物移动速度（里/天）
+    travel_speed:
+      "步行": 30
+      "骑马": 100
+      "御剑": 500
+      "飞舟": 1000
+
+# 7. 战斗逻辑验证
+combat_logic:
+  # 反派智商检查
+  villain_intelligence:
+    # 禁止的行为
+    forbidden_actions:
+      - "明知不敌还送死"
+      - "毫无理由的嘲讽"
+      - "在禁地随意进出"
+    # 必须有合理动机
+    require_motivation: true
+  
+  # 战斗细节检查
+  battle_details:
+    # 禁术使用必须有铺垫
+    forbidden_technique_foreshadowing: true
+    # 底牌使用必须提前说明
+    trump_card_explanation: true
+
+# 8. 缺章检测
+chapter_continuity:
+  # 是否启用严格检测
+  strict_mode: true
+  # 发现缺章时自动补充
+  auto_fill_missing: true
+  # 补充生成时的上下文章节数
+  context_chapters: 3
