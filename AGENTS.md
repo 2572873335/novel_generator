@@ -12,8 +12,11 @@ Coding agent instructions for the Novel Generator AI system.
 - `/大纲` - 启动大纲架构
 - `/卷纲` - 启动卷纲架构
 - `/章纲` - 启动章纲架构
+- `/节奏` - 启动节奏设计流程
+- `/开篇诊断` - 对前三章进行黄金三章诊断
 - `/写作 [章节号]` - 撰写指定章节
 - `/编辑 [章节号]` - 编辑指定章节
+- `/审稿 [章节号]` - 资深编辑审稿
 - `/状态` - 查看项目状态
 
 ### 工作流程
@@ -23,14 +26,76 @@ Coding agent instructions for the Novel Generator AI system.
 4. `/大纲` → 生成大纲
 5. `/卷纲` → 细化卷纲
 6. `/章纲` → 细化章纲
-7. `/写作` → 撰写章节
-8. `/编辑` → 润色章节
+7. `/节奏` → 设计章节节奏
+8. `/写作` → 撰写章节
+9. `/开篇诊断` → 诊断前三章（可选）
+10. `/审稿` → 资深编辑审稿
+11. `/编辑` → 润色章节
 
 ### 质量标准
 - 逻辑自洽，设定一致
 - 人物立体，动机清晰
 - 情节紧凑，节奏流畅
 - 文字生动，画面感强
+- 开篇合规，符合黄金三章
+
+---
+
+## Skills 层级架构
+
+系统采用四级层级架构，17个专业技能协同工作：
+
+```
+Level 1: Coordinator (协调员) - 3个
+├── worldbuilder-coordinator    世界观总控
+├── plot-architect-coordinator  剧情总控
+└── novel-coordinator           项目协调
+
+Level 2: Architect (架构师) - 5个
+├── outline-architect   故事大纲
+├── volume-architect    卷纲设计
+├── chapter-architect   章纲设计
+├── character-designer  人物设计
+└── rhythm-designer     节奏设计 (新增)
+
+Level 3: Expert (专家) - 6个
+├── scene-writer         场景写作
+├── cultivation-designer 修炼体系
+├── currency-expert      货币经济
+├── geopolitics-expert   地缘政治
+├── society-expert       社会结构
+└── web-novel-methodology 网文方法论
+
+Level 4: Auditor (审计) - 3个
+├── editor               编辑润色
+├── senior-editor        资深审稿
+└── opening-diagnostician 开篇诊断 (新增)
+```
+
+### 新增核心功能
+
+#### 1. 开篇诊断 (opening-diagnostician)
+基于起点"黄金三章"法则，对前三章进行严苛诊断：
+- **三秒定律**：前500字必须出现主角名
+- **钩子密度**：每300字至少一个悬念点
+- **毒点扫描**：检测绿帽、圣母、虐主过度等致命问题
+- **金手指亮相**：第1章必须展示核心优势
+- **冲突爆发**：3000字内首场核心冲突
+- **信息密度**：禁止大段世界观说明文
+
+评级标准：S/A/B/C/F（F级拒绝生成）
+
+#### 2. 节奏设计 (rhythm-designer)
+为每个章节设计精确的节奏地图：
+- **爽点密度**：每3000字至少1个小爽点
+- **压抑释放比**：7:3
+- **章末钩子**：最后200字必须是cliffhanger
+- **情绪曲线**：波浪形情绪变化
+- **信息密度**：禁止连续500字无剧情推进
+
+输出：YAML格式节奏地图
+
+---
 
 ## 四层防御一致性系统
 
@@ -51,6 +116,10 @@ Coding agent instructions for the Novel Generator AI system.
 - LocationState - 地点移动历史
 - FactionState - 宗门变更记录
 
+**阈值设置**：
+- 高威胁敌人：威胁等级 ≥ 6 必须有代价才能击败
+- 主角能力上限：核心能力不超过 4 个
+
 ### 3. ConsistencyChecker (agents/consistency_checker.py)
 严格检测6大类问题：
 1. 宗门名称一致性（防止精神分裂）
@@ -69,6 +138,8 @@ Coding agent instructions for the Novel Generator AI system.
 ### 配置文件
 - `config/consistency_rules.yaml` - 验证规则
 
+---
+
 ## Build & Test Commands
 
 ```bash
@@ -86,285 +157,131 @@ python main.py --progress novels/my_novel
 
 # 启动Web UI界面
 streamlit run app.py
-
-# 运行单个测试（当存在测试时）
-pytest tests/test_file.py::test_function -v
-
-# 运行所有测试
-pytest tests/ -v
-
-# 代码格式化（可选）
-black .
-
-# 代码检查（可选）
-flake8 .
-ruff check .
 ```
+
+---
 
 ## Project Structure
 
 ```
 novel_generator/
-├── agents/                 # Agent实现
+├── .opencode/skills/         # Skills技能目录 (17个)
+│   ├── worldbuilder-coordinator/
+│   ├── plot-architect-coordinator/
+│   ├── novel-coordinator/
+│   ├── outline-architect/
+│   ├── volume-architect/
+│   ├── chapter-architect/
+│   ├── character-designer/
+│   ├── rhythm-designer/          # 新增
+│   ├── scene-writer/
+│   ├── cultivation-designer/
+│   ├── currency-expert/
+│   ├── geopolitics-expert/
+│   ├── society-expert/
+│   ├── web-novel-methodology/
+│   ├── editor/
+│   ├── senior-editor/
+│   └── opening-diagnostician/    # 新增
+├── agents/                   # Agent实现
 │   ├── initializer_agent.py
 │   ├── writer_agent.py
 │   ├── reviewer_agent.py
-│   └── *.md               # 专业智能体提示词(WorldBuilder, CharacterDesigner等)
-├── .opencode/              # Skills目录
-│   └── skills/
-│       ├── worldbuilder-coordinator/
-│       │   └── SKILL.md
-│       ├── currency-expert/
-│       │   └── SKILL.md
-│       ├── geopolitics-expert/
-│       │   └── SKILL.md
-│       ├── society-expert/
-│       │   └── SKILL.md
-│       ├── cultivation-designer/
-│       │   └── SKILL.md
-│       ├── plot-architect-coordinator/
-│       │   └── SKILL.md
-│       ├── outline-architect/
-│       │   └── SKILL.md
-│       ├── volume-architect/
-│       │   └── SKILL.md
-│       ├── chapter-architect/
-│       │   └── SKILL.md
-│       ├── character-designer/
-│       │   └── SKILL.md
-│       ├── scene-writer/
-│       │   └── SKILL.md
-│       ├── editor/
-│       │   └── SKILL.md
-│       └── novel-coordinator/
-│           └── SKILL.md
-├── core/                   # 核心功能
-│   ├── novel_generator.py  # 主控制器
-│   ├── progress_manager.py # 进度管理
-│   ├── chapter_manager.py  # 章节管理
+│   └── consistency_checker.py
+├── core/                     # 核心功能
+│   ├── novel_generator.py    # 主控制器
+│   ├── agent_manager.py      # 智能体调度 (含层级架构)
+│   ├── consistency_tracker.py # 设定追踪
+│   ├── writing_constraint_manager.py # 约束管理
+│   ├── progress_manager.py
+│   ├── chapter_manager.py
 │   ├── character_manager.py
-│   ├── agent_manager.py    # 智能体调度
-│   ├── model_manager.py    # AI模型管理
-│   ├── config_manager.py   # 配置/API密钥管理
-│   └── log_manager.py      # 日志系统
-├── config/                 # 配置模块
-│   └── settings.py         # NovelConfig, AgentPrompts
-├── novels/                 # 生成的小说项目目录
-├── logs/                   # 日志文件
-├── app.py                  # Web UI界面（Streamlit）
-├── main.py                 # 命令行入口
-├── .env                    # 环境变量（API密钥等）
-├── .env.example            # 环境变量示例
-└── requirements.txt        # 依赖配置
+│   ├── model_manager.py
+│   └── log_manager.py
+├── config/                   # 配置模块
+│   ├── settings.py
+│   └── consistency_rules.yaml
+├── novels/                   # 生成的小说项目
+├── app.py                    # Web UI (Streamlit)
+├── main.py                   # 命令行入口
+├── .env                      # 环境变量
+└── requirements.txt          # 依赖配置
 ```
+
+---
 
 ## 小说项目文档结构
 
 ```
 novel-project/
-├── AGENTS.md               # AI行为准则
-├── world/                  # 世界观文档
-├── characters/             # 人物文档
-├── plot/                   # 剧情文档
-└── manuscript/             # 正文稿件
+├── outline.md               # 小说大纲
+├── characters.json          # 角色设定
+├── chapter-list.json        # 章节列表
+├── world-rules.json         # 世界观规则（含修炼体系）
+├── novel-progress.txt       # 进度跟踪
+├── chapters/                # 章节内容
+│   ├── chapter-001.md
+│   └── ...
+├── reviews/                 # 审查报告
+│   ├── review-001.md
+│   └── ...
+├── consistency_reports/     # 一致性检查报告
+│   └── consistency_005.md
+└── agent_outputs/           # 智能体输出
+    ├── worldbuilder_output.md
+    └── ...
 ```
+
+---
 
 ## Code Style Guidelines
 
 ### Imports
-- Standard library imports first (os, json, sys, time)
-- Third-party imports second (streamlit, pathlib)
-- Local module imports last
-- Use try/except for optional dependencies
-- Handle both relative and absolute imports
-
 ```python
 import os
-import sys
 import json
-from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
+from typing import Dict, List, Any, Optional
 from pathlib import Path
-from datetime import datetime
+from dataclasses import dataclass, field
 
 try:
-    from progress_manager import ProgressManager
+    from .consistency_tracker import ConsistencyTracker
 except ImportError:
-    from .progress_manager import ProgressManager
+    from consistency_tracker import ConsistencyTracker
 ```
 
 ### Type Hints
-- Use type hints for all function parameters and return types
-- Use `Optional[Type]` for nullable values
-- Use `Dict[str, Any]` for JSON-like data and config dictionaries
-- Use `List[Type]` for collections
-- Import from `typing` module explicitly
-
 ```python
-def process_chapter(self, chapter_number: int, content: str) -> Dict[str, Any]:
-    result: Optional[ChapterProgress] = self.get_chapter(chapter_number)
-
 def execute_agent(self, agent_name: str, context: Dict[str, Any]) -> Dict[str, Any]:
     ...
 
-def get_available_agents(self) -> List[Dict[str, str]]:
-    ...
+def get_skill_hierarchy(self) -> Dict[str, Any]:
+    hierarchy: Dict[str, List[Dict]] = {...}
+    return hierarchy
 ```
 
 ### Naming Conventions
-- Classes: `PascalCase` (NovelGenerator, WriterAgent, ProgressManager)
-- Functions/Methods: `snake_case` (write_session, load_progress, update_chapter_status)
-- Private methods: `_leading_underscore` (_load_progress, _save_progress, _mock_execute)
-- Constants: `UPPER_SNAKE_CASE` (DEFAULT_CONFIG, INITIALIZER_SYSTEM_PROMPT)
-- Variables: descriptive `snake_case` (chapter_number, not ch; novel_config, not nc)
-- File names: `snake_case.py` (novel_generator.py, agent_manager.py)
-
-### Docstrings
-- Use triple-quoted docstrings for all public classes and methods
-- Document Args and Returns sections
-- Include type information in docstrings
-- Chinese docstrings are acceptable
-
-```python
-def initialize_progress(self, title: str, genre: str, total_chapters: int,
-                       chapter_titles: List[str]) -> NovelProgress:
-    """初始化小说进度
-    
-    Args:
-        title: 小说标题
-        genre: 小说类型
-        total_chapters: 总章节数
-        chapter_titles: 章节标题列表
-        
-    Returns:
-        NovelProgress: 初始化后的进度对象
-    """
-
-def run(self) -> Dict[str, Any]:
-    """Run the complete novel generation workflow.
-    
-    Returns:
-        Dict containing generation statistics and results
-    """
-```
+- Classes: `PascalCase` (AgentManager, ConsistencyTracker)
+- Functions: `snake_case` (get_skill_hierarchy, validate_triggers)
+- Private: `_leading_underscore` (_parse_skill_metadata)
+- Constants: `UPPER_SNAKE_CASE`
 
 ### Data Classes
-- Use `@dataclass` for configuration and data models
-- Implement `__post_init__` for default value initialization
-- Use `asdict()` for serialization to JSON
-
 ```python
 @dataclass
-class ChapterProgress:
-    chapter_number: int
-    title: str
-    status: str  # pending, writing, reviewing, completed, revision_needed
-    word_count: int = 0
-    quality_score: float = 0.0
-    
-    def __post_init__(self):
-        if not self.created_at:
-            self.created_at = datetime.now().isoformat()
-
-@dataclass
-class NovelProgress:
-    title: str
-    genre: str
-    total_chapters: int
-    chapters: List[ChapterProgress] = None
-    
-    def __post_init__(self):
-        if self.chapters is None:
-            self.chapters = []
+class SkillMetadata:
+    name: str
+    level: str = "expert"
+    triggers: List[str] = field(default_factory=list)
+    parent: Optional[str] = None
+    subordinates: List[str] = field(default_factory=list)
 ```
 
-### File Operations
-- Always specify `encoding='utf-8'` for text files
-- Use context managers (with statements)
-- Handle file existence checks before operations
-- Use JSON with `ensure_ascii=False` for Chinese text
-- Use `Path` from pathlib for path operations
+---
 
-```python
-# Writing files
-with open(filepath, 'w', encoding='utf-8') as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
+## Environment Configuration
 
-# Reading files
-with open(filepath, 'r', encoding='utf-8') as f:
-    data = json.load(f)
-
-# Using pathlib
-from pathlib import Path
-chapters_dir = Path(project_dir) / "chapters"
-if chapters_dir.exists():
-    chapter_files = sorted(chapters_dir.glob("chapter-*.md"))
-
-# Check existence before reading
-if not os.path.exists(progress_file):
-    return None
-```
-
-### Error Handling
-- Use try-except for file operations and external calls
-- Return `Optional[Type]` when operations might fail
-- Log errors with descriptive messages (use log_manager)
-- Use specific exception types when possible
-- Print user-friendly error messages
-
-```python
-# File operations
-try:
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
-except FileNotFoundError:
-    return None
-except json.JSONDecodeError as e:
-    print(f"Invalid JSON in {filepath}: {e}")
-    return None
-
-# General operations
-try:
-    result = create_novel(config)
-    if result['success']:
-        print(f"Success: {result['project_dir']}")
-except Exception as e:
-    st.error(f"Error: {str(e)}")
-    logger.log_error_with_traceback(e, "create_novel")
-```
-
-### Project Conventions
-- Progress files: `novel-progress.txt` (JSON format)
-- Chapter files: `chapter-{number:03d}.md` (e.g., chapter-001.md)
-- Chapter list: `chapter-list.json`
-- Project directories: `novels/{title.replace(' ', '_').lower()}/`
-- Status values: pending, writing, reviewing, completed, revision_needed
-- Quality scores: 1.0 to 10.0 scale (7.0 is minimum passing score)
-- Review files: `reviews/review-{number:03d}.md`
-
-### Architecture Patterns
-- Agents handle business logic and AI interactions
-- Managers handle data persistence and state
-- Use clear separation: initialization → writing → review → merge
-- Each session should update progress files
-- Git-style commits are logged for each chapter completion
-- Coordinator pattern: AgentManager orchestrates multiple specialized agents
-
-### Agent System
-- Core agents (Python): InitializerAgent, WriterAgent, ReviewerAgent
-- Specialized agents (Markdown prompts): WorldBuilder, CharacterDesigner, PlotArchitect, OutlineArchitect, SceneWriter, Editor, VolumeArchitect, ChapterArchitect, CultivationDesigner, CurrencyExpert, GeopoliticsExpert, SocietyExpert
-- Agents receive context dict and return result dict
-- Use `AgentManager` to coordinate multi-agent workflows
-
-### Environment Configuration
 - API keys stored in `.env` file (never commit)
 - Use `.env.example` as template
-- Key environment variables: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MOONSHOT_API_KEY`, `DEEPSEEK_API_KEY`, `DEFAULT_MODEL_ID`, `DEFAULT_TEMPERATURE`, `DEFAULT_MAX_TOKENS`
-- Custom model support via `CUSTOM_MODEL_NAME`, `CUSTOM_BASE_URL`, `CUSTOM_API_KEY_ENV`
-
-### Streamlit UI Patterns
-- Use `st.session_state` for state management
-- Initialize session state in dedicated function
-- Use `st.columns()` for layouts
-- Custom CSS via `st.markdown()` with `unsafe_allow_html=True`
-- Form submissions use `st.form()` context manager
+- Key variables: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MOONSHOT_API_KEY`, `DEEPSEEK_API_KEY`
+- Custom model: `CUSTOM_MODEL_NAME`, `CUSTOM_BASE_URL`, `CUSTOM_API_KEY_ENV`
