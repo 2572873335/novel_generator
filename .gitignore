@@ -35,3 +35,16 @@ logs/
 # Development notes (do not commit)
 改进.md
 AGENTS补充.md
+
+# Old/archive folder
+old/
+
+# Cache files
+.ruff_cache/
+
+# Test files
+test_*.py
+test_*.json
+test_*.log
+demo.py
+nul
