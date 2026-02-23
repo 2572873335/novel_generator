@@ -36,6 +36,8 @@ python main.py --title "My Novel" --genre "Fantasy" --chapters 20
   - `writing_constraint_manager.py` - Pre-writing constraint injection
   - `consistency_tracker.py` - Real-time state tracking
   - `hybrid_checker.py` - 3-layer consistency checking
+  - `skill_context_bus.py` - Skill context bus (solves skill island problem)
+  - `checkpoint_manager.py` - Enhanced checkpoint with recovery support
 
 - **config/**: Settings and configuration
 - **.opencode/skills/**: 17+ specialized skills in 4-level hierarchy

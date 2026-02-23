@@ -1,0 +1,125 @@
+# 小说类型模板配置
+# 简化版 - 用于V7类型检测系统
+
+# 类型关键词映射
+genre_keywords:
+  xianxia:
+    - 修仙
+    - 修炼
+    - 灵气
+    - 筑基
+    - 金丹
+    - 元婴
+    - 渡劫
+    - 宗门
+    - 功法
+    - 灵根
+
+  urban:
+    - 都市
+    - 总裁
+    - 豪门
+    - 重生
+    - 赘婿
+    - 兵王
+    - 神医
+
+  fantasy:
+    - 魔法
+    - 精灵
+    - 魔兽
+    - 异世界
+    - 召唤
+    - 血脉
+
+  scifi:
+    - 星际
+    - 宇宙
+    - 飞船
+    - 科技
+    - AI
+    - 未来
+
+  horror:
+    - 恐怖
+    - 惊悚
+    - 鬼魂
+    - 灵异
+
+  mystery:
+    - 推理
+    - 侦探
+    - 悬疑
+    - 破案
+
+# 类型对应的爽点模板
+payoff_templates:
+  xianxia:
+    - 越级挑战
+    - 秘境奇遇
+    - 功法突破
+    - 灵宝认主
+    - 仇人相见
+    - 打脸反派
+    - 势力崛起
+
+  urban:
+    - 身份打脸
+    - 美女投怀
+    - 财富逆袭
+    - 权力巅峰
+    - 情敌相见
+    - 家族认亲
+
+  fantasy:
+    - 血脉觉醒
+    - 魔法突破
+    - 史诗装备
+    - 屠龙勇士
+    - 王国危机
+
+# 类型对应的约束模板
+constraint_templates:
+  xianxia:
+    has_cultivation: true
+    realm_system: true
+    faction_system: true
+    combat_rules:
+      max_cross_realm: 2
+      cross_realm_combat: forbidden
+
+  urban:
+    has_cultivation: false
+    faction_system: true
+    combat_rules:
+      max_cross_rank: 3
+
+  fantasy:
+    has_cultivation: true
+    magic_system: true
+    faction_system: true
+
+# 黄金三章要求
+opening_requirements:
+  xianxia:
+    golden_hook_types:
+      - 身份落差
+      - 退婚羞辱
+      - 血脉觉醒
+      - 秘境开启
+      - 仇家上门
+
+  urban:
+    golden_hook_types:
+      - 身份隐藏
+      - 财富展露
+      - 美女相遇
+      - 仇人打脸
+      - 家族危机
+
+  fantasy:
+    golden_hook_types:
+      - 使命召唤
+      - 血脉觉醒
+      - 宝藏发现
+      - 危机降临

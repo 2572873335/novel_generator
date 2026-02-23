@@ -569,6 +569,130 @@ class HybridChecker:
         self._false_positive_cache.clear()
         self._llm_cache.clear()
 
+    # ==================== Phase 4: 动态战力/境界识别 ====================
+
+    def extract_realm_with_llm(self, content: str, realm_hierarchy: Dict[str, int] = None) -> Dict[str, Any]:
+        """
+        使用LLM提取本章境界描述
+
+        用于动态识别新境界，检测战力崩坏
+
+        Args:
+            content: 章节内容
+            realm_hierarchy: 已有的境界层级（可选）
+
+        Returns:
+            {
+                "detected_realm": "金丹期",
+                "realm_mentions": ["筑基期", "金丹期"],
+                "power_anomalies": [],
+                "confidence": "high/medium/low"
+            }
+        """
+        if not self.llm_client:
+            return {
+                "detected_realm": None,
+                "error": "No LLM client available",
+                "confidence": "low"
+            }
+
+        # 构建提取提示
+        prompt = f"""请从以下小说章节内容中提取修炼境界信息。
+
+## 章节内容（摘要）
+{content[:2000]}
+
+## 任务
+1. 提取所有提及的境界名称
+2. 判断当前主角所在的境界
+3. 检测是否有战力崩坏（越级挑战、境界跳跃等）
+
+## 输出格式（仅输出JSON，不要其他内容）
+{{
+    "realm_mentions": ["筑基期", "金丹期"],
+    "current_realm": "金丹期",
+    "power_anomalies": [
+        {{"type": "越级挑战", "description": "筑基期击败金丹期", "severity": "critical"}}
+    ],
+    "confidence": "high"
+}}"""
+
+        try:
+            result = self.llm_client.generate(
+                prompt=prompt,
+                temperature=0.2,
+                max_tokens=500
+            )
+
+            # 解析JSON结果
+            import json
+            import re
+
+            # 尝试提取JSON
+            json_match = re.search(r'\{[\s\S]*\}', result)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                return parsed
+
+            return {
+                "detected_realm": None,
+                "raw_result": result,
+                "confidence": "low"
+            }
+
+        except Exception as e:
+            return {
+                "detected_realm": None,
+                "error": str(e),
+                "confidence": "low"
+            }
+
+    def check_power_consistency(self, content: str, previous_realm: str,
+                                 realm_hierarchy: Dict[str, int]) -> List[Dict[str, Any]]:
+        """
+        检测战力一致性
+
+        Args:
+            content: 章节内容
+            previous_realm: 前一章的境界
+            realm_hierarchy: 境界层级
+
+        Returns:
+            战力问题列表
+        """
+        issues = []
+
+        if not previous_realm or not realm_hierarchy:
+            return issues
+
+        # 提取本章境界
+        realm_patterns = [
+            r"([^\s，,。.]{2,4}境)",
+            r"([^\s，,。.]{2,4}期)",
+            r"([^\s，,。.]{2,4}层)",
+        ]
+
+        current_level = realm_hierarchy.get(previous_realm, 0)
+
+        for pattern in realm_patterns:
+            import re
+            matches = re.findall(pattern, content)
+            for match in matches:
+                level = realm_hierarchy.get(match)
+                if level is not None:
+                    # 检查是否越级超过2个小境界
+                    if level > current_level + 2:
+                        issues.append({
+                            "type": "power_anomaly",
+                            "severity": "warning",
+                            "message": f"检测到境界跳跃: {previous_realm} -> {match}",
+                            "previous_realm": previous_realm,
+                            "detected_realm": match,
+                            "jump_size": level - current_level
+                        })
+
+        return issues
+
 
 # 简单的LLM客户端mock（用于测试）
 class MockLLMClient:

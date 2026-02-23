@@ -218,6 +218,28 @@ class WriterAgentV2:
             logger.warning(f"ConsistencyTracker not available: {e}")
             self.consistency_tracker = None
 
+        # Phase 3: 集成 SkillContextBus (解决Skill孤岛问题)
+        try:
+            from core.skill_context_bus import SkillContextBus
+
+            self.skill_context_bus = SkillContextBus(self.project_dir)
+            logger.info("SkillContextBus initialized")
+        except ImportError as e:
+            logger.warning(f"SkillContextBus not available: {e}")
+            self.skill_context_bus = None
+
+        # Phase 1: 集成开篇诊断 (opening-diagnostician)
+        self.opening_diagnosis_enabled = True
+        logger.info("Opening diagnosis enabled for chapters 1-3")
+
+        # Phase 2: 爽点关键词列表
+        self.payoff_keywords = [
+            "逆转", "反杀", "突破", "获得至宝", "秒杀",
+            "震惊", "悔恨", "暴涨", "觉醒", "认输",
+            "无敌", "横推", "碾压", "爆发", "惊喜",
+            "收获", "秘宝", "传承", "功法", "实力大增"
+        ]
+
     def _load_faction_whitelist(self) -> List[str]:
         """加载宗门白名单"""
         whitelist = []
@@ -495,44 +517,52 @@ class WriterAgentV2:
     def _handle_polish_stage(self, context: PipelineContext) -> Dict[str, Any]:
         """润色阶段 - 语义优化"""
         print("  Polishing text...")
-        
+
         # 获取草稿内容和一致性检查结果
         draft_result = context.stage_results.get(PipelineStage.DRAFT, {})
         draft_content = draft_result.get("draft_content", "")
-        
+
         consistency_result = context.stage_results.get(PipelineStage.CONSISTENCY_CHECK, {})
         issues = consistency_result.get("issues", [])
-        
+
         if not draft_content:
             return {
                 "success": False,
                 "failed": True,
                 "error": "No draft content available for polishing"
             }
-        
+
         # 如果有严重一致性错误，需要先修复
         critical_issues = [issue for issue in issues if issue.get("severity") == "critical"]
-        
+
         if critical_issues:
             print(f"    Fixing {len(critical_issues)} critical issues...")
             fixed_content = self._fix_critical_issues(draft_content, critical_issues)
         else:
             fixed_content = draft_content
-        
+
+        # Phase 2: 爽点密度检测（润色前检测）
+        print("    Running payoff density check...")
+        payoff_result = self._check_payoff_density(fixed_content, context.chapter_number)
+        context.warnings.extend([f"爽点密度: {payoff_result.get('density', 0)}/千字"] if not payoff_result.get("passed") else [])
+
         # 语义润色
         try:
             polish_prompt = self._build_polish_prompt(context, fixed_content, issues)
-            
+
             polished_content = self.llm.generate(
                 prompt=polish_prompt,
                 temperature=0.6,
                 system_prompt="你是专业的文学编辑，擅长优化文字流畅度、增强画面感、提升阅读体验。",
                 max_tokens=len(fixed_content) + 500  # 允许适度扩展
             )
-            
+
             # 计算改进指标
             improvement_metrics = self._calculate_improvement_metrics(draft_content, polished_content)
-            
+
+            # 添加爽点密度信息到指标
+            improvement_metrics["payoff_density"] = payoff_result
+
             return {
                 "success": True,
                 "polished_content": polished_content,
@@ -540,7 +570,7 @@ class WriterAgentV2:
                 "improvement_metrics": improvement_metrics,
                 "critical_issues_fixed": len(critical_issues)
             }
-            
+
         except Exception as e:
             logger.error(f"Polish stage failed: {e}")
             # 优雅降级：使用原始内容
@@ -1265,26 +1295,26 @@ class WriterAgentV2:
             try:
                 with open(chapter_list_file, "r", encoding="utf-8") as f:
                     chapters = json.load(f)
-                
+
                 for ch in chapters:
                     if ch.get("chapter_number") == context.chapter_number:
                         ch["status"] = "completed" if final_result.get("success") else "failed"
                         ch["completed_at"] = datetime.now().isoformat()
                         ch["word_count"] = final_result.get("word_count", 0)
                         break
-                
+
                 with open(chapter_list_file, "w", encoding="utf-8") as f:
                     json.dump(chapters, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 logger.warning(f"Failed to update chapter list: {e}")
-        
+
         # 更新进度文件
         progress_file = os.path.join(self.project_dir, "novel-progress.txt")
         if os.path.exists(progress_file):
             try:
                 with open(progress_file, "r", encoding="utf-8") as f:
                     progress = json.load(f)
-                
+
                 # 更新章节信息
                 chapter_entry = {
                     "chapter_number": context.chapter_number,
@@ -1295,11 +1325,11 @@ class WriterAgentV2:
                     "errors": context.errors,
                     "warnings": context.warnings
                 }
-                
+
                 # 添加到进度
                 if "chapters" not in progress:
                     progress["chapters"] = []
-                
+
                 # 更新或添加章节条目
                 found = False
                 for i, ch in enumerate(progress["chapters"]):
@@ -1307,18 +1337,18 @@ class WriterAgentV2:
                         progress["chapters"][i] = chapter_entry
                         found = True
                         break
-                
+
                 if not found:
                     progress["chapters"].append(chapter_entry)
-                
+
                 # 更新统计信息
                 completed_chapters = sum(1 for ch in progress["chapters"] if ch.get("status") == "completed")
                 total_word_count = sum(ch.get("word_count", 0) for ch in progress["chapters"])
-                
+
                 progress["completed_chapters"] = completed_chapters
                 progress["total_word_count"] = total_word_count
                 progress["last_updated"] = datetime.now().isoformat()
-                
+
                 with open(progress_file, "w", encoding="utf-8") as f:
                     json.dump(progress, f, ensure_ascii=False, indent=2)
             except Exception as e:
@@ -1327,6 +1357,39 @@ class WriterAgentV2:
         # Phase 3: 更新 ConsistencyTracker 和 WritingConstraintManager
         if final_result.get("success"):
             self._update_trackers(context)
+
+        # Phase 1: 开篇诊断 (第1-3章)
+        if final_result.get("success") and context.chapter_number <= 3:
+            print(f"\n{'=' * 60}")
+            print(f"[开篇诊断] 章节 {context.chapter_number} 已完成，启动黄金三章诊断...")
+            print("=" * 60)
+
+            diagnosis_result = self._run_opening_diagnosis(context.chapter_number)
+
+            # 如果诊断不通过，触发强制重写
+            if not diagnosis_result.get("passed"):
+                grade = diagnosis_result.get("grade", "F")
+                if grade in ['D', 'F']:
+                    print(f"\n[严重] 开篇诊断不通过: {grade}级，触发强制重写")
+                    # 强制重写
+                    self._force_rewrite(context.chapter_number)
+                    # 重新运行诊断
+                    diagnosis_result = self._run_opening_diagnosis(context.chapter_number)
+
+            # 更新进度文件中的开篇诊断结果
+            if diagnosis_result.get("grade"):
+                try:
+                    with open(progress_file, "r", encoding="utf-8") as f:
+                        progress = json.load(f)
+
+                    for ch in progress.get("chapters", []):
+                        if ch.get("chapter_number") == context.chapter_number:
+                            ch["opening_diagnosis_grade"] = diagnosis_result.get("grade")
+
+                    with open(progress_file, "w", encoding="utf-8") as f:
+                        json.dump(progress, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    logger.warning(f"Failed to update diagnosis grade: {e}")
 
     def _update_trackers(self, context: PipelineContext):
         """更新追踪器状态"""
@@ -1383,6 +1446,46 @@ class WriterAgentV2:
                         break
             except Exception as e:
                 logger.warning(f"Failed to update consistency tracker: {e}")
+
+        # Phase 3: 更新 SkillContextBus
+        if self.skill_context_bus:
+            try:
+                # 检测并保存关键信息
+                context_data = {}
+
+                # 境界信息
+                detected_realm = self._detect_realm_from_content(content)
+                if detected_realm:
+                    context_data["current_realm"] = detected_realm
+
+                # 地点信息
+                detected_location = self._detect_location_from_content(content)
+                if detected_location:
+                    context_data["current_location"] = detected_location
+
+                # 势力信息
+                detected_faction = self._detect_faction_from_content(content)
+                if detected_faction:
+                    context_data["current_faction"] = detected_faction
+
+                # 爽点密度
+                payoff_result = self._check_payoff_density(content, context.chapter_number)
+                context_data["payoff_density"] = payoff_result.get("density", 0)
+
+                # 主角名
+                protagonist = self._get_protagonist_name()
+                if protagonist:
+                    context_data["protagonist"] = protagonist
+
+                # 更新到上下文总线
+                self.skill_context_bus.update(
+                    "scene-writer",
+                    context_data,
+                    context.chapter_number
+                )
+                logger.info(f"Updated SkillContextBus for chapter {context.chapter_number}")
+            except Exception as e:
+                logger.warning(f"Failed to update SkillContextBus: {e}")
 
     def _detect_realm_from_content(self, content: str) -> str:
         """从内容中检测境界"""
@@ -1456,3 +1559,249 @@ class WriterAgentV2:
             except:
                 pass
         return "主角"
+
+    # ==================== Phase 1: 开篇诊断 ====================
+
+    def _run_opening_diagnosis(self, chapter_number: int) -> Dict[str, Any]:
+        """
+        运行开篇诊断 - 仅对第1-3章执行
+        使用 opening-diagnostician skill 进行黄金三章诊断
+        """
+        if not self.opening_diagnosis_enabled:
+            return {"passed": True, "grade": "N/A"}
+
+        if chapter_number > 3:
+            return {"passed": True, "grade": "N/A"}
+
+        print(f"\n{'=' * 60}")
+        print(f"[开篇诊断] 正在进行第{chapter_number}章黄金三章诊断...")
+        print("=" * 60)
+
+        try:
+            # 加载前三章内容
+            chapters_content = {}
+            for i in range(1, 4):
+                ch_file = os.path.join(self.chapters_dir, f"chapter-{i:03d}.md")
+                if os.path.exists(ch_file):
+                    with open(ch_file, "r", encoding="utf-8") as f:
+                        chapters_content[i] = f.read()
+
+            if len(chapters_content) < chapter_number:
+                print(f"[警告] 无法加载第{chapter_number}章，跳过开篇诊断")
+                return {"passed": True, "grade": "unknown"}
+
+            # 加载项目配置获取类型
+            genre = "unknown"
+            config_file = os.path.join(self.project_dir, "project-config.json")
+            if os.path.exists(config_file):
+                with open(config_file, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                    genre = config.get("genre", "unknown")
+
+            protagonist = self._get_protagonist_name()
+
+            # 构建诊断提示 - 使用 opening-diagnostician skill 的标准
+            diagnosis_prompt = self._build_opening_diagnosis_prompt(
+                chapters_content, genre, protagonist
+            )
+
+            # 调用 LLM 进行诊断
+            diagnosis_result = self.llm.generate(
+                prompt=diagnosis_prompt,
+                temperature=0.3,
+                system_prompt="你是起点中文网金牌审稿编辑，拥有10年+网文审稿经验。请严格按照开篇诊断标准进行评分。",
+                max_tokens=2000
+            )
+
+            # 解析诊断结果
+            grade = self._parse_diagnosis_grade(diagnosis_result)
+
+            # 保存诊断报告
+            diagnosis_dir = os.path.join(self.project_dir, "opening_diagnosis")
+            os.makedirs(diagnosis_dir, exist_ok=True)
+            report_file = os.path.join(diagnosis_dir, f"diagnosis_chapter_{chapter_number}.md")
+
+            with open(report_file, "w", encoding="utf-8") as f:
+                f.write(f"# 《开篇诊断报告 - 第{chapter_number}章》\n\n")
+                f.write(f"## 诊断时间: {datetime.now().isoformat()}\n\n")
+                f.write(diagnosis_result)
+
+            print(f"\n--- 开篇诊断结果 ---")
+            print(f"综合评级: {grade}")
+
+            if grade in ['D', 'F']:
+                print(f"\n[严重] 开篇诊断不通过: {grade}级")
+                print("将触发强制重写...")
+                return {"passed": False, "grade": grade, "report": diagnosis_result}
+            else:
+                print(f"\n[通过] 开篇诊断通过: {grade}级")
+                return {"passed": True, "grade": grade, "report": diagnosis_result}
+
+        except Exception as e:
+            logger.warning(f"开篇诊断失败: {e}")
+            return {"passed": True, "grade": "error", "error": str(e)}
+
+    def _build_opening_diagnosis_prompt(self, chapters_content: Dict[int, str],
+                                         genre: str, protagonist: str) -> str:
+        """构建开篇诊断提示词"""
+        ch1 = chapters_content.get(1, "")[:2000]
+        ch2 = chapters_content.get(2, "")[:1500]
+        ch3 = chapters_content.get(3, "")[:1500]
+
+        prompt = f"""请对以下小说的黄金三章进行严格诊断。
+
+## 小说信息
+- 类型: {genre}
+- 主角: {protagonist}
+
+## 第一章内容
+{ch1}
+
+## 第二章内容
+{ch2}
+
+## 第三章内容
+{ch3}
+
+## 诊断要求
+请严格按照以下6个维度进行评分（S/A/B/C/D/F级）：
+
+### 1. 三秒定律
+前500字必须出现主角名，前1000字必须建立基本场景
+
+### 2. 钩子密度
+每300字至少一个悬念点/爽点/冲突点
+
+### 3. 毒点扫描
+无致命毒点（绿帽、圣母、虐主过度、降智反派）
+
+### 4. 金手指亮相
+第1章必须暗示或展示金手指/核心优势
+
+### 5. 冲突爆发
+3000字内必须有首场核心冲突
+
+### 6. 信息密度
+禁止大段世界观说明文
+
+## 输出格式
+请直接输出诊断结果，格式如下：
+
+## 综合评级：[S/A/B/C/D/F]级
+
+## 六维评分
+| 维度 | 评分 | 说明 |
+|------|------|------|
+| 三秒定律 | X | 具体问题 |
+| 钩子密度 | X | 具体问题 |
+| 毒点扫描 | X | 具体问题 |
+| 金手指亮相 | X | 具体问题 |
+| 冲突爆发 | X | 具体问题 |
+| 信息密度 | X | 具体问题 |
+
+## 致命问题（如有）
+- 问题列表
+
+## 修改建议
+必须修改的具体建议"""
+
+        return prompt
+
+    def _parse_diagnosis_grade(self, diagnosis_result: str) -> str:
+        """从诊断结果中解析综合评级"""
+        import re
+        # 查找综合评级
+        match = re.search(r'综合评级[：:]\s*([SABCDF])', diagnosis_result)
+        if match:
+            return match.group(1)
+
+        # 备选：查找任何 S/A/B/C/D/F 评级
+        match = re.search(r'\n([SABCDF])级', diagnosis_result)
+        if match:
+            return match.group(1)
+
+        return "unknown"
+
+    def _force_rewrite(self, chapter_number: int) -> bool:
+        """强制重写章节"""
+        print(f"\n{'=' * 60}")
+        print(f"[强制重写] 第{chapter_number}章开篇诊断不通过，触发重写")
+        print("=" * 60)
+
+        # 构建重写提示
+        rewrite_prompt = f"""请重写小说第{chapter_number}章，重点改进以下方面：
+
+1. 确保前三章整体质量达标
+2. 强化钩子设置
+3. 避免毒点
+4. 明确金手指
+5. 增加冲突爆发
+6. 控制信息密度
+
+请保持原有剧情主线，只进行优化改进。"""
+
+        # 重新调用写作管道
+        try:
+            result = self.write_chapter(chapter_number)
+            if result.get("success"):
+                print(f"[OK] 第{chapter_number}章重写完成")
+                return True
+            else:
+                print(f"[错误] 重写失败: {result.get('error')}")
+                return False
+        except Exception as e:
+            logger.error(f"强制重写失败: {e}")
+            return False
+
+    # ==================== Phase 2: 爽点密度检测 ====================
+
+    def _check_payoff_density(self, content: str, chapter_number: int) -> Dict[str, Any]:
+        """
+        检测爽点密度
+        返回: {density: float, passed: bool, details: list}
+        """
+        if not content:
+            return {"density": 0, "passed": True, "details": []}
+
+        # 计算字数（千字）
+        word_count = len(content)
+        thousand_words = word_count / 1000
+
+        if thousand_words < 0.1:
+            return {"density": 0, "passed": True, "details": []}
+
+        # 统计爽点关键词出现次数
+        payoff_count = 0
+        details = []
+
+        for keyword in self.payoff_keywords:
+            count = content.count(keyword)
+            if count > 0:
+                payoff_count += count
+                details.append(f"{keyword}: {count}次")
+
+        # 计算密度（次/千字）
+        density = payoff_count / thousand_words
+
+        # 阈值：0.3次/千字
+        threshold = 0.3
+        passed = density >= threshold
+
+        result = {
+            "density": round(density, 2),
+            "threshold": threshold,
+            "passed": passed,
+            "payoff_count": payoff_count,
+            "word_count": word_count,
+            "details": details[:10]  # 最多显示10个
+        }
+
+        # 输出日志
+        if not passed:
+            print(f"\n[警告] 爽点密度不足: {density:.2f}/千字 (阈值: {threshold}/千字)")
+            if details:
+                print(f"  检测到的爽点: {', '.join(details[:5])}")
+        else:
+            print(f"\n[通过] 爽点密度: {density:.2f}/千字")
+
+        return result
