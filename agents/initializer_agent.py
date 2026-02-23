@@ -144,7 +144,16 @@ class InitializerAgent:
         chapters_dir = os.path.join(self.project_dir, "chapters")
         os.makedirs(chapters_dir, exist_ok=True)
 
-        # 7. 创建README
+        # 7. 创建world-rules.json（关键：必须先于章节生成）
+        print("\n🌍 正在生成世界观规则...")
+        world_rules = self._generate_world_rules(config, outline, characters)
+        world_rules_path = os.path.join(self.project_dir, "world-rules.json")
+        with open(world_rules_path, "w", encoding="utf-8") as f:
+            json.dump(world_rules, f, ensure_ascii=False, indent=2)
+        results["files_created"].append("world-rules.json")
+        print(f"   ✓ 世界观规则已保存: world-rules.json")
+
+        # 8. 创建README
         readme = self._generate_readme(config, len(chapters))
         readme_path = os.path.join(self.project_dir, "README.md")
         with open(readme_path, "w", encoding="utf-8") as f:
@@ -437,6 +446,71 @@ class InitializerAgent:
         }
 
         return progress
+
+    def _generate_world_rules(self, config: Dict[str, Any], outline: str, characters: List[Dict]) -> Dict[str, Any]:
+        """生成世界观规则文件（关键修复：确保生成完整的world-rules.json）"""
+        genre = config.get("genre", "xianxia")
+
+        # 默认修仙世界观
+        world_rules = {
+            "world_type": genre,
+            "has_cultivation": True,
+            "cultivation_system": {
+                "境界列表": ["无剑者", "炼气期", "剑气境", "剑心境", "剑意境"],
+                "境界层级": {
+                    "无剑者": 0,
+                    "炼气期": 1,
+                    "剑气境": 2,
+                    "剑心境": 3,
+                    "剑意境": 4
+                }
+            },
+            "factions": {},
+            "realm_hierarchy": {
+                "无剑者": 0,
+                "炼气期": 1,
+                "剑气境": 2,
+                "剑心境": 3,
+                "剑意境": 4
+            },
+            "cross_realm_combat": "forbidden",
+            "max_cross_realm": 0
+        }
+
+        # 从大纲中提取宗门信息
+        faction_keywords = ["宗", "门", "派", "阁", "宫", "府", "殿", "院"]
+        found_factions = set()
+        for line in outline.split("\n"):
+            for keyword in faction_keywords:
+                if keyword in line:
+                    # 提取2-4个字的宗门名
+                    import re
+                    matches = re.findall(rf"[\u4e00-\u9fa5]{{2,4}}{keyword}", line)
+                    found_factions.update(matches)
+
+        # 添加找到的宗门
+        for faction in list(found_factions)[:10]:  # 最多10个
+            world_rules["factions"][faction] = {"type": "sect"}
+
+        # 如果没有找到宗门，添加默认值
+        if not world_rules["factions"]:
+            if genre == "xianxia":
+                world_rules["factions"] = {"天剑宗": {"type": "sect"}}
+            elif genre == "fantasy":
+                world_rules["factions"] = {"王国A": {"type": "kingdom"}, "王国B": {"type": "kingdom"}}
+
+        # 从角色中提取主角名
+        protagonist_name = None
+        for char in characters:
+            if char.get("role") == "protagonist":
+                protagonist_name = char.get("name")
+                break
+
+        if protagonist_name:
+            world_rules["protagonist_name"] = protagonist_name
+            world_rules["locked_names"] = {"主角": protagonist_name}
+
+        return world_rules
 
     def _generate_readme(self, config: Dict[str, Any], total_chapters: int) -> str:
         """生成项目README"""

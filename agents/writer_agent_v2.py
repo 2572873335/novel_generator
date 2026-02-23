@@ -1488,18 +1488,43 @@ class WriterAgentV2:
                 logger.warning(f"Failed to update SkillContextBus: {e}")
 
     def _detect_realm_from_content(self, content: str) -> str:
-        """从内容中检测境界"""
+        """从内容中检测境界 - 改进版，精确匹配已知境界"""
         import re
-        # 常见境界关键词
-        realm_patterns = [
-            r"([\u4e00-\u9fa5]+境)",
-            r"([\u4e00-\u9fa5]+层)",
-        ]
-        for pattern in realm_patterns:
-            matches = re.findall(pattern, content)
-            if matches:
-                # 返回最后一个提及的境界（通常是当前境界）
-                return matches[-1]
+
+        # 获取已知的境界列表
+        known_realms = []
+        if self.constraint_manager:
+            realm_hierarchy = self.constraint_manager.constraints.realm_hierarchy
+            known_realms = list(realm_hierarchy.keys())
+
+        if not known_realms:
+            # 回退到默认境界列表
+            known_realms = ["无剑者", "炼气期", "炼气一层", "炼气二层", "炼气三层",
+                          "剑气境", "剑气境一层", "剑气境二层", "剑气境三层", "剑气境四层",
+                          "剑心境", "剑心境一层", "剑心境二层",
+                          "剑意境", "剑意境一层"]
+
+        # 构建精确匹配的模式（使用词边界）
+        # 匹配 "突破到XXX" 或 "已达XXX" 或 "XXX层/期/境"
+        realm_mentions = []
+
+        for realm in known_realms:
+            # 模式1: 突破到XXX
+            pattern1 = rf"(?:突破|晋升|晋级|达到|升至|踏入|进入)(?:到|了)?{realm}"
+            if re.search(pattern1, content):
+                realm_mentions.append(realm)
+
+            # 模式2: XXX层/期/境（直接境界名）
+            if realm.endswith(("层", "期", "境")):
+                # 直接境界名匹配，前后有边界
+                pattern2 = rf"(?<![a-zA-Z\u4e00-\u9fa5]){realm}(?![a-zA-Z\u4e00-\u9fa5])"
+                if re.search(pattern2, content):
+                    realm_mentions.append(realm)
+
+        if realm_mentions:
+            # 返回最后一个提及的境界（通常是当前境界）
+            return realm_mentions[-1]
+
         return ""
 
     def _detect_location_from_content(self, content: str) -> str:

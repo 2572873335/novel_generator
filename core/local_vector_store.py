@@ -440,19 +440,30 @@ class LocalVectorStore:
         return score
 
     def search(
-        self, query: str, k: int = 5, method: str = "tfidf"
+        self, query: str = None, k: int = 5, method: str = "tfidf",
+        query_text: str = None, top_k: int = None, filters: dict = None
     ) -> List[SearchResult]:
         """
         搜索相似文档
 
         Args:
-            query: 查询文本
+            query: 查询文本 (主参数)
             k: 返回结果数量
             method: 排序方法 ("tfidf" 或 "bm25")
+            query_text: 查询文本 (别名，兼容time_aware_rag)
+            top_k: 返回结果数量 (别名)
+            filters: 过滤条件 (暂不支持，会被忽略)
 
         Returns:
             搜索结果列表
         """
+        # 兼容处理：支持query_text和top_k参数
+        if query_text is not None:
+            query = query_text
+        if top_k is not None:
+            k = top_k
+        if query is None:
+            query = ""
         with self._get_connection() as conn:
             cursor = conn.cursor()
 

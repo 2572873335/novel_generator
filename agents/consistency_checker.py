@@ -260,13 +260,24 @@ class ConsistencyChecker:
         if not whitelist:
             return violations
 
-        # 检测所有可能的宗门名称
+        # 常见误报词，排除这些不视为宗门
+        faction_ignore_list = {
+            "外门", "内门", "宗门", "山门", "府邸", "仙府", "洞府",
+            "剑门", "法门", "师门", "本门", "该门", "此门", "各门",
+            "天门", "宫门", "殿门", "阁楼", "楼宇", "殿堂", "仙宫",
+            "联盟", "门派", "仙门", "俗门", " gates"
+        }
+
+        # 检测所有可能的宗门名称（使用词边界防止误匹配）
         faction_pattern = (
-            r"[\u4e00-\u9fa5]{2,6}(?:宗|派|阁|门|宫|殿|院|府|山|谷|岛|盟|会)"
+            r"(?<![\u4e00-\u9fa5])[\u4e00-\u9fa5]{2,4}(?:宗|派|阁|门|宫|殿|院|府)(?![\u4e00-\u9fa5])"
         )
         found_factions = set(re.findall(faction_pattern, content))
 
         for faction in found_factions:
+            # 跳过常见误报
+            if faction in faction_ignore_list:
+                continue
             if faction not in whitelist:
                 # 检查是否是相似名称（可能是变体）
                 similar = self._find_similar_faction(faction, whitelist)
