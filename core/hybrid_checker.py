@@ -2,9 +2,12 @@
 Hybrid Consistency Checker
 3层检测：regex快速匹配 → 相似度匹配 → LLM语义验证
 用于减少宗门名称检测的误报率
+支持 check_chapter() 方法用于章节检查
 """
 
 import re
+import json
+import os
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
@@ -173,7 +176,139 @@ class HybridChecker:
                 ))
         
         return violations
-    
+
+    def check_chapter(
+        self,
+        chapter_number: int,
+        content: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        检查单个章节的一致性
+
+        Args:
+            chapter_number: 章节编号
+            content: 章节内容
+            context: 额外的上下文信息（如项目配置）
+
+        Returns:
+            检查结果字典，包含：
+            - passed: 是否通过检查
+            - issues: 问题列表
+            - summary: 检查摘要
+        """
+        issues = []
+
+        # 1. 执行基础检查（宗门名称检测）
+        violations = self.check(content)
+
+        # 将 Violation 对象转换为字典格式
+        for v in violations:
+            issues.append({
+                "type": v.type,
+                "message": v.message,
+                "severity": v.severity,
+                "matched_text": v.matched_text,
+                "suggested_correction": v.suggested_correction,
+            })
+
+        # 2. 从上下文加载额外约束进行验证
+        if context:
+            # 检查角色名一致性
+            name_issues = self._check_name_consistency(content, context)
+            issues.extend(name_issues)
+
+            # 检查战力/境界一致性
+            realm_issues = self._check_realm_consistency(content, context)
+            issues.extend(realm_issues)
+
+        # 统计问题
+        critical_count = sum(1 for i in issues if i.get("severity") == "critical")
+        warning_count = sum(1 for i in issues if i.get("severity") == "warning")
+
+        return {
+            "passed": critical_count == 0,
+            "issues": issues,
+            "critical_count": critical_count,
+            "warning_count": warning_count,
+            "chapter": chapter_number,
+            "summary": f"检查完成: {critical_count}个严重问题, {warning_count}个警告"
+        }
+
+    def _check_name_consistency(
+        self, content: str, context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """检查人物姓名一致性"""
+        issues = []
+
+        # 从上下文获取锁定的名字
+        locked_names = context.get("locked_names", {})
+        if not locked_names:
+            return issues
+
+        for role, name in locked_names.items():
+            if not name or len(name) < 2:
+                continue
+
+            surname = name[0] if len(name) == 2 else name[:2]
+
+            # 查找可能的变体
+            variant_pattern = rf"{re.escape(surname)}[\u4e00-\u9fa5]{{1,{len(name)}}}"
+            variants = re.findall(variant_pattern, content)
+
+            for variant in set(variants):
+                if variant != name and variant not in locked_names.values():
+                    # 排除常见词
+                    common_words = ["一些", "一样", "一直", "一起", "所谓", "自己", "他人", "此时"]
+                    if variant in common_words:
+                        continue
+
+                    issues.append({
+                        "type": "name_variant",
+                        "severity": "warning",
+                        "message": f"疑似姓名变体: '{name}' vs '{variant}'",
+                        "matched_text": variant,
+                        "suggested_correction": name,
+                        "chapter": context.get("chapter_number", 0)
+                    })
+
+        return issues
+
+    def _check_realm_consistency(
+        self, content: str, context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """检查境界/战力一致性"""
+        issues = []
+
+        realm_hierarchy = context.get("realm_hierarchy", {})
+        current_realm = context.get("current_realm", "")
+        cross_realm_combat = context.get("cross_realm_combat", "forbidden")
+
+        if cross_realm_combat == "forbidden" and realm_hierarchy and current_realm:
+            current_level = realm_hierarchy.get(current_realm, 0)
+
+            # 检测战斗描述
+            battle_keywords = ["击败", "战胜", "击杀", "重创", "打退", "斩杀"]
+            for keyword in battle_keywords:
+                if keyword in content:
+                    for realm, level in realm_hierarchy.items():
+                        if level > current_level + 2:  # 跨大境界
+                            if realm in content:
+                                # 检查是否有代价描述
+                                cost_keywords = ["代价", "燃烧", "牺牲", "重伤", "陨落", "自爆", "禁术"]
+                                has_cost = any(c in content[max(0, content.find(keyword)-100):content.find(keyword)+100] for c in cost_keywords)
+
+                                if not has_cost:
+                                    issues.append({
+                                        "type": "cross_realm_combat",
+                                        "severity": "critical",
+                                        "message": f"跨境界战斗未提及代价: {current_realm} vs {realm}",
+                                        "matched_text": keyword,
+                                        "suggested_correction": "添加战斗代价描述",
+                                    })
+
+        return issues
+
     def _regex_filter(self, content: str) -> List[str]:
         """
         Layer 1: Regex快速过滤

@@ -98,8 +98,9 @@ class NovelGenerator:
         # 阶段2: 写作
         self._write_novel()
 
-        # 阶段3: 审查 (跳过以避免Unicode错误)
-        # self._review_novel()
+        # 阶段3: 审查 (默认禁用，避免编码问题)
+        if self.config.get("enable_final_review", False):
+            self._review_novel()
 
         # 阶段4: 合并
         self._merge_chapters()
@@ -174,6 +175,13 @@ class NovelGenerator:
         self.config["v7_constraints"] = self.v7_setup.get("constraints_prompt", "")
         self.config["v7_genre"] = self.v7_setup.get("genre", genre_hint or "general")
         self.config["v7_has_cultivation"] = self.v7_setup.get("has_cultivation", False)
+
+        # 确保项目目录存在，然后保存V7配置到project-config.json
+        os.makedirs(self.project_dir, exist_ok=True)
+        config_file = os.path.join(self.project_dir, "project-config.json")
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(self.config, f, ensure_ascii=False, indent=2)
+        print(f"[OK] V7配置已保存到: project-config.json")
         print()
 
         from agent_manager import AgentManager
@@ -259,10 +267,12 @@ class NovelGenerator:
         import sys
 
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-        from agents.writer_agent import WriterAgent
+        from agents.writer_agent_v2 import WriterAgentV2 as WriterAgent
         from agents.consistency_checker import ConsistencyChecker
 
-        self.writer = WriterAgent(self.llm_client, self.project_dir)
+        # 传递V7约束给WriterAgent
+        v7_constraints = self.config.get("v7_constraints", "")
+        self.writer = WriterAgent(self.llm_client, self.project_dir, v7_constraints)
         self.consistency_checker = ConsistencyChecker(self.project_dir, self.llm_client)
 
         progress = self.progress_manager.load_progress()
@@ -300,6 +310,10 @@ class NovelGenerator:
 
             completed += 1
 
+            # 自动审查每章（如果启用）- 默认禁用避免编码问题
+            if self.config.get("auto_review", False):
+                revision_needed = self._review_and_revise(completed, max_revisions=2)
+
             if completed % 5 == 0 and completed > last_consistency_check:
                 last_consistency_check = completed
                 print(f"\n{'=' * 60}")
@@ -309,6 +323,11 @@ class NovelGenerator:
                 checkpoint_approved = self._human_checkpoint(completed)
                 if not checkpoint_approved:
                     print("[警告] 检查点未通过，需要回滚重写")
+
+                # Phase 5: 调用资深编辑审核
+                editor_approved = self._senior_editor_audit(completed)
+                if not editor_approved:
+                    print("[警告] 资深编辑审核未通过，需要重写")
 
                 check_result = self.consistency_checker.check_all_chapters()
 
@@ -395,6 +414,47 @@ class NovelGenerator:
         print(f"  需要修改: {total - passed}")
         print(f"  平均评分: {avg_score:.1f}/10")
 
+    def _review_and_revise(self, chapter_number: int, max_revisions: int = 2) -> bool:
+        """审查并根据评分决定是否需要重写"""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from agents.reviewer_agent import ReviewerAgent
+
+        if not hasattr(self, 'reviewer') or self.reviewer is None:
+            self.reviewer = ReviewerAgent(self.llm_client, self.project_dir)
+
+        for attempt in range(max_revisions):
+            print(f"\n[审查] 第{chapter_number}章 - 审查尝试 {attempt + 1}/{max_revisions}")
+            result = self.reviewer.review_chapter(chapter_number)
+
+            if result.passed or result.overall_score >= 7.0:
+                print(f"[通过] 章节质量评分: {result.overall_score:.1f}/10")
+                return True
+
+            if attempt < max_revisions - 1:
+                print(f"[需修改] 评分: {result.overall_score:.1f}/10, 建议: {result.suggestions[:2] if result.suggestions else '无'}")
+                self._revise_chapter(chapter_number, result.suggestions)
+
+        print(f"[警告] 章节 {chapter_number} 经过{max_revisions}次重写后仍未通过")
+        return False
+
+    def _revise_chapter(self, chapter_number: int, suggestions: List[str]):
+        """调用WriterAgent重写章节"""
+        print(f"\n[重写] 根据审查建议重写第{chapter_number}章...")
+
+        # 使用WriterAgentV2重写
+        try:
+            from agents.writer_agent_v2 import WriterAgentV2 as WriterAgent
+            v7_constraints = self.config.get("v7_constraints", "")
+            writer = WriterAgent(self.llm_client, self.project_dir, v7_constraints)
+            result = writer.write_chapter(chapter_number)
+            if result.get("success"):
+                print(f"[OK] 第{chapter_number}章已重写")
+            else:
+                print(f"[错误] 重写失败: {result.get('error', '未知错误')}")
+        except Exception as e:
+            print(f"[错误] 重写章节失败: {e}")
+
     def _human_checkpoint(self, chapter_number: int) -> bool:
         print(f"\n{'=' * 60}")
         print(f"[检查点] 已完成第{chapter_number}章")
@@ -408,6 +468,125 @@ class NovelGenerator:
 
         print("[自动] 检查点通过（可在交互模式下启用人工确认）")
         return True
+
+    def _senior_editor_audit(self, chapter_number: int) -> bool:
+        """
+        Phase 5: 使用 senior-editor skill 进行审核
+        每5章完成后调用一次
+        """
+        print(f"\n{'=' * 60}")
+        print(f"[审核] 调用资深编辑进行第{chapter_number}章审核")
+        print("=" * 60)
+
+        # 加载 senior-editor skill
+        try:
+            from core.agent_manager import AgentManager
+
+            # 创建 agent manager 来加载 skill
+            agent_mgr = AgentManager(self.llm_client, self.project_dir)
+
+            # 加载 senior-editor skill
+            skill_prompt = agent_mgr.load_skill_prompt("senior-editor")
+
+            if not skill_prompt:
+                print("[警告] 无法加载 senior-editor skill，跳过审核")
+                return True  # 不阻塞流程
+
+            # 读取本章内容
+            chapter_file = os.path.join(
+                self.project_dir, "chapters", f"chapter-{chapter_number:03d}.md"
+            )
+            if not os.path.exists(chapter_file):
+                print(f"[警告] 章节文件不存在: {chapter_file}")
+                return True
+
+            with open(chapter_file, "r", encoding="utf-8") as f:
+                chapter_content = f.read()
+
+            # 读取前文概要
+            prev_chapters_summary = ""
+            if chapter_number > 1:
+                prev_file = os.path.join(self.project_dir, "chapters")
+                for i in range(1, chapter_number):
+                    prev_ch = os.path.join(prev_file, f"chapter-{i:03d}.md")
+                    if os.path.exists(prev_ch):
+                        with open(prev_ch, "r", encoding="utf-8") as f:
+                            # 只取前500字作为概要
+                            content = f.read()[:500]
+                            prev_chapters_summary += f"\n第{i}章: {content}\n"
+
+            # 构建审核提示
+            audit_prompt = f"""请作为资深编辑，对以下小说章节进行严格审核。
+
+## 本章内容（第{chapter_number}章）
+{chapter_content[:3000]}
+
+## 前文概要
+{prev_chapters_summary[:1000]}
+
+## 审核要求
+请按照以下维度进行审核，并给出具体的修改建议：
+
+### 1. 开篇诊断（如是第1章）
+- 黄金三章是否合格
+- 钩子设置是否有效
+
+### 2. 节奏把控
+- 爽点密度是否足够
+- 是否有拖沓情节
+
+### 3. 人设审计
+- 角色行为是否一致
+- 是否有OOC（崩坏）现象
+
+### 4. 战力审计（如有战斗）
+- 战力体系是否崩坏
+- 跨境界战斗是否合理
+
+### 5. 商业性评估
+- 是否有付费点潜力
+- 读者留存率预期
+
+请直接输出审核结果，包括：
+- 评分（0-10分）
+- 发现的问题列表
+- 修改建议
+- 是否需要重写（是/否）"""
+
+            # 调用 LLM 进行审核
+            print("  正在调用资深编辑审核...")
+            audit_result = self.llm_client.generate(
+                prompt=audit_prompt,
+                temperature=0.3,
+                max_tokens=2000
+            )
+
+            print("\n--- 资深编辑审核结果 ---")
+            print(audit_result[:1000])  # 打印前1000字
+
+            # 保存审核结果
+            audit_dir = os.path.join(self.project_dir, "senior_editor_audits")
+            os.makedirs(audit_dir, exist_ok=True)
+            audit_file = os.path.join(audit_dir, f"audit_chapter_{chapter_number}.md")
+            with open(audit_file, "w", encoding="utf-8") as f:
+                f.write(f"# 资深编辑审核报告 - 第{chapter_number}章\n\n")
+                f.write(audit_result)
+
+            print(f"\n审核报告已保存: {audit_file}")
+
+            # 检查是否需要重写
+            if "需要重写" in audit_result or "重写" in audit_result.lower()[:200]:
+                print("\n[警告] 资深编辑建议需要重写")
+                return False
+
+            return True
+
+        except ImportError as e:
+            print(f"[警告] 无法导入 AgentManager: {e}")
+            return True
+        except Exception as e:
+            print(f"[错误] 资深编辑审核失败: {e}")
+            return True  # 不阻塞流程
 
     def _merge_chapters(self):
         print("\n" + "=" * 60)

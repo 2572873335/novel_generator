@@ -17,6 +17,7 @@ import yaml
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from enum import Enum
 
 
 @dataclass
@@ -166,6 +167,76 @@ class ConsistencyChecker:
                 [v for v in violations if v["severity"] == "critical"]
             ),
             "passed": len([v for v in violations if v["severity"] == "critical"]) == 0,
+        }
+
+    def check_chapter(
+        self,
+        chapter_number: int,
+        content: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        检查单个章节内容（不加载文件，直接检查传入的内容）
+        用于实时校验场景
+
+        Args:
+            chapter_number: 章节编号
+            content: 章节内容文本
+            context: 额外上下文（可选）
+
+        Returns:
+            检查结果字典
+        """
+        violations = []
+
+        # 1. 宗门名称检查
+        faction_violations = self._check_faction_consistency(chapter_number, content)
+        violations.extend(faction_violations)
+
+        # 2. 人物姓名检查
+        name_violations = self._check_name_consistency(chapter_number, content)
+        violations.extend(name_violations)
+
+        # 3. 战力体系检查
+        combat_violations = self._check_combat_consistency(chapter_number, content)
+        violations.extend(combat_violations)
+
+        # 4. 修为进度检查
+        cultivation_violations = self._check_cultivation_consistency(
+            chapter_number, content
+        )
+        violations.extend(cultivation_violations)
+
+        # 5. 体质设定检查
+        constitution_violations = self._check_constitution_consistency(
+            chapter_number, content
+        )
+        violations.extend(constitution_violations)
+
+        # 6. 情节逻辑检查
+        plot_violations = self._check_plot_logic(chapter_number, content)
+        violations.extend(plot_violations)
+
+        # 7. 时间线检查
+        timeline_violations = self._check_timeline_consistency(chapter_number, content)
+        violations.extend(timeline_violations)
+
+        # 8. 武器命名检查
+        weapon_violations = self._check_weapon_naming(chapter_number, content)
+        violations.extend(weapon_violations)
+
+        # 统计
+        critical_count = len([v for v in violations if v["severity"] == "critical"])
+        warning_count = len([v for v in violations if v["severity"] == "warning"])
+
+        return {
+            "passed": critical_count == 0,
+            "issues": violations,
+            "violations": violations,
+            "critical_count": critical_count,
+            "warning_count": warning_count,
+            "chapter": chapter_number,
+            "summary": f"检查完成: {critical_count}个严重问题, {warning_count}个警告"
         }
 
     def _load_chapter_content(self, chapter_number: int) -> str:
