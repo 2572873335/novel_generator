@@ -132,26 +132,36 @@ class LocalVectorStore:
 
         if JIEBA_AVAILABLE:
             # 使用jieba分词
-            tokens = list(jieba.cut(text))
-            # 过滤停用词和单字符
-            tokens = [t.strip() for t in tokens if len(t.strip()) >= 1]
+            try:
+                tokens = list(jieba.cut(text))
+                # 过滤停用词和单字符
+                tokens = [t.strip() for t in tokens if len(t.strip()) >= 1]
+            except Exception:
+                # jieba分词失败，fallback到n-gram
+                tokens = self._ngram_tokenize(text)
         else:
             # 使用字符n-gram（适合中文）
-            tokens = []
-            # 提取连续中文字符
-            chinese_pattern = re.compile(r"[\u4e00-\u9fff]+")
-            chinese_matches = chinese_pattern.findall(text)
+            tokens = self._ngram_tokenize(text)
+        return tokens
 
-            for segment in chinese_matches:
-                # 生成1-gram, 2-gram, 3-gram
-                for n in range(self.NGRAM_MIN, self.NGRAM_MAX + 1):
-                    for i in range(len(segment) - n + 1):
-                        tokens.append(segment[i : i + n])
+    def _ngram_tokenize(self, text: str) -> List[str]:
+        """字符n-gram分词（无jieba时的fallback）"""
+        tokens = []
+        # 提取连续中文字符
+        chinese_pattern = re.compile(r"[\u4e00-\u9fff]+")
+        chinese_matches = chinese_pattern.findall(text)
 
-            # 也添加英文/数字词
-            english_pattern = re.compile(r"[a-zA-Z0-9]+")
-            english_matches = english_pattern.findall(text)
-            tokens.extend(english_matches)
+        for segment in chinese_matches:
+            # 生成1-gram, 2-gram, 3-gram
+            for n in range(self.NGRAM_MIN, self.NGRAM_MAX + 1):
+                for i in range(len(segment) - n + 1):
+                    tokens.append(segment[i : i + n])
+
+        # 也添加英文/数字词
+        english_pattern = re.compile(r"[a-zA-Z0-9]+")
+        english_matches = english_pattern.findall(text)
+        tokens.extend(english_matches)
+        return tokens
 
         return tokens
 

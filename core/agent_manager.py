@@ -380,49 +380,62 @@ class AgentManager:
         print("[AgentManager] 启动完整智能体工作流")
         print("=" * 60)
 
+        # Agent name to Skill name mapping
+        AGENT_TO_SKILL = {
+            "WorldBuilder": "worldbuilder-coordinator",
+            "GeopoliticsExpert": "geopolitics-expert",
+            "SocietyExpert": "society-expert",
+            "CultivationDesigner": "cultivation-designer",
+            "CharacterDesigner": "character-designer",
+            "PlotArchitect": "plot-architect-coordinator",
+            "OutlineArchitect": "outline-architect",
+            "VolumeArchitect": "volume-architect",
+            "ChapterArchitect": "chapter-architect",
+        }
+
         workflow = [
             # Phase 1: 世界构建
             {
                 "phase": "world_building",
-                "agent": "WorldBuilder",
+                "agent": "worldbuilder-coordinator",
                 "desc": "构建世界观（科技、政治、社会）",
             },
             {
                 "phase": "world_building",
-                "agent": "GeopoliticsExpert",
+                "agent": "geopolitics-expert",
                 "desc": "设计地缘政治体系",
             },
             {
                 "phase": "world_building",
-                "agent": "SocietyExpert",
+                "agent": "society-expert",
                 "desc": "设计社会结构",
             },
             # Phase 2: 能力体系
             {
                 "phase": "power_system",
-                "agent": "CultivationDesigner",
+                "agent": "cultivation-designer",
                 "desc": "设计能力/修炼体系（统一、有边界）",
             },
             # Phase 3: 角色设计
             {
                 "phase": "character",
-                "agent": "CharacterDesigner",
+                "agent": "character-designer",
                 "desc": "设计角色（主角能力<5，配角独立线）",
             },
             # Phase 4: 剧情架构
             {
                 "phase": "plot",
-                "agent": "PlotArchitect",
+                "agent": "plot-architect-coordinator",
                 "desc": "架构剧情（敌人威胁体系、弱点、代价）",
             },
             # Phase 5: 大纲设计
-            {"phase": "outline", "agent": "OutlineArchitect", "desc": "设计章节大纲"},
+            {"phase": "outline", "agent": "outline-architect", "desc": "设计章节大纲"},
             {
                 "phase": "outline",
-                "agent": "VolumeArchitect",
+                "agent": "volume-architect",
                 "desc": "分卷规划（长篇）",
             },
-            {"phase": "outline", "agent": "ChapterArchitect", "desc": "详细章纲"},
+            {"phase": "outline", "agent": "chapter-architect", "desc": "详细章纲"},
         ]
 
         results = []
@@ -523,17 +536,33 @@ class AgentManager:
                     self.tracker.track_ability_gain(char_name, ability, 0, "初始设定")
 
     def _parse_characters(self, content: str) -> Dict:
-        """解析角色信息"""
-        # 复用 InitializerAgent 的解析逻辑
+        """解析角色信息 - 增强版，处理各种编码问题"""
+        import re
+        
         try:
-            import re
-
+            # 清理常见的编码问题和特殊字符
+            # 替换Unicode智能引号为标准引号
+            content = content.replace('\u201c', '"').replace('\u201d', '"')
+            content = content.replace('\u2018', "'").replace('\u2019', "'")
+            content = content.replace('\u201e', '"').replace('\u201f', '"')
+            
             # 尝试提取 JSON
             json_match = re.search(r"\[[\s\S]*\]", content)
             if json_match:
-                return {"characters": json.loads(json_match.group())}
-        except:
-            pass
+                json_str = json_match.group()
+                # 尝试多种编码
+                for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
+                    try:
+                        return {"characters": json.loads(json_str)}
+                    except:
+                        try:
+                            # 尝试重新编码
+                            json_str_fixed = json_str.encode(encoding).decode('utf-8')
+                            return {"characters": json.loads(json_str_fixed)}
+                        except:
+                            continue
+        except Exception as e:
+            print(f"  [WARN] 角色解析失败: {e}")
         return {"characters": []}
 
     def _parse_chapters(self, content: str, config: Dict) -> List[Dict]:
