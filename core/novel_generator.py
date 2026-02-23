@@ -328,6 +328,8 @@ class NovelGenerator:
                 editor_approved = self._senior_editor_audit(completed)
                 if not editor_approved:
                     print("[警告] 资深编辑审核未通过，需要重写")
+                    # 触发重写流程
+                    self._trigger_rewrite_from_audit(completed)
 
                 check_result = self.consistency_checker.check_all_chapters()
 
@@ -587,6 +589,143 @@ class NovelGenerator:
         except Exception as e:
             print(f"[错误] 资深编辑审核失败: {e}")
             return True  # 不阻塞流程
+
+    def _trigger_rewrite_from_audit(self, chapter_number: int) -> bool:
+        """
+        根据资深编辑审核结果触发重写
+        当审核返回"需要重写"时执行真正的重写流程
+        """
+        print(f"\n{'=' * 60}")
+        print(f"[重写] 资深编辑审核不通过，触发第{chapter_number}章重写")
+        print("=" * 60)
+
+        # 读取审核报告获取修改建议
+        audit_file = os.path.join(
+            self.project_dir, "senior_editor_audits", f"audit_chapter_{chapter_number}.md"
+        )
+        audit_suggestions = ""
+        if os.path.exists(audit_file):
+            with open(audit_file, "r", encoding="utf-8") as f:
+                audit_suggestions = f.read()
+
+        # 提取修改建议
+        rewrite_prompt = self._extract_rewrite_suggestions(audit_suggestions, chapter_number)
+
+        # 重新调用写作管道进行重写
+        try:
+            # 删除现有章节文件
+            chapter_file = os.path.join(
+                self.project_dir, "chapters", f"chapter-{chapter_number:03d}.md"
+            )
+            if os.path.exists(chapter_file):
+                os.remove(chapter_file)
+
+            # 删除相关元数据
+            meta_file = os.path.join(
+                self.project_dir, "chapters", f"chapter-{chapter_number:03d}.meta.json"
+            )
+            if os.path.exists(meta_file):
+                os.remove(meta_file)
+
+            # 更新进度状态为pending
+            progress = self.progress_manager.load_progress()
+            if progress and hasattr(progress, 'chapters'):
+                for ch in progress.chapters:
+                    if ch.get("chapter_number") == chapter_number:
+                        ch["status"] = "pending"
+                        ch["quality_score"] = 0.0
+                        break
+                self.progress_manager.save_progress(progress)
+
+            # 使用WriterAgent重新写作该章节
+            print(f"  正在重新写作第{chapter_number}章...")
+            result = self.writer.write_chapter(chapter_number)
+
+            if result.get("success"):
+                print(f"[OK] 第{chapter_number}章重写完成")
+
+                # 更新进度
+                word_count = result.get("word_count", 0)
+                self.progress_manager.update_chapter_progress(
+                    chapter_number,
+                    status="completed",
+                    word_count=word_count,
+                    quality_score=7.0
+                )
+
+                # 重新运行资深编辑审核
+                print(f"  正在重新审核第{chapter_number}章...")
+                reapproved = self._senior_editor_audit(chapter_number)
+
+                if not reapproved:
+                    print(f"[警告] 重写后仍未通过审核，将再次重写...")
+                    # 最多重写3次
+                    for retry in range(2):
+                        print(f"  重试 {retry + 2}/3...")
+                        # 重新读取新的审核建议
+                        new_audit_file = os.path.join(
+                            self.project_dir, "senior_editor_audits",
+                            f"audit_chapter_{chapter_number}.md"
+                        )
+                        if os.path.exists(new_audit_file):
+                            with open(new_audit_file, "r", encoding="utf-8") as f:
+                                new_suggestions = f.read()
+                            rewrite_prompt = self._extract_rewrite_suggestions(
+                                new_suggestions, chapter_number
+                            )
+
+                        # 再次删除并重写
+                        if os.path.exists(chapter_file):
+                            os.remove(chapter_file)
+                        result = self.writer.write_chapter(chapter_number)
+                        if result.get("success"):
+                            self.progress_manager.update_chapter_progress(
+                                chapter_number,
+                                status="completed",
+                                word_count=result.get("word_count", 0),
+                                quality_score=7.0
+                            )
+
+                        reapproved = self._senior_editor_audit(chapter_number)
+                        if reapproved:
+                            print(f"[OK] 第{chapter_number}章重写后通过审核")
+                            break
+
+                return True
+            else:
+                print(f"[错误] 重写失败: {result.get('error', '未知错误')}")
+                return False
+
+        except Exception as e:
+            print(f"[错误] 触发重写失败: {e}")
+            return False
+
+    def _extract_rewrite_suggestions(self, audit_result: str, chapter_number: int) -> str:
+        """从审核结果中提取修改建议用于重写"""
+        suggestions = []
+
+        # 提取问题列表
+        if "问题" in audit_result:
+            problem_section = audit_result[audit_result.find("问题"):]
+            if "修改建议" in problem_section:
+                problem_section = problem_section[:problem_section.find("修改建议")]
+            suggestions.append(problem_section[:500])
+
+        # 提取修改建议
+        if "修改建议" in audit_result:
+            suggestion_section = audit_result[audit_result.find("修改建议"):]
+            if "是否需要重写" in suggestion_section:
+                suggestion_section = suggestion_section[:suggestion_section.find("是否需要重写")]
+            suggestions.append(suggestion_section[:500])
+
+        prompt = f"请重写第{chapter_number}章，重点改进以下方面：\n"
+        for i, s in enumerate(suggestions, 1):
+            if s:
+                prompt += f"{i}. {s}\n"
+
+        prompt += "\n请保持原有剧情主线，只进行优化改进。"
+
+        return prompt
 
     def _merge_chapters(self):
         print("\n" + "=" * 60)

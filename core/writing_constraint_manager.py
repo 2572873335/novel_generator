@@ -12,9 +12,13 @@ Writing Constraint Manager
 
 import yaml
 import json
+import logging
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 from dataclasses import dataclass, asdict
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -131,12 +135,27 @@ class WritingConstraintManager:
                         protagonist_constitution = ability
                         break
 
+        # 硬熔断：必须能提取到主角名
+        if not protagonist_name:
+            raise RuntimeError(
+                f"[FATAL] 无法从 {self.project_dir}/characters.json 提取主角名！"
+                f"需要在characters.json中设置 role='protagonist'。系统熔断。"
+            )
+
         factions = world_rules.get("factions", {})
         faction_names = list(factions.keys())
         current_faction = faction_names[0] if faction_names else ""
 
         cultivation_system = world_rules.get("cultivation_system", {})
         realm_list = cultivation_system.get("境界列表", [])
+
+        # 硬熔断：境界列表不能为空
+        if not realm_list:
+            raise RuntimeError(
+                f"[FATAL] {self.project_dir}/world-rules.json 缺失境界列表！"
+                f"系统熔断。请检查world-rules.json是否正确生成。"
+            )
+
         realm_hierarchy = {realm: i for i, realm in enumerate(realm_list)}
 
         current_realm = self._detect_initial_realm(characters)
@@ -383,9 +402,23 @@ class WritingConstraintManager:
         c = self.constraints
 
         if detected_realm and detected_realm != c.current_realm:
-            c.current_realm = detected_realm
-            c.last_breakthrough_chapter = chapter_number
-            updated = True
+            # 检查境界是否回退（战力崩坏检测）
+            current_level = c.realm_hierarchy.get(c.current_realm, 0)
+            detected_level = c.realm_hierarchy.get(detected_realm, 0)
+
+            # 如果检测到的境界比当前境界低，记录警告但不更新
+            if detected_level < current_level:
+                logger.warning(
+                    f"[境界回退警告] Chapter {chapter_number}: 检测到境界从 {c.current_realm}(L{current_level}) "
+                    f"回退到 {detected_realm}(L{detected_level})。这是战力崩坏，系统拒绝更新。"
+                )
+                # 不更新境界，防止战力崩坏
+            else:
+                # 境界提升或相同，更新状态
+                c.current_realm = detected_realm
+                c.last_breakthrough_chapter = chapter_number
+                updated = True
+                logger.info(f"[境界更新] Chapter {chapter_number}: {c.current_realm} → {detected_realm}")
 
         if detected_location and detected_location != c.current_location:
             c.current_location = detected_location
@@ -425,6 +458,104 @@ class WritingConstraintManager:
         if updated:
             self._save_constraints(c)
 
+    def _validate_timeline(self, chapter_number: int, chapter_content: str) -> List[Dict[str, Any]]:
+        """
+        验证时间线一致性
+        检测：时间倒流、时间循环、跳跃过大等问题
+        """
+        import re
+
+        violations = []
+        c = self.constraints
+
+        # 提取本章中的所有时间标记
+        time_patterns = {
+            "day": r"Day\s*(\d+)|第(\d+)天|天数?(\d+)|(\d+)天后?",
+            "month": r"(\d+)个月|(\d+)月后",
+            "year": r"(\d+)年后|(\d+)年",
+        }
+
+        days_found = []
+
+        # 匹配天数
+        for pattern in [r"Day\s*(\d+)", r"第(\d+)天", r"天数?(\d+)"]:
+            matches = re.findall(pattern, chapter_content)
+            for match in matches:
+                if isinstance(match, tuple):
+                    for m in match:
+                        if m and m.isdigit():
+                            days_found.append(int(m))
+                elif match and match.isdigit():
+                    days_found.append(int(match))
+
+        # 匹配"X天后"
+        future_pattern = r"(\d+)天后?"
+        matches = re.findall(future_pattern, chapter_content)
+        for match in matches:
+            if match and match.isdigit():
+                days_found.append(int(match))
+
+        if days_found:
+            current_day = c.current_day if c.current_day else 1
+
+            # 检测时间倒流
+            min_day = min(days_found)
+            if min_day < current_day:
+                violations.append({
+                    "type": "timeline_regression",
+                    "severity": "critical",
+                    "message": f"检测到时间倒流：当前第{current_day}天，但章节中出现第{min_day}天",
+                    "details": "时间线不允许倒流，不能让故事回到过去",
+                    "suggestion": f"将时间改为第{current_day}天或之后"
+                })
+
+            # 检测时间跳跃过大
+            max_day = max(days_found)
+            if max_day - current_day > c.max_time_jump:
+                violations.append({
+                    "type": "timeline_jump",
+                    "severity": "warning",
+                    "message": f"检测到时间跳跃过大：从第{current_day}天跳跃到第{max_day}天",
+                    "details": f"单章节时间跳跃超过{c.max_time_jump}天，建议分多章叙述",
+                    "suggestion": f"将时间跳跃控制在{c.max_time_jump}天以内，或增加详细过程描写"
+                })
+
+            # 检测时间循环（连续两个"七天后"等）
+            chapter_content_lower = chapter_content.lower()
+            if "天后" in chapter_content_lower:
+                # 检测连续重复的时间跳跃
+                duplicate_patterns = re.findall(r"(\d+)天后.*?\1天后", chapter_content_lower)
+                if duplicate_patterns:
+                    violations.append({
+                        "type": "timeline_loop",
+                        "severity": "critical",
+                        "message": "检测到时间循环：相同的'X天后'出现多次",
+                        "details": "不能连续两次使用相同的'X天后'跳转",
+                        "suggestion": "使用不同的时间跨度或明确时间段"
+                    })
+
+        # 检测月份/年份时间倒流
+        month_patterns = [
+            r"(\d+)个月后",
+            r"(\d+)月后",
+        ]
+        for pattern in month_patterns:
+            matches = re.findall(pattern, chapter_content)
+            if matches:
+                months = [int(m) for m in matches]
+                # 月份应该递增（相对于初始值）
+                # 这里只做基本检查
+                if months and max(months) > 120:  # 超过10年
+                    violations.append({
+                        "type": "timeline_excessive",
+                        "severity": "warning",
+                        "message": f"检测到过长时间跨度：{max(months)}个月",
+                        "details": "单章节内时间跨度不宜过长",
+                        "suggestion": "将长时间跨度拆分为多章描述"
+                    })
+
+        return violations
+
     def validate_chapter(
         self, chapter_number: int, chapter_content: str
     ) -> List[Dict[str, Any]]:
@@ -440,11 +571,21 @@ class WritingConstraintManager:
         c = self.constraints
 
         # 1. 检查宗门名称 - 严格白名单制度
+        # 常见误报词，排除这些不视为宗门
+        faction_ignore_list = {
+            "外门", "内门", "宗门", "山门", "府邸", "仙府", "洞府",
+            "剑门", "法门", "师门", "本门", "该门", "此门", "各门",
+            "天门", "宫门", "殿门", "阁楼", "楼宇", "殿堂", "仙宫"
+        }
+
         # 提取所有可能的宗门名称（XXX宗、XXX派、XXX阁等）
-        faction_pattern = r"[\u4e00-\u9fa5]{2,4}(?:宗|派|阁|门|宫|殿|院|府)"
+        faction_pattern = r"(?<![\u4e00-\u9fa5])[\u4e00-\u9fa5]{2,4}(?:宗|派|阁|门|宫|殿|院|府)(?![\u4e00-\u9fa5])"
         found_factions = set(re.findall(faction_pattern, chapter_content))
 
         for faction in found_factions:
+            # 跳过常见误报
+            if faction in faction_ignore_list:
+                continue
             if faction not in c.faction_whitelist:
                 violations.append(
                     {
@@ -456,24 +597,66 @@ class WritingConstraintManager:
                     }
                 )
 
-        # 2. 检查人物姓名变更 - 检测疑似变体
-        for role, name in c.locked_names.items():
+        # 1.5 检查境界回退（战力崩坏检测）
+        current_level = c.realm_hierarchy.get(c.current_realm, 0)
+
+        # 提取本章中提到的所有境界
+        realm_mentions = []
+        for realm, level in c.realm_hierarchy.items():
+            if realm in chapter_content:
+                realm_mentions.append((realm, level))
+
+        # 检查是否有境界回退
+        for realm, level in realm_mentions:
+            if level < current_level:
+                violations.append({
+                    "type": "realm_regression",
+                    "severity": "critical",
+                    "message": f"检测到战力崩坏：章节中提及低境界'{realm}(L{level})'",
+                    "details": f"当前记录境界为'{c.current_realm}(L{current_level})'，章节不应出现境界回退或低境界描述",
+                    "suggestion": "移除或修改章节中关于低境界的描述"
+                })
+                break  # 只报告一次
+
+        # 2. 检查人物姓名变更 - 检测疑似变体和错误名字
+        # 提取所有被锁定的名字
+        locked_name_values = set(c.locked_names.values())
+        protagonist_name = c.protagonist_name
+
+        # 提取章节中所有2-4字的中文名字（可能是角色名）
+        name_pattern = r"[\u4e00-\u9fa5]{2,4}"
+        potential_names = re.findall(name_pattern, chapter_content)
+
+        # 检查是否有使用错误的主角名字
+        wrong_name_candidates = {"林渊", "林轩"}  # 可以扩展
+        for wrong_name in wrong_name_candidates:
+            # 直接检测章节中是否包含错误的名字（使用词边界避免误匹配）
+            if wrong_name != protagonist_name and wrong_name in chapter_content:
+                violations.append({
+                    "type": "wrong_protagonist_name",
+                    "message": f"检测到错误的主角名：'{wrong_name}'",
+                    "severity": "critical",
+                    "details": f"正确的主角名应为：'{protagonist_name}'",
+                    "suggestion": f"将'{wrong_name}'改为'{protagonist_name}'"
+                })
+
+        for role, name in locked_name_values:
             # 如果原姓名在文中出现，检查是否有变体
             if name in chapter_content and len(name) >= 2:
                 surname = name[0] if len(name) == 2 else name[:2]
-                # 检测同姓不同名的变体
-                variant_pattern = rf"{re.escape(surname)}[\u4e00-\u9fa5]{{1,2}}"
+                # 检测同姓不同名的变体（改进：排除紧跟的常用字）
+                variant_pattern = rf"{re.escape(surname)}(?![\u4e00-\u9fa5]{{0,2}}(与|在|说|道|来|去|看|道|的|了|着|是|把|被|从|到|为|和|或|但|而|则|就|也|都|还|又|再|才|已|正|将|可|会|能|应该|必须|需要|可以|可能))[\u4e00-\u9fa5]{{1,2}}"
                 variants = re.findall(variant_pattern, chapter_content)
 
                 for variant in set(variants):
-                    if variant != name and variant not in c.locked_names.values():
+                    if variant != name and variant not in locked_name_values:
                         # 可能是姓名变体，需要警告
                         violations.append(
                             {
                                 "type": "name_variant_warning",
                                 "message": f"检测到疑似姓名变体：'{name}' vs '{variant}'",
                                 "severity": "warning",
-                                "details": f"角色'{role}'的姓名为'{name}'，但文中出现'{variant}'",
+                                "details": f"角色名应为'{name}'，但文中出现'{variant}'",
                                 "suggestion": f"确认'{variant}'是否为'{name}'的误写",
                             }
                         )
@@ -670,6 +853,10 @@ class WritingConstraintManager:
                                 "suggestion": f"让{faction}重新登场或说明其去向",
                             }
                         )
+
+        # 时间线校验 - 新增严格时间顺序检测
+        timeline_violations = self._validate_timeline(chapter_number, chapter_content)
+        violations.extend(timeline_violations)
 
         return violations
 
