@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(head:*)",
+      "Bash(cd C:/Users/XiaoXin/Desktop/novel_generator && python main.py --title \"测试修仙小说\" --genre \"xianxia\" --chapters 20 2>&1)",
+      "Bash(ls:*)",
+      "Bash(cd C:\\\\Users\\\\XiaoXin\\\\Desktop\\\\novel_generator:*)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebSearch",
+      "Bash(wc:*)"
+    ]
+  }
+}
