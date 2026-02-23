@@ -2,140 +2,238 @@
 
 Coding agent instructions for the Novel Generator AI system.
 
-## 小说创作AI团队
+## 项目概述
 
-这是一个专业的AI小说创作团队，包含世界观构建、人物设计、剧情架构、场景写作、编辑润色等多个专业角色。
+AI Novel Generator 是一个基于 Anthropic 长运行代理架构的全自动 AI 小说生成系统。支持多 AI 提供商（Anthropic Claude, OpenAI, Moonshot, DeepSeek）。
 
-### 可用指令
-- `/世界观` - 启动世界观构建流程
-- `/人物` - 启动人物设计流程
-- `/大纲` - 启动大纲架构
-- `/卷纲` - 启动卷纲架构
-- `/章纲` - 启动章纲架构
-- `/节奏` - 启动节奏设计流程
-- `/开篇诊断` - 对前三章进行黄金三章诊断
-- `/写作 [章节号]` - 撰写指定章节
-- `/编辑 [章节号]` - 编辑指定章节
-- `/审稿 [章节号]` - 资深编辑审稿
-- `/状态` - 查看项目状态
+### 核心特性
 
-### 工作流程
-1. 用户提出需求 → 初始化项目
-2. `/世界观` → 构建世界观
-3. `/人物` → 设计人物
-4. `/大纲` → 生成大纲
-5. `/卷纲` → 细化卷纲
-6. `/章纲` → 细化章纲
-7. `/节奏` → 设计章节节奏
-8. `/写作` → 撰写章节
-9. `/开篇诊断` → 诊断前三章（可选）
-10. `/审稿` → 资深编辑审稿
-11. `/编辑` → 润色章节
-
-### 质量标准
-- 逻辑自洽，设定一致
-- 人物立体，动机清晰
-- 情节紧凑，节奏流畅
-- 文字生动，画面感强
-- 开篇合规，符合黄金三章
+- **多模型支持**: Claude, GPT, Kimi, DeepSeek
+- **17+ 专业技能**: 4级层级架构
+- **3层一致性防御**: 事前约束 → 事中校验 → 事后审核
+- **V7 类型感知**: 自动检测小说类型并应用约束模板
+- **RAG 上下文检索**: 时间感知 + 向量检索
 
 ---
 
-## Skills 层级架构
-
-系统采用四级层级架构，17+个专业技能协同工作：
+## 系统架构
 
 ```
-Level 1: Coordinator (协调员) - 3个
-├── worldbuilder-coordinator    世界观总控
-├── plot-architect-coordinator  剧情总控
-└── novel-coordinator         小说总控
-
-Level 2: Architect (架构师) - 5个
-├── outline-architect         大纲架构
-├── volume-architect           卷纲架构
-├── chapter-architect          章纲架构
-├── character-designer        人物设计
-└── rhythm-designer           节奏设计
-
-Level 3: Expert (专家) - 6个
-├── scene-writer              场景写作
-├── cultivation-designer      修炼体系设计
-├── currency-expert           货币体系专家
-├── geopolitics-expert        地缘政治专家
-├── society-expert           社会结构专家
-└── web-novel-methodology    网文方法论
-
-Level 4: Auditor (审核) - 3个
-├── editor                    编辑
-├── senior-editor             资深编辑
-└── opening-diagnostician    开篇诊断
+┌─────────────────────────────────────────────────────────────────┐
+│                        NovelGenerator                            │
+│                      (core/novel_generator.py)                  │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌───────────────┐    ┌─────────────────┐    ┌─────────────────────┐
+│  AgentManager │    │ V7Integrator    │    │ WritingConstraint  │
+│  (技能加载)    │    │ (类型感知)       │    │ Manager (约束注入)   │
+└───────────────┘    └─────────────────┘    └─────────────────────┘
+        │                       │                       │
+        ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      WriterAgentV2                               │
+│                  (5阶段管道写作: 大纲→草稿→校验→润色→终稿)        │
+└─────────────────────────────────────────────────────────────────┘
+        │
+        ├─→ HybridChecker (3层一致性检测)
+        ├─→ ConsistencyTracker (状态追踪)
+        ├─→ SkillContextBus (跨技能上下文)
+        ├─→ TimeAwareRAG (时间感知检索)
+        └─→ CheckpointManager (检查点恢复)
 ```
 
 ---
 
-## Agent 模块
+## 目录结构
 
-### 核心 Agent
+```
+novel_generator/
+├── agents/                    # Agent 实现
+│   ├── writer_agent_v2.py    # 主写作 Agent (管道架构)
+│   ├── consistency_checker.py # 严格一致性检查
+│   ├── reviewer_agent.py      # 审查 Agent
+│   ├── senior_editor_v2.py   # 资深编辑 Agent
+│   ├── market_analyzer.py     # 市场分析 Agent
+│   ├── rag_consistency_checker.py # RAG 一致性检查
+│   └── initializer_agent.py  # 初始化 Agent
+│
+├── core/                      # 核心系统
+│   ├── novel_generator.py     # 主控协调器
+│   ├── agent_manager.py       # Agent 管理和技能加载
+│   ├── v7_integrator.py      # V7 类型感知系统
+│   ├── genre_detector.py     # 类型检测器
+│   ├── constraint_template_manager.py # 约束模板管理
+│   ├── constraint_arbiter.py  # 约束仲裁器
+│   ├── writing_constraint_manager.py # 写作约束管理
+│   ├── consistency_tracker.py # 设定一致性追踪
+│   ├── hybrid_checker.py      # 混合检查器 (regex+相似度+LLM)
+│   ├── skill_context_bus.py   # 技能上下文总线
+│   ├── checkpoint_manager.py  # 检查点管理器
+│   ├── time_aware_rag.py      # 时间感知 RAG
+│   ├── local_vector_store.py  # 本地向量存储
+│   ├── expectation_tracker.py # 期待感追踪
+│   ├── reader_expectation.py  # 读者期待分析
+│   ├── entity_graph.py        # 实体关系图
+│   ├── character_state_machine.py # 角色状态机
+│   ├── state_snapshot.py      # 状态快照
+│   ├── summary_indexer.py     # 摘要索引
+│   ├── chapter_manager.py     # 章节管理
+│   ├── character_manager.py   # 角色管理
+│   ├── progress_manager.py    # 进度管理
+│   ├── model_manager.py       # 模型管理
+│   └── config_manager.py      # 配置管理
+│
+├── config/                    # 配置文件
+│   ├── consistency_rules.yaml # 一致性规则
+│   └── genre_templates.yaml   # 类型模板
+│
+├── .opencode/skills/          # 技能系统 (27个)
+│   ├── level1_coordinator/    # L1: 协调员 (3个)
+│   ├── level2_architect/      # L2: 架构师 (5个)
+│   ├── level3_expert/         # L3: 专家 (6个)
+│   ├── level4_auditor/        # L4: 审核 (3个)
+│   ├── style_*/               # 文风技能 (7个)
+│   └── genre_expert/          # 类型专家 (3个)
+│
+├── novels/                    # 生成的小说项目
+├── main.py                    # CLI 入口
+└── app.py                     # Web UI (Streamlit)
+```
 
-| Agent | 文件 | 功能 |
-|-------|------|------|
-| WriterAgentV2 | agents/writer_agent_v2.py | 主管道写作，五阶段流水线 |
-| ConsistencyChecker | agents/consistency_checker.py | 严格一致性检查 |
-| SeniorEditorV2 | agents/senior_editor_v2.py | 资深编辑审核 |
-| MarketAnalyzer | agents/market_analyzer.py | 市场分析 |
+---
 
-### 核心模块
+## Skills 层级架构 (27个)
 
-| 模块 | 文件 | 功能 |
-|------|------|------|
-| NovelGenerator | core/novel_generator.py | 主控协调器 |
-| AgentManager | core/agent_manager.py | 智能体管理与技能加载 |
-| WritingConstraintManager | core/writing_constraint_manager.py | 写作约束管理器 |
-| ConsistencyTracker | core/consistency_tracker.py | 设定一致性追踪器 |
-| HybridChecker | core/hybrid_checker.py | 混合检查器 |
-| V7Integrator | core/v7_integrator.py | 类型感知系统 |
+### Level 1: Coordinator (协调员) - 3个
+| Skill | 功能 |
+|-------|------|
+| `worldbuilder-coordinator` | 世界观总控 |
+| `plot-architect-coordinator` | 剧情总控 |
+| `novel-coordinator` | 小说总控 |
+
+### Level 2: Architect (架构师) - 5个
+| Skill | 功能 |
+|-------|------|
+| `outline-architect` | 大纲架构 |
+| `volume-architect` | 卷纲架构 |
+| `chapter-architect` | 章纲架构 |
+| `character-designer` | 人物设计 |
+| `rhythm-designer` | 节奏设计 |
+
+### Level 3: Expert (专家) - 6个
+| Skill | 功能 |
+|-------|------|
+| `scene-writer` | 场景写作 |
+| `cultivation-designer` | 修炼体系设计 |
+| `currency-expert` | 货币体系专家 |
+| `geopolitics-expert` | 地缘政治专家 |
+| `society-expert` | 社会结构专家 |
+| `web-novel-methodology` | 网文方法论 |
+
+### Level 4: Auditor (审核) - 3个
+| Skill | 功能 |
+|-------|------|
+| `editor` | 编辑 |
+| `senior-editor` | 资深编辑 |
+| `opening-diagnostician` | 开篇诊断 |
+
+### Style Skills (文风) - 7个
+| Skill | 功能 |
+|-------|------|
+| `style-blood-punch` | 热血文风 |
+| `style-cowboy` | 西部文风 |
+| `style-dark` | 黑暗文风 |
+| `style-infinity` | 无限流 |
+| `style-building` | 经营文风 |
+| `style-serious` | 严肃文风 |
+| `style-sweet` | 甜宠文风 |
+
+### Genre Experts (类型专家) - 3个
+| Skill | 功能 |
+|-------|------|
+| `scifi-expert` | 科幻专家 |
+| `suspense-expert` | 悬疑专家 |
+| `urban-expert` | 都市专家 |
 
 ---
 
 ## 三层一致性防御系统
 
-### 第一层：事前约束 (WritingConstraintManager)
-- 将约束注入LLM提示词
+### 第一层：事前约束 (Pre-writing)
+**组件**: `WritingConstraintManager`
+- 将约束注入 LLM 提示词
 - 锁定宗门名称、人物姓名、境界体系
 - 防止生成不符合设定的内容
+- 动态加载 world-rules.json 中的境界
 
-### 第二层：事中校验 (_pre_save_validation)
+### 第二层：事中校验 (Real-time)
+**组件**: `_pre_save_validation()` in WriterAgentV2
 - 章节保存前实时校验
-- 使用WritingConstraintManager.validate_chapter()
-- 发现问题立即触发重写
+- 使用 WritingConstraintManager.validate_chapter()
+- 发现严重问题立即触发重写
 
-### 第三层：事后审核 (Senior-editor)
+### 第三层：事后审核 (Post-writing)
+**组件**: `SeniorEditorV2` / `senior-editor` skill
 - 每5章调用资深编辑审核
 - 多维度质量审查
 - 检测自动化检查遗漏的问题
 
 ---
 
-## 配置说明
+## 优化特性 (2024)
 
-### 环境变量 (.env)
-```
-ANTHROPIC_API_KEY=       # Claude API
-OPENAI_API_KEY=          # GPT-4o API
-MOONSHOT_API_KEY=        # Kimi API
-DEEPSEEK_API_KEY=        # DeepSeek API
-```
+### 1. 强制开篇诊断
+- 第1-3章自动调用 `opening-diagnostician` skill
+- 综合评级 D/F 触发强制重写
+- 诊断报告保存到 `opening_diagnosis/`
 
-### 配置文件
-- `config/consistency_rules.yaml` - 一致性规则配置
-- `writing_constraints.json` - 项目约束配置（自动生成）
+### 2. 爽点密度监控
+- 20个爽点关键词实时检测
+- 阈值: 0.3/千字
+- 低于阈值触发警告
+
+### 3. Skill 上下文总线
+- 解决 17 个 Skill 孤岛问题
+- 跨 Skill 状态传递 (境界、势力、爽点密度)
+- 上下文持久化到 `skill_context.json`
+
+### 4. 动态战力检测
+- LLM 提取本章境界描述
+- 检测战力崩坏和境界跳跃
+- 与前文对比异常预警
+
+### 5. 增强检查点机制
+- 支持从任意检查点恢复
+- LLM 调用超时自动重试
+- 人工干预点支持暂停确认
 
 ---
 
-## 使用示例
+## 配置说明
 
-### 命令行模式
+### 环境变量 (.env)
+```bash
+ANTHROPIC_API_KEY=      # Claude API
+OPENAI_API_KEY=         # GPT-4o API
+MOONSHOT_API_KEY=       # Kimi API
+DEEPSEEK_API_KEY=       # DeepSeek API
+DEFAULT_MODEL_ID=       # 默认模型
+```
+
+### 配置文件
+| 文件 | 功能 |
+|------|------|
+| `config/consistency_rules.yaml` | 一致性规则配置 |
+| `config/genre_templates.yaml` | 类型模板配置 |
+| `writing_constraints.json` | 项目约束配置 (自动生成) |
+
+---
+
+## 使用方式
+
+### 命令行
 ```bash
 # 交互模式
 python main.py --interactive
@@ -147,7 +245,7 @@ python main.py --config config.json
 python main.py --title "我的小说" --genre "仙侠" --chapters 20
 ```
 
-### Web界面
+### Web 界面
 ```bash
 streamlit run app.py
 ```
@@ -156,14 +254,14 @@ streamlit run app.py
 
 ## 开发指南
 
-### 添加新的Skill
+### 添加新的 Skill
 1. 在 `.opencode/skills/` 下创建新文件夹
-2. 添加 `SKILL.md` 文件
+2. 添加 `SKILL.md` 文件（遵循 skill 元数据格式）
 3. 在 `core/agent_manager.py` 中注册
 
-### 添加新的Agent
+### 添加新的 Agent
 1. 在 `agents/` 下创建新文件
-2. 实现标准的Agent接口
+2. 实现标准的 Agent 接口
 3. 在 `core/novel_generator.py` 中集成
 
 ---
