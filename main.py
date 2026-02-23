@@ -16,7 +16,7 @@ import sys
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from novel_generator import create_novel, NovelGenerator
+from core.novel_generator import create_novel, NovelGenerator
 
 
 def load_config(config_file: str) -> dict:
@@ -133,7 +133,7 @@ def main():
     
     # 查看进度模式
     if args.progress:
-        from novel_generator.core.progress_manager import ProgressManager
+        from core.progress_manager import ProgressManager
         
         pm = ProgressManager(args.progress)
         progress = pm.load_progress()

@@ -89,6 +89,40 @@ metadata:
 | relationship_needs | string[] | 关系需求           |
 | growth_direction   | string   | 成长方向           |
 
+## 输出格式要求（必须严格遵守）
+
+**【关键】你必须输出可直接解析的JSON格式，不是故事叙事！**
+
+```json
+[
+  {
+    "name": "角色姓名",
+    "age": "年龄",
+    "gender": "性别",
+    "role": "主角/配角/反派/龙套",
+    "occupation": "职业",
+    "appearance": "外貌描述",
+    "personality": "性格特征（MBTI/九型人格）",
+    "background": "背景故事",
+    "motivation": "表面动机",
+    "deep_motivation": "深层动机",
+    "ability": "特殊能力",
+    "flaw": "性格缺陷",
+    "arc": "成长轨迹",
+    "dialogue_style": "对话风格",
+    "relationships": {}
+  }
+]
+```
+
+### 重要约束：
+- 输出必须是可以被 json.loads() 解析的JSON数组
+- 不要生成markdown格式的文件内容
+- 不要生成叙事性故事段落
+- 只输出纯JSON，不要有其他文字说明
+
+**不要生成叙事性故事内容。**
+
 ## 输出文档
 
 characters/ 

@@ -1,5 +1,6 @@
 ---
 name: web_novel_methodology
+version: "1.0"
 description: 网文写作核心方法论，包含开篇法则、战力体系设计、时间线管理、人物塑造、情节设计与节奏控制。当需要指导网文创作、检查作品质量、避免常见雷区时触发。
 license: MIT
 compatibility: opencode
@@ -7,6 +8,11 @@ metadata:
   category: novel-writing
   subcategory: methodology
   language: zh-cn
+  level: expert
+  triggers:
+    - 网文方法论
+    - web-novel-method
+    - writing-methodology
   source: 起点中文网、番茄小说、龙空论坛等平台最佳实践
 ---
 
