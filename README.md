@@ -76,7 +76,7 @@ The system implements a robust 3-layer defense to prevent consistency issues:
 
 ```
 novel_generator/
-├── .opencode/skills/          # Skills System (17+ skills)
+├── .opencode/skills/          # Skills System (27 skills)
 │   ├── Level 1 - Coordinator
 │   ├── Level 2 - Architect
 │   ├── Level 3 - Expert
@@ -107,7 +107,7 @@ novel_generator/
 
 ## Skills Hierarchy
 
-The system uses a 4-level hierarchy with 17+ specialized skills:
+The system uses a 4-level hierarchy with 27 specialized skills:
 
 | Level | Type | Skills | Count |
 |-------|------|--------|-------|
@@ -251,7 +251,7 @@ python main.py --progress novels/my_novel
 - Ensures quality of each chapter
 
 ### 3. Hierarchical Agents
-- 17+ specialized skills, 4 levels
+- 27 specialized skills, 4 levels
 - Coordinator → Architect → Expert → Auditor
 
 ### 4. Genre-Aware System (V7)

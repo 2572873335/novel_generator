@@ -44,7 +44,7 @@
 
 ```
 novel_generator/
-├── .opencode/skills/          # Skills技能系统 (17个)
+├── .opencode/skills/          # Skills技能系统 (27个)
 │   ├── Level 1 - Coordinator (协调员)
 │   │   ├── worldbuilder-coordinator/
 │   │   ├── plot-architect-coordinator/
@@ -90,7 +90,7 @@ novel_generator/
 
 ## Skills 层级架构
 
-系统采用四级层级架构，17个专业技能协同工作：
+系统采用四级层级架构，27个专业技能协同工作：
 
 | 层级 | 类型 | Skills | 数量 |
 |------|------|--------|------|
@@ -261,7 +261,7 @@ python main.py --progress novels/my_novel
 - 写作约束、状态追踪、一致性检查、自动验证
 
 ### 3. 层级化智能体
-- 17个专业技能，4个层级
+- 27个专业技能，4个层级
 - Coordinator → Architect → Expert → Auditor
 
 ### 4. 黄金三章诊断
