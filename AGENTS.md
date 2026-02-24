@@ -13,11 +13,38 @@ AI Novel Generator 是一个基于 Anthropic 长运行代理架构的全自动 A
 - **3层一致性防御**: 事前约束 → 事中校验 → 事后审核
 - **V7 类型感知**: 自动检测小说类型并应用约束模板
 - **RAG 上下文检索**: 时间感知 + 向量检索
+- **NovelForge v4.0**: 单次API调用 + 熔断机制 + 情绪追踪
 
 ---
 
 ## 系统架构
 
+### NovelForge v4.0 架构
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Orchestrator (core/orchestrator.py)          │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ NovelForge v4.0 核心 (7模块)                              │  │
+│  │ 1. EmotionWriter (单次API调用)                           │  │
+│  │ 2. CreativeDirector (熔断仲裁)                           │  │
+│  │ 3. PromptAssembler (Prompt聚合)                          │  │
+│  │ 4. EmotionTracker (情绪债务账本)                          │  │
+│  │ 5. WorldBible (事件溯源)                                 │  │
+│  │ 6. ConsistencyGuardian (一致性检查)                       │  │
+│  │ 7. StyleAnchor (文风锁定)                               │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌───────────────┐    ┌─────────────────┐    ┌─────────────────────┐
+│  Emotion     │    │ Circuit         │    │ Producer           │
+│  Tracker     │    │ Breaker         │    │ Dashboard          │
+│  (Python)    │    │ Monitor         │    │ (PyQt6 UI)         │
+└───────────────┘    └─────────────────┘    └─────────────────────┘
+```
+
+### Legacy v3.x 架构
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        NovelGenerator                            │
@@ -57,10 +84,13 @@ novel_generator/
 │   ├── senior_editor_v2.py   # 资深编辑 Agent
 │   ├── market_analyzer.py     # 市场分析 Agent
 │   ├── rag_consistency_checker.py # RAG 一致性检查
-│   └── initializer_agent.py  # 初始化 Agent
+│   ├── initializer_agent.py  # 初始化 Agent
+│   ├── creative_director.py  # [v4.0] 熔断仲裁器
+│   └── emotion_writer.py     # [v4.0] 单次API写作
 │
 ├── core/                      # 核心系统
 │   ├── novel_generator.py     # 主控协调器
+│   ├── orchestrator.py       # [v4.0] 主循环组装
 │   ├── agent_manager.py       # Agent 管理和技能加载
 │   ├── v7_integrator.py      # V7 类型感知系统
 │   ├── genre_detector.py     # 类型检测器
@@ -83,7 +113,13 @@ novel_generator/
 │   ├── character_manager.py   # 角色管理
 │   ├── progress_manager.py    # 进度管理
 │   ├── model_manager.py       # 模型管理
-│   └── config_manager.py      # 配置管理
+│   ├── config_manager.py      # 配置管理
+│   ├── emotion_tracker.py     # [v4.0] 情绪债务账本
+│   ├── world_bible.py        # [v4.0] 事件溯源
+│   └── prompt_assembler.py   # [v4.0] Prompt聚合
+│
+├── ui/                        # [v4.0] UI组件
+│   └── producer_dashboard.py # 熔断可视化
 │
 ├── config/                    # 配置文件
 │   ├── consistency_rules.yaml # 一致性规则
@@ -208,6 +244,46 @@ novel_generator/
 - 支持从任意检查点恢复
 - LLM 调用超时自动重试
 - 人工干预点支持暂停确认
+
+---
+
+## NovelForge v4.0 核心特性
+
+### 1. 防Token黑洞: Prompt聚合
+- **问题**: L1→L2→L3→L4 每层都调API (8-12次调用/章)
+- **解决**: L2+L3 合并为单次Prompt组装
+- 核心组件: `core/prompt_assembler.py`
+
+### 2. 防LLM计算灾难: Python算术
+- **问题**: LLM不擅长精确计算
+- **解决**: 所有计算在Python中完成，LLM只接收文本化结果
+- 核心组件: `core/emotion_tracker.py`
+- 情绪债务自动衰减 (默认30%/章)
+
+### 3. 防无限循环: 熔断机制
+- **问题**: 无限制回滚导致第1章重写100次
+- **解决**: 全局熔断器，超过阈值强制SUSPEND
+- 阈值配置:
+  - 第1-3章: 最多3次回滚
+  - 第4-10章: 最多5次回滚
+  - 第11章+: 最多8次回滚
+- 核心组件: `agents/creative_director.py`
+- 生成文件: `.suspended.json`
+
+### 4. 事件溯源: World Bible
+- **问题**: 时间线混乱、战力崩坏、人物状态丢失
+- **解决**: 记录所有关键事件用于一致性检查
+- 核心组件: `core/world_bible.py`
+- 事件类型: 死亡、复活、境界升级、势力变化
+
+### 5. 单次API调用: EmotionWriter
+- **问题**: 多层Skill调用导致Token爆炸
+- **解决**: 整合PromptAssembler + EmotionTracker + WorldBible
+- 核心组件: `agents/emotion_writer.py`
+
+### 6. 生产者仪表板
+- **功能**: 熔断状态实时显示、情绪债务可视化
+- 核心组件: `ui/producer_dashboard.py` (PyQt6)
 
 ---
 

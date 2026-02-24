@@ -1,8 +1,20 @@
-# 全自动AI小说生成系统
+# 全自动AI小说生成系统 - NovelForge v4.0
 
 基于 [Anthropic 长运行代理最佳实践](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) 构建的全自动AI小说生成系统。
 
+**最新版本: NovelForge v4.0** - 工业级生产环境就绪版本，包含熔断机制、情绪追踪和单次API调用架构。
+
 [English](README.md)
+
+## v4.0 新特性
+
+- **单次API调用**: 每章API调用从8-12次减少到1次
+- **熔断机制**: 防止无限重写循环（超过阈值强制暂停）
+- **Python算术**: 情绪计算在Python中完成，LLM只接收文本
+- **事件溯源**: World Bible 追踪所有关键事件
+- **生产者仪表板**: PyQt6熔断可视化UI
+
+---
 
 ## 核心概念
 
@@ -15,28 +27,71 @@
 - 规划章节结构（Feature List）
 - 设定世界观和写作风格指南
 
-### 2. Writer Agent（写作代理）
+### 2. NovelForge v4.0 编排器（新增）
+- **EmotionWriter**: 单次API调用场景写作
+- **CreativeDirector**: 熔断机制+仲裁
+- **EmotionTracker**: Python情绪债务账本
+- **WorldBible**: 事件溯源存储
+- **PromptAssembler**: 多技能Prompt聚合
+
+### 3. Writer Agent（写作代理）
 - 每次会话进行增量式进展
 - 一次只专注于一个章节
 - 阅读进度文件了解已完成内容
 - 创作完成后更新进度文件
 - 使用Git进行版本控制
 
-### 3. Reviewer Agent（审查代理）
+### 4. Reviewer Agent（审查代理）
 - 评估章节质量的多个维度
 - 提供具体的修改建议
 - 确保质量达标后才标记完成
 
-### 4. 进度管理系统
+### 5. 进度管理系统
 - **novel-progress.txt**: 记录整体进度和每个章节的状态
 - **chapter-list.json**: 章节列表（对应文章中的 feature list）
 - **characters.json**: 角色设定
 - **outline.md**: 小说大纲
+- **emotion_ledger.json**: 情绪债务追踪 (v4.0)
+- **world_bible.json**: 事件溯源 (v4.0)
 
-### 5. 一致性防御系统
-- **WritingConstraintManager**: 写作时注入约束，防止违规内容生成
-- **ConsistencyTracker**: 实时追踪境界、体质、地点、宗门变化
-- **ConsistencyChecker**: 严格检测6大类一致性问题
+---
+
+## 三层一致性防御系统
+
+基于起点编辑审稿意见，系统内置严格的一致性检查：
+
+### 第1层: 写作前约束 (WritingConstraintManager)
+- 写作时注入约束，防止生成违规内容
+- 锁定宗门名、角色名、境界体系
+
+### 第2层: 实时验证 (_pre_save_validation)
+- 保存前验证章节
+- 检测到严重违规则触发重写
+
+### 第3层: 写作后审查 (Senior-editor)
+- 每5章调用一次资深编辑技能
+- 多维度质量审查
+- 检测自动化检查遗漏的问题
+
+---
+
+## NovelForge v4.0 核心特性
+
+### 1. 防Token黑洞: Prompt聚合
+将L2+L3技能合并为单次Prompt，减少API调用从8-12次/章到1次/章。
+
+### 2. 防LLM计算灾难: Python算术
+所有情绪计算在Python中完成，LLM只接收文本指令。
+
+### 3. 防无限循环: 熔断机制
+```
+第1-3章:  最多3次回滚 → 强制暂停
+第4-10章: 最多5次回滚 → 强制暂停
+第11章+:  最多8次回滚 → 强制暂停
+```
+
+### 4. 事件溯源: World Bible
+记录关键事件（死亡、复活、境界升级）用于一致性检查。
 
 ---
 
@@ -46,43 +101,35 @@
 novel_generator/
 ├── .opencode/skills/          # Skills技能系统 (27个)
 │   ├── Level 1 - Coordinator (协调员)
-│   │   ├── worldbuilder-coordinator/
-│   │   ├── plot-architect-coordinator/
-│   │   └── novel-coordinator/
 │   ├── Level 2 - Architect (架构师)
-│   │   ├── outline-architect/
-│   │   ├── volume-architect/
-│   │   ├── chapter-architect/
-│   │   ├── character-designer/
-│   │   └── rhythm-designer/        # 新增
 │   ├── Level 3 - Expert (专家)
-│   │   ├── scene-writer/
-│   │   ├── cultivation-designer/
-│   │   ├── currency-expert/
-│   │   ├── geopolitics-expert/
-│   │   ├── society-expert/
-│   │   └── web-novel-methodology/
 │   └── Level 4 - Auditor (审计)
-│       ├── editor/
-│       ├── senior-editor/
-│       └── opening-diagnostician/  # 新增
 ├── agents/                    # 代理模块
-│   ├── initializer_agent.py
-│   ├── writer_agent.py
-│   ├── reviewer_agent.py
-│   └── consistency_checker.py
+│   ├── writer_agent_v2.py     # 主管道写作代理
+│   ├── consistency_checker.py # 严格一致性检查
+│   ├── senior_editor_v2.py   # 资深编辑
+│   ├── creative_director.py  # [v4.0] 熔断仲裁器
+│   └── emotion_writer.py     # [v4.0] 单次API写作
 ├── core/                      # 核心模块
 │   ├── novel_generator.py    # 主控制器
-│   ├── agent_manager.py      # 智能体调度 (含层级架构)
-│   ├── consistency_tracker.py
+│   ├── orchestrator.py       # [v4.0] 主循环组装
+│   ├── agent_manager.py      # 智能体调度
+│   ├── writing_constraint_manager.py # 写作约束
+│   ├── consistency_tracker.py # 实时追踪
+│   ├── hybrid_checker.py     # 3层检查
+│   ├── v7_integrator.py      # 类型感知系统
+│   ├── emotion_tracker.py    # [v4.0] 情绪债务
+│   ├── world_bible.py        # [v4.0] 事件溯源
+│   ├── prompt_assembler.py   # [v4.0] Prompt聚合
 │   └── ...
+├── ui/                        # [v4.0] UI组件
+│   └── producer_dashboard.py # 熔断可视化
 ├── config/                    # 配置模块
-│   ├── settings.py
 │   └── consistency_rules.yaml
-├── novels/                    # 生成的小说项目
-├── app.py                     # Web UI界面（Streamlit）
-├── main.py                    # 命令行入口
-├── .env                       # 环境变量
+├── novels/                   # 生成的小说项目
+├── app.py                    # Web UI界面（Streamlit）
+├── main.py                   # 命令行入口
+├── .env                      # 环境变量
 └── requirements.txt           # 依赖配置
 ```
 
@@ -104,7 +151,7 @@ novel_generator/
 #### 开篇诊断 (opening-diagnostician)
 基于起点"黄金三章"法则，对前三章进行严苛诊断：
 - 三秒定律、钩子密度、毒点扫描
-- 金手指亮相、冲突爆发、信息密度
+- 金手指亮相、冲突爆发，信息密度
 - 评级：S/A/B/C/F（F级拒绝生成）
 
 #### 节奏设计 (rhythm-designer)
@@ -157,7 +204,7 @@ streamlit run app.py
 - ➕ **创建新项目** - 填写小说配置并初始化
 - 💬 **对话创作** - 通过对话引导完成小说设定
 - 📚 **设定库管理** - 管理世界观、人物、组织等设定
-- ✍️ **写作控制** - 启动写作、质量审查、合并导出
+- ✍️ **写作控制** - 启动写作，质量审查、合并导出
 - 📊 **进度监控** - 实时查看项目进度和章节状态
 - 🤖 **智能体管理** - 查看和协调专业智能体
 
@@ -173,37 +220,56 @@ python main.py --config my_novel.json
 # 使用命令行参数
 python main.py --title "我的小说" --genre "玄幻" --chapters 20
 
+# 批量模式（推荐长篇小说）
+python main.py --title "我的小说" --genre "玄幻" --chapters 1000 --batch-size 20
+
+# 从检查点恢复
+python main.py --project novels/my_novel --batch-size 20
+
 # 查看进度
 python main.py --progress novels/my_novel
 ```
 
+### 3. 生产者仪表板 (v4.0)
+
+```bash
+# 运行熔断可视化UI
+python -m ui.producer_dashboard novels/my_project
+```
+
 ---
 
-## 四层防御一致性系统
+## NovelForge v4.0 组件
 
-基于起点编辑审稿意见，系统内置严格的一致性检查：
+### EmotionTracker (core/emotion_tracker.py)
+- Python情绪债务账本
+- 自动衰减（每章30%）
+- 生成文本指令给LLM
 
-### 1. WritingConstraintManager
-写作时注入约束，防止生成违规内容
+### WorldBible (core/world_bible.py)
+- 事件溯源存储
+- 记录：死亡、复活、境界升级
+- 支持事件反转
 
-### 2. ConsistencyTracker
-实时追踪状态变化：
-- 境界突破时间线
-- 体质变更记录
-- 地点移动历史
-- 宗门变更记录
+### PromptAssembler (core/prompt_assembler.py)
+- 聚合多技能为单次Prompt
+- 弹性大纲（近景清晰，远景模糊）
+- 情绪连续性检查
 
-### 3. ConsistencyChecker
-严格检测6大类问题：
-1. 宗门名称一致性
-2. 人物姓名一致性
-3. 战力体系一致性
-4. 修为进度一致性
-5. 体质设定一致性
-6. 情节逻辑一致性
+### CreativeDirector (agents/creative_director.py)
+- 熔断机制带可配置阈值
+- 仲裁：PASS / REWRITE / ROLLBACK / SUSPEND
+- 触发时生成.suspended.json
 
-### 4. WriterAgent 集成
-写作流程中自动验证，检测境界/地点/宗门变化
+### EmotionWriter (agents/emotion_writer.py)
+- 单次API调用场景写作
+- 集成PromptAssembler + EmotionTracker + WorldBible
+- 自动事件提取
+
+### Orchestrator (core/orchestrator.py)
+- 带检查点支持的主循环
+- 协调所有v4.0组件
+- 处理重试逻辑
 
 ---
 
@@ -236,29 +302,35 @@ python main.py --progress novels/my_novel
 4. 节奏设计
    └── RhythmDesigner 为每章设计节奏地图
 
-5. 写作
-   └── SceneWriter 按节奏地图撰写章节
+5. 写作（管道）
+   └── WriterAgentV2: 大纲 → 草稿 → 一致性 → 润色 → 终稿
 
-6. 开篇诊断（前3章）
+6. v4.0 写作（单次API）
+   └── EmotionWriter: Prompt组装 → LLM → 情绪追踪 → 事件记录
+
+7. 实时验证
+   └── 保存前验证
+
+8. 定期审查（每5章）
+   └── 资深编辑审查
+
+9. 开篇诊断（前3章）
    └── OpeningDiagnostician 进行黄金三章诊断
 
-7. 审稿
-   └── SeniorEditor 进行6维度审稿
-
-8. 编辑润色
-   └── Editor 润色文字
+10. 熔断检查 (v4.0)
+    └── CreativeDirector: 检查阈值 → 触发则暂停
 ```
 
 ---
 
 ## 核心优势
 
-### 1. 增量式进展
+### 1. 三层一致性防御
+- 写作约束、状态追踪、一致性检查、自动验证
+
+### 2. 增量式进展
 - 每次会话只处理一个章节
 - 确保每个章节的质量
-
-### 2. 四层一致性防御
-- 写作约束、状态追踪、一致性检查、自动验证
 
 ### 3. 层级化智能体
 - 27个专业技能，4个层级
@@ -271,6 +343,21 @@ python main.py --progress novels/my_novel
 ### 5. 节奏设计系统
 - 情绪曲线设计
 - 爽点密度控制
+
+### 6. NovelForge v4.0 生产特性
+- 单次API调用降低成本和延迟
+- 熔断防止无限循环
+- Python算术确保计算准确
+- 事件溯源防止时间线问题
+
+---
+
+## 测试
+
+```bash
+# 运行熔断机制测试
+python test_circuit_breaker.py
+```
 
 ---
 

@@ -1,8 +1,20 @@
-# AI Novel Generator
+# AI Novel Generator - NovelForge v4.0
 
 A fully automated AI novel generation system built based on [Anthropic's best practices for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents).
 
+**Latest Version: NovelForge v4.0** - Production-ready with circuit breaker mechanism, emotion tracking, and single-API-call architecture.
+
 [中文文档](README.zh_CN.md)
+
+## What's New in v4.0
+
+- **Single-API-Call Writing**: Reduced API calls from 8-12 to 1 per chapter
+- **Circuit Breaker**: Prevents infinite rewrite loops (force SUSPEND after threshold)
+- **Python Arithmetic**: Emotion calculations done in Python, LLM receives text only
+- **Event Traceability**: World Bible tracks all key events
+- **Producer Dashboard**: PyQt6 UI for monitoring circuit breaker status
+
+---
 
 ## Core Concepts
 
@@ -15,23 +27,32 @@ This system implements the **long-running agent** solution proposed by Anthropic
 - Plans chapter structure
 - Sets worldview and writing style guide
 
-### 2. Writer Agent V2 (Pipeline Architecture)
+### 2. NovelForge v4.0 Orchestrator (NEW)
+- **EmotionWriter**: Single-API-call scene writer with prompt aggregation
+- **CreativeDirector**: Circuit breaker + arbitration
+- **EmotionTracker**: Python-based emotion debt ledger
+- **WorldBible**: Event traceability storage
+- **PromptAssembler**: Multi-skill prompt aggregation
+
+### 3. Writer Agent V2 (Pipeline Architecture)
 - Five-stage pipeline: Outline → Draft → Consistency Check → Polish → Final
 - Integrates TimeAwareRAG for context retrieval
 - Real-time validation before save
 - Automatic constraint injection
 
-### 3. Reviewer Agent
+### 4. Reviewer Agent
 - Evaluates multiple dimensions of chapter quality
 - Provides specific modification suggestions
 - Ensures quality standards before marking complete
 
-### 4. Progress Management System
+### 5. Progress Management System
 - **novel-progress.txt**: Records overall progress and each chapter's status
 - **chapter-list.json**: Chapter list
 - **characters.json**: Character settings
 - **outline.md**: Novel outline
 - **writing_constraints.json**: Locked consistency constraints
+- **emotion_ledger.json**: Emotion debt tracking (v4.0)
+- **world_bible.json**: Event traceability (v4.0)
 
 ---
 
@@ -72,6 +93,26 @@ The system implements a robust 3-layer defense to prevent consistency issues:
 
 ---
 
+## NovelForge v4.0 Key Features
+
+### 1. Anti-Token-Blackhole: Prompt Aggregation
+Merge L2+L3 skills into single prompt assembly, reducing API calls from 8-12 to 1 per chapter.
+
+### 2. Anti-LLM-Math-Disaster: Python Arithmetic
+All emotion calculations done in Python, LLM receives only text instructions.
+
+### 3. Anti-Infinite-Loop: Circuit Breaker
+```
+Chapters 1-3:  Max 3 rollbacks → Force SUSPEND
+Chapters 4-10: Max 5 rollbacks → Force SUSPEND
+Chapters 11+:  Max 8 rollbacks → Force SUSPEND
+```
+
+### 4. Event Traceability: World Bible
+Records key events (deaths, resurrections, realm upgrades) for consistency checking.
+
+---
+
 ## System Architecture
 
 ```
@@ -85,15 +126,22 @@ novel_generator/
 │   ├── writer_agent_v2.py     # Main writer with pipeline
 │   ├── consistency_checker.py # Strict consistency checker
 │   ├── senior_editor_v2.py    # Senior editor
-│   └── ...
+│   ├── creative_director.py   # [NEW v4.0] Circuit breaker
+│   └── emotion_writer.py      # [NEW v4.0] Single-API writer
 ├── core/                      # Core modules
 │   ├── novel_generator.py     # Main orchestrator
+│   ├── orchestrator.py        # [NEW v4.0] Main loop assembly
 │   ├── agent_manager.py       # Skills management
 │   ├── writing_constraint_manager.py  # Pre-writing constraints
 │   ├── consistency_tracker.py # Real-time tracking
 │   ├── hybrid_checker.py      # 3-layer checking
 │   ├── v7_integrator.py      # Genre-aware system
+│   ├── emotion_tracker.py     # [NEW v4.0] Emotion debt
+│   ├── world_bible.py        # [NEW v4.0] Event traceability
+│   ├── prompt_assembler.py   # [NEW v4.0] Prompt aggregation
 │   └── ...
+├── ui/                        # [NEW v4.0] UI components
+│   └── producer_dashboard.py # Circuit breaker visualization
 ├── config/                    # Configuration
 │   └── consistency_rules.yaml
 ├── novels/                    # Generated novels
@@ -167,8 +215,21 @@ python main.py --config my_novel.json
 # Use command line arguments
 python main.py --title "My Novel" --genre "Fantasy" --chapters 20
 
+# Batch mode (recommended for long novels)
+python main.py --title "My Novel" --genre "Fantasy" --chapters 1000 --batch-size 20
+
+# Resume from checkpoint
+python main.py --project novels/my_novel --batch-size 20
+
 # View progress
 python main.py --progress novels/my_novel
+```
+
+### 3. Producer Dashboard (v4.0)
+
+```bash
+# Run circuit breaker visualization UI
+python -m ui.producer_dashboard novels/my_project
 ```
 
 ---
@@ -187,28 +248,37 @@ python main.py --progress novels/my_novel
 
 ---
 
-## Consistency Components
+## NovelForge v4.0 Components
 
-### WritingConstraintManager
-- Located: `core/writing_constraint_manager.py`
-- Loads constraints from `writing_constraints.json`
-- Generates constraint prompts: `get_constraint_prompt(chapter_number)`
-- Validates chapters: `validate_chapter(chapter_number, content)`
+### EmotionTracker (core/emotion_tracker.py)
+- Python-based emotion debt ledger
+- Automatic decay (30% per chapter)
+- Generates text instructions for LLM
 
-### ConsistencyTracker
-- Located: `core/consistency_tracker.py`
-- Tracks: realm, constitution, location, faction, timeline
-- Methods: `track_realm_breakthrough()`, `track_constitution_change()`, etc.
+### WorldBible (core/world_bible.py)
+- Event traceability storage
+- Records: deaths, resurrections, realm upgrades
+- Supports event reversal
 
-### ConsistencyChecker
-- Located: `agents/consistency_checker.py`
-- Methods: `check_chapter()`, `check_all_chapters()`
-- 6 detection categories
+### PromptAssembler (core/prompt_assembler.py)
+- Aggregates multiple skills into single prompt
+- Elastic outline (near clear, far fuzzy)
+- Emotion continuity checking
 
-### HybridChecker
-- Located: `core/hybrid_checker.py`
-- 3-layer detection: regex → similarity → LLM
-- Method: `check_chapter()`
+### CreativeDirector (agents/creative_director.py)
+- Circuit breaker with configurable thresholds
+- Arbitration: PASS / REWRITE / ROLLBACK / SUSPEND
+- Generates .suspended.json when triggered
+
+### EmotionWriter (agents/emotion_writer.py)
+- Single-API-call scene writer
+- Integrates PromptAssembler + EmotionTracker + WorldBible
+- Automatic event extraction
+
+### Orchestrator (core/orchestrator.py)
+- Main loop with checkpoint support
+- Coordinates all v4.0 components
+- Handles retry logic
 
 ---
 
@@ -227,14 +297,17 @@ python main.py --progress novels/my_novel
 4. Writing (Pipeline)
    └── WriterAgentV2: Outline → Draft → Consistency → Polish → Final
 
-5. Real-time Validation
+5. v4.0 Writing (Single-API)
+   └── EmotionWriter: PromptAssembly → LLM → EmotionTrack → EventRecord
+
+6. Real-time Validation
    └── _pre_save_validation() before each save
 
-6. Periodic Audit (every 5 chapters)
+7. Periodic Audit (every 5 chapters)
    └── senior-editor skill review
 
-7. Opening Diagnosis (first 3 chapters)
-   └── OpeningDiagnostician performs Golden Three Chapters diagnosis
+8. Circuit Breaker Check (v4.0)
+   └── CreativeDirector: Check threshold → SUSPEND if triggered
 ```
 
 ---
@@ -257,6 +330,21 @@ python main.py --progress novels/my_novel
 ### 4. Genre-Aware System (V7)
 - Auto-detects 6 genre types
 - Genre-specific constraint templates
+
+### 5. NovelForge v4.0 Production Features
+- Single-API-call reduces cost and latency
+- Circuit breaker prevents infinite loops
+- Python arithmetic ensures calculation accuracy
+- Event traceability prevents timeline issues
+
+---
+
+## Testing
+
+```bash
+# Run circuit breaker tests
+python test_circuit_breaker.py
+```
 
 ---
 
