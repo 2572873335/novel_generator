@@ -649,6 +649,7 @@ class ModelManager:
         """调用 Anthropic 兼容 API (MiniMax, Kimi for Coding 等)"""
         try:
             import anthropic
+            import httpx
 
             api_key = self.get_api_key()
             if not api_key:
@@ -656,10 +657,13 @@ class ModelManager:
 
             # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
             if self.config.auth_token_env:
+                http_client = httpx.Client(
+                    headers={"Authorization": f"Bearer {api_key}"}
+                )
                 client = anthropic.Anthropic(
                     api_key=api_key,
                     base_url=self.config.base_url,
-                    default_headers={"Authorization": f"Bearer {api_key}"}
+                    http_client=http_client
                 )
             else:
                 client = anthropic.Anthropic(
@@ -694,6 +698,7 @@ class ModelManager:
         """流式调用 Anthropic 兼容 API"""
         try:
             import anthropic
+            import httpx
 
             api_key = self.get_api_key()
             if not api_key:
@@ -702,10 +707,13 @@ class ModelManager:
 
             # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
             if self.config.auth_token_env:
+                http_client = httpx.Client(
+                    headers={"Authorization": f"Bearer {api_key}"}
+                )
                 client = anthropic.Anthropic(
                     api_key=api_key,
                     base_url=self.config.base_url,
-                    default_headers={"Authorization": f"Bearer {api_key}"}
+                    http_client=http_client
                 )
             else:
                 client = anthropic.Anthropic(
@@ -742,6 +750,7 @@ class ModelManager:
         """多轮对话 - Anthropic 兼容 API"""
         try:
             import anthropic
+            import httpx
 
             api_key = self.get_api_key()
             if not api_key:
@@ -749,10 +758,13 @@ class ModelManager:
 
             # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
             if self.config.auth_token_env:
+                http_client = httpx.Client(
+                    headers={"Authorization": f"Bearer {api_key}"}
+                )
                 client = anthropic.Anthropic(
                     api_key=api_key,
                     base_url=self.config.base_url,
-                    default_headers={"Authorization": f"Bearer {api_key}"}
+                    http_client=http_client
                 )
             else:
                 client = anthropic.Anthropic(
