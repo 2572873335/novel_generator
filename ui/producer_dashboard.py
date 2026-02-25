@@ -1489,6 +1489,8 @@ class SettingsDialog(QDialog):
         "ANTHROPIC_API_KEY": ("Anthropic API Key", "Claude 模型"),
         "OPENAI_API_KEY": ("OpenAI API Key", "GPT 模型"),
         "MOONSHOT_API_KEY": ("Moonshot API Key", "Kimi 模型"),
+        "MINIMAX_API_KEY": ("MiniMax API Key", "MiniMax M2.5"),
+        "KIMI_FOR_CODING_API_KEY": ("Kimi for Coding API Key", "Kimi 编程版"),
     }
 
     # 可用模型（与 model_manager.py 中的 AVAILABLE_MODELS 保持一致）
@@ -1498,6 +1500,8 @@ class SettingsDialog(QDialog):
         "claude-3-5-sonnet (Anthropic)",
         "gpt-4o (OpenAI)",
         "moonshot-v1-8k (Moonshot)",
+        "minimax-m2.5 (MiniMax)",
+        "kimi-for-coding (Kimi 编程版)",
     ]
 
     def __init__(self, parent=None):
@@ -1767,6 +1771,8 @@ class SettingsDialog(QDialog):
                 "claude": "ANTHROPIC_API_KEY",
                 "gpt": "OPENAI_API_KEY",
                 "moonshot": "MOONSHOT_API_KEY",
+                "minimax": "MINIMAX_API_KEY",
+                "kimi-for-coding": "KIMI_FOR_CODING_API_KEY",
             }
 
             # 保存选中的模型

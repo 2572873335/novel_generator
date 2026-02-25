@@ -22,6 +22,7 @@ class ModelProvider(Enum):
     MOONSHOT = "moonshot"
     DEEPSEEK = "deepseek"
     CUSTOM = "custom"
+    ANTHROPIC_COMPATIBLE = "anthropic_compatible"  # Anthropic API 兼容服务
 
 
 @dataclass
@@ -37,6 +38,8 @@ class ModelConfig:
     temperature_range: tuple = (0.0, 1.0)
     supports_system_prompt: bool = True
     description: str = ""
+    # Anthropic 兼容服务专用
+    auth_token_env: Optional[str] = None  # 用于 MiniMax 等需要不同认证头的情况
 
 
 class ModelManager:
@@ -168,6 +171,25 @@ class ModelManager:
             max_tokens=4000,
             description="DeepSeek Coder - 代码能力强",
         ),
+        # Anthropic 兼容服务
+        "minimax-m2.5": ModelConfig(
+            name="minimax-m2.5",
+            display_name="MiniMax-M2.5",
+            provider=ModelProvider.ANTHROPIC_COMPATIBLE,
+            api_key_env="MINIMAX_API_KEY",
+            base_url="https://api.minimaxi.com/anthropic",
+            max_tokens=4000,
+            description="MiniMax-M2.5 - 国内大模型，Anthropic API兼容",
+        ),
+        "kimi-for-coding": ModelConfig(
+            name="kimi-for-coding",
+            display_name="Kimi for Coding",
+            provider=ModelProvider.ANTHROPIC_COMPATIBLE,
+            api_key_env="KIMI_FOR_CODING_API_KEY",
+            base_url="https://api.kimi.com/coding/",
+            max_tokens=4000,
+            description="Kimi for Coding - 专为编程优化，Anthropic API兼容",
+        ),
     }
 
     def __init__(
@@ -262,6 +284,8 @@ class ModelManager:
 
         if provider == ModelProvider.ANTHROPIC:
             return self._call_anthropic(prompt, temperature, system_prompt, **kwargs)
+        elif provider == ModelProvider.ANTHROPIC_COMPATIBLE:
+            return self._call_anthropic_compatible(prompt, temperature, system_prompt, **kwargs)
         elif provider == ModelProvider.OPENAI:
             return self._call_openai(prompt, temperature, system_prompt, **kwargs)
         elif provider == ModelProvider.MOONSHOT:
@@ -298,6 +322,10 @@ class ModelManager:
 
         if provider == ModelProvider.ANTHROPIC:
             yield from self._stream_anthropic(
+                prompt, temperature, system_prompt, messages, **kwargs
+            )
+        elif provider == ModelProvider.ANTHROPIC_COMPATIBLE:
+            yield from self._stream_anthropic_compatible(
                 prompt, temperature, system_prompt, messages, **kwargs
             )
         elif provider in (
@@ -407,6 +435,8 @@ class ModelManager:
 
         if provider == ModelProvider.ANTHROPIC:
             return self._chat_anthropic(messages, temperature, system_prompt, **kwargs)
+        elif provider == ModelProvider.ANTHROPIC_COMPATIBLE:
+            return self._chat_anthropic_compatible(messages, temperature, system_prompt, **kwargs)
         elif provider in (
             ModelProvider.OPENAI,
             ModelProvider.MOONSHOT,
@@ -609,6 +639,100 @@ class ModelManager:
             return f"[错误] 请安装 openai 包: pip install openai"
         except Exception as e:
             return f"[错误] 自定义API调用失败: {str(e)}"
+
+    def _call_anthropic_compatible(
+        self, prompt: str, temperature: float, system_prompt: Optional[str], **kwargs
+    ) -> str:
+        """调用 Anthropic 兼容 API (MiniMax, Kimi for Coding 等)"""
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+            )
+
+            messages = [{"role": "user", "content": prompt}]
+
+            response = client.messages.create(
+                model=self.config.name,
+                max_tokens=self.config.max_tokens,
+                temperature=temperature,
+                messages=messages,
+                system=system_prompt if system_prompt else "",
+            )
+
+            return response.content[0].text
+        except ImportError:
+            return f"[错误] 请安装 anthropic 包: pip install anthropic"
+        except Exception as e:
+            return f"[错误] {self.config.display_name} API调用失败: {str(e)}"
+
+    def _stream_anthropic_compatible(
+        self,
+        prompt: str,
+        temperature: float,
+        system_prompt: Optional[str],
+        messages: Optional[List[Dict]],
+        **kwargs,
+    ):
+        """流式调用 Anthropic 兼容 API"""
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+            )
+
+            if messages:
+                api_messages = messages
+            else:
+                api_messages = [{"role": "user", "content": prompt}]
+
+            with client.messages.stream(
+                model=self.config.name,
+                max_tokens=self.config.max_tokens,
+                temperature=temperature,
+                messages=api_messages,
+                system=system_prompt if system_prompt else "",
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except ImportError:
+            yield "[错误] 请安装 anthropic 包: pip install anthropic"
+        except Exception as e:
+            yield f"[错误] {self.config.display_name} API调用失败: {str(e)}"
+
+    def _chat_anthropic_compatible(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        system_prompt: Optional[str],
+        **kwargs,
+    ) -> str:
+        """多轮对话 - Anthropic 兼容 API"""
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+            )
+
+            response = client.messages.create(
+                model=self.config.name,
+                max_tokens=self.config.max_tokens,
+                temperature=temperature,
+                messages=messages,
+                system=system_prompt if system_prompt else "",
+            )
+
+            return response.content[0].text
+        except ImportError:
+            return f"[错误] 请安装 anthropic 包: pip install anthropic"
+        except Exception as e:
+            return f"[错误] {self.config.display_name} API调用失败: {str(e)}"
 
 
 # 便捷的工厂函数
