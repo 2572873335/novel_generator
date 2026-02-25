@@ -1173,6 +1173,18 @@ class PreProductionPanel(QWidget):
         self.init_ui()
         self.load_existing_files()
 
+    # 题材类型和监控指标映射（从ProjectSetupDialog移过来）
+    GENRE_METRICS = {
+        "修仙": ["realm", "spiritual_power", "tribulation_count"],
+        "都市": ["reputation", "wealth", "relationship_level"],
+        "赛博朋克": ["cyber_psychosis_level", "credits", "augmentation_level"],
+        "玄幻": ["realm", "magic_power", "artifact_rank"],
+        "科幻": ["tech_level", "resources", "alliance_count"],
+        "悬疑": ["clue_count", "danger_level", "truth_revealed"],
+        "历史": ["influence", "wealth", "army_size"],
+    }
+    GENRE_TYPES = list(GENRE_METRICS.keys()) + ["其他"]
+
     def init_ui(self):
         """初始化UI"""
         self.setStyleSheet(f"""
@@ -1188,6 +1200,19 @@ class PreProductionPanel(QWidget):
                 color: {CyberpunkTheme.TEXT_PRIMARY};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
                 font-family: Consolas;
+            }}
+            QLineEdit, QComboBox, QSpinBox {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 4px;
+                padding: 6px;
+                font-family: Consolas;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                background-color: {CyberpunkTheme.BG_LIGHT};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                width: 16px;
             }}
             QPushButton {{
                 background-color: {CyberpunkTheme.BG_LIGHT};
@@ -1229,6 +1254,44 @@ class PreProductionPanel(QWidget):
         title.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; padding: 10px;")
         layout.addWidget(title)
+
+        # ========== 项目基础信息区域（替代原来的新建档案弹窗）==========
+        info_group = QGroupBox("📁 项目基础信息")
+        info_layout = QFormLayout()
+        info_layout.setSpacing(8)
+
+        # 书名
+        self.title_edit = QLineEdit()
+        self.title_edit.setPlaceholderText("输入小说书名...")
+        info_layout.addRow("📖 书名:", self.title_edit)
+
+        # 题材类型
+        self.genre_combo = QComboBox()
+        self.genre_combo.addItems(self.GENRE_TYPES)
+        self.genre_combo.currentTextChanged.connect(self.on_genre_changed)
+        info_layout.addRow("🎭 题材:", self.genre_combo)
+
+        # 主角名
+        self.protagonist_edit = QLineEdit()
+        self.protagonist_edit.setPlaceholderText("输入主角姓名...")
+        info_layout.addRow("👤 主角:", self.protagonist_edit)
+
+        # 目标章节数
+        self.chapters_spin = QSpinBox()
+        self.chapters_spin.setRange(1, 10000)
+        self.chapters_spin.setValue(50)
+        self.chapters_spin.setToolTip("建议: 第一版50-200章")
+        info_layout.addRow("📑 目标章节:", self.chapters_spin)
+
+        # 监控指标预览
+        self.metrics_label = QLabel()
+        self.metrics_label.setFont(QFont("Consolas", 9))
+        self.metrics_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
+        info_layout.addRow("📊 监控指标:", self.metrics_label)
+        self.on_genre_changed("修仙")  # 默认显示修仙指标
+
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
 
         # 大纲和人物设定区域（上下布局）
         content_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -1294,6 +1357,24 @@ class PreProductionPanel(QWidget):
         # 按钮区
         button_layout = QHBoxLayout()
 
+        # 保存项目按钮（替代原来的弹窗确认）
+        self.save_btn = QPushButton("💾 保存项目")
+        self.save_btn.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        self.save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_PRIMARY};
+                color: {CyberpunkTheme.BG_DARK};
+                border: 2px solid {CyberpunkTheme.FG_PRIMARY};
+            }}
+            QPushButton:hover {{
+                background-color: #00ccff;
+            }}
+        """)
+        self.save_btn.clicked.connect(self.on_save_project)
+        button_layout.addWidget(self.save_btn)
+
+        button_layout.addSpacing(20)
+
         self.gen_btn = QPushButton("1️⃣ 生成设置")
         self.gen_btn.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
         self.gen_btn.clicked.connect(self.on_generate_settings)
@@ -1341,10 +1422,45 @@ class PreProductionPanel(QWidget):
             except:
                 pass
 
+    def on_genre_changed(self, genre: str):
+        """题材变化时更新监控指标"""
+        metrics = self.GENRE_METRICS.get(genre, ["reputation", "wealth", "progress"])
+        self.metrics_label.setText(f"{', '.join(metrics)}")
+
+    def get_project_config(self) -> dict:
+        """获取项目配置（用于保存项目信息）"""
+        title = self.title_edit.text().strip()
+        genre = self.genre_combo.currentText()
+        protagonist = self.protagonist_edit.text().strip()
+        chapters = self.chapters_spin.value()
+
+        return {
+            "title": title or "未命名项目",
+            "genre": genre,
+            "protagonist": protagonist or "主角",
+            "target_chapters": chapters,
+            "settings": f"{genre}类型小说，主角{protagonist or '主角'}",
+            "metrics": self.GENRE_METRICS.get(genre, ["reputation", "wealth", "progress"]),
+        }
+
     def save_to_disk(self):
         """保存编辑内容到磁盘"""
+        # 获取项目配置
+        config = self.get_project_config()
+
+        # 使用书名作为项目目录名（如果没有书名则使用默认）
+        if config["title"] and config["title"] != "未命名项目":
+            safe_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in config["title"])
+            self.project_dir = f"novels/{safe_name}"
+
         project_path = Path(self.project_dir)
         project_path.mkdir(parents=True, exist_ok=True)
+
+        # 保存项目配置
+        config_path = project_path / "project_config.json"
+        import json
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
 
         # 保存大纲
         outline_file = project_path / "outline.md"
@@ -1370,6 +1486,25 @@ class PreProductionPanel(QWidget):
         """批准并开始写作"""
         self.save_to_disk()
         self.approve_and_start.emit()
+
+    def on_save_project(self):
+        """保存项目按钮点击"""
+        title = self.title_edit.text().strip()
+        if not title:
+            QMessageBox.warning(
+                self, "保存失败",
+                "请输入书名后再保存项目",
+                QMessageBox.StandardButton.Ok
+            )
+            self.title_edit.setFocus()
+            return
+
+        self.save_to_disk()
+        QMessageBox.information(
+            self, "保存成功",
+            f"项目「{title}」已保存到 {self.project_dir}",
+            QMessageBox.StandardButton.Ok
+        )
 
     def on_apply_suggestions(self):
         """采纳建议并修改"""
@@ -2298,6 +2433,20 @@ class ProducerDashboard(QMainWindow):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     self.project_config = json.load(f)
+
+                # 加载配置到前期筹备面板的表单
+                config = self.project_config
+                if config:
+                    self.preproduction_panel.title_edit.setText(config.get("title", ""))
+                    self.preproduction_panel.protagonist_edit.setText(config.get("protagonist", ""))
+                    self.preproduction_panel.chapters_spin.setValue(config.get("target_chapters", 50))
+
+                    # 设置题材
+                    genre = config.get("genre", "修仙")
+                    index = self.preproduction_panel.genre_combo.findText(genre)
+                    if index >= 0:
+                        self.preproduction_panel.genre_combo.setCurrentIndex(index)
+
             except Exception as e:
                 print(f"Warning: Failed to load project config: {e}")
                 self.project_config = None
@@ -2357,24 +2506,25 @@ class ProducerDashboard(QMainWindow):
         self.log_panel.append_log(f"Selected agent: {agent_name}", "info", agent_name)
 
     def on_new_project(self):
-        """新建项目"""
-        dialog = ProjectSetupDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            config = dialog.get_project_config()
-            if config:
-                title = config["title"]
-                safe_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in title)
-                self.project_dir = f"novels/{safe_name}"
+        """新建项目 - 直接切换到前期筹备标签页"""
+        # 清空当前项目
+        self.project_dir = "novels/default"
+        self.project_config = {}
 
-                Path(self.project_dir).mkdir(parents=True, exist_ok=True)
+        # 清空前期筹备面板
+        self.preproduction_panel.title_edit.clear()
+        self.preproduction_panel.protagonist_edit.clear()
+        self.preproduction_panel.chapters_spin.setValue(50)
+        self.preproduction_panel.genre_combo.setCurrentIndex(0)
+        self.preproduction_panel.outline_text.clear()
+        self.preproduction_panel.chars_text.clear()
+        self.preproduction_panel.eval_text.clear()
 
-                config_path = Path(self.project_dir) / "project_config.json"
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(config, f, ensure_ascii=False, indent=2)
+        # 切换到前期筹备标签页
+        self.tabs.setCurrentIndex(0)
 
-                self.project_config = config
-                self.log_panel.append_log(f"New project created: {title}", "success")
-                self.display_project_info()
+        self.log_panel.append_log("新建项目 - 请在前期筹备室填写项目信息", "info")
+        self.display_project_info()
 
     def on_open_project(self):
         """打开项目"""
@@ -2383,6 +2533,32 @@ class ProducerDashboard(QMainWindow):
             self.project_dir = directory
             self.load_project_config()
             self.display_project_info()
+
+            # 加载大纲和人物文件到前期筹备面板
+            project_path = Path(self.project_dir)
+
+            # 加载大纲
+            outline_file = project_path / "outline.md"
+            if outline_file.exists():
+                try:
+                    self.preproduction_panel.outline_text.setText(
+                        outline_file.read_text(encoding="utf-8")
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to load outline: {e}")
+
+            # 加载人物设定
+            chars_file = project_path / "characters.json"
+            if chars_file.exists():
+                try:
+                    self.preproduction_panel.chars_text.setText(
+                        chars_file.read_text(encoding="utf-8")
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to load characters: {e}")
+
+            # 更新前期筹备面板的项目目录
+            self.preproduction_panel.project_dir = self.project_dir
 
     def on_view_documents(self):
         """查看文档"""
