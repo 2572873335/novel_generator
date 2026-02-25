@@ -681,20 +681,21 @@ class ModelManager:
                 system=system_prompt if system_prompt else "",
             )
 
-            # 处理响应 - 详细的空值检查
+            # 处理响应 - 遍历所有content block，找到type='text'的
             if response is None:
                 return f"[错误] {self.config.display_name} 返回None响应"
-            if not hasattr(response, 'content'):
-                return f"[错误] {self.config.display_name} 响应缺少content字段: {type(response)}"
-            if response.content is None:
-                return f"[错误] {self.config.display_name} response.content为None"
-            if len(response.content) == 0:
-                return f"[错误] {self.config.display_name} response.content为空列表"
-            if response.content[0] is None:
-                return f"[错误] {self.config.display_name} response.content[0]为None"
-            if not hasattr(response.content[0], 'text'):
-                return f"[错误] {self.config.display_name} response.content[0]缺少text字段: {type(response.content[0])}"
-            return response.content[0].text
+            if not hasattr(response, 'content') or response.content is None:
+                return f"[错误] {self.config.display_name} 响应缺少content"
+
+            # 遍历所有content block，找到text不为None的
+            for block in response.content:
+                if hasattr(block, 'text') and block.text is not None:
+                    return block.text
+                # 处理MiniMax的特殊格式
+                if hasattr(block, 'type') and block.type == 'text' and hasattr(block, 'text'):
+                    return block.text
+
+            return f"[错误] {self.config.display_name} 未找到有效的text内容"
         except ImportError:
             return f"[错误] 请安装 anthropic 包: pip install anthropic"
         except Exception as e:
@@ -793,20 +794,21 @@ class ModelManager:
                 system=system_prompt if system_prompt else "",
             )
 
-            # 处理响应 - 详细的空值检查
+            # 处理响应 - 遍历所有content block，找到type='text'的
             if response is None:
                 return f"[错误] {self.config.display_name} 返回None响应"
-            if not hasattr(response, 'content'):
-                return f"[错误] {self.config.display_name} 响应缺少content字段: {type(response)}"
-            if response.content is None:
-                return f"[错误] {self.config.display_name} response.content为None"
-            if len(response.content) == 0:
-                return f"[错误] {self.config.display_name} response.content为空列表"
-            if response.content[0] is None:
-                return f"[错误] {self.config.display_name} response.content[0]为None"
-            if not hasattr(response.content[0], 'text'):
-                return f"[错误] {self.config.display_name} response.content[0]缺少text字段: {type(response.content[0])}"
-            return response.content[0].text
+            if not hasattr(response, 'content') or response.content is None:
+                return f"[错误] {self.config.display_name} 响应缺少content"
+
+            # 遍历所有content block，找到text不为None的
+            for block in response.content:
+                if hasattr(block, 'text') and block.text is not None:
+                    return block.text
+                # 处理MiniMax的特殊格式
+                if hasattr(block, 'type') and block.type == 'text' and hasattr(block, 'text'):
+                    return block.text
+
+            return f"[错误] {self.config.display_name} 未找到有效的text内容"
         except ImportError:
             return f"[错误] 请安装 anthropic 包: pip install anthropic"
         except Exception as e:
