@@ -193,7 +193,7 @@ def save_api_key(key_name: str, key_value: str, env_path: Optional[str] = None) 
                 "OpenAI GPT 系列": ["OPENAI_API_KEY"],
                 "Moonshot Kimi 系列": ["MOONSHOT_API_KEY"],
                 "DeepSeek 系列": ["DEEPSEEK_API_KEY"],
-                "MiniMax 系列": ["MINIMAX_API_KEY"],
+                "MiniMax 系列": ["ANTHROPIC_AUTH_TOKEN"],
                 "Kimi for Coding": ["KIMI_FOR_CODING_API_KEY"],
                 "自定义模型": ["CUSTOM_API_KEY"],
             }

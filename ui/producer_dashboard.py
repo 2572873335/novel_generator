@@ -1489,7 +1489,7 @@ class SettingsDialog(QDialog):
         "ANTHROPIC_API_KEY": ("Anthropic API Key", "Claude 模型"),
         "OPENAI_API_KEY": ("OpenAI API Key", "GPT 模型"),
         "MOONSHOT_API_KEY": ("Moonshot API Key", "Kimi 模型"),
-        "MINIMAX_API_KEY": ("MiniMax API Key", "MiniMax M2.5"),
+        "ANTHROPIC_AUTH_TOKEN": ("MiniMax Auth Token", "MiniMax M2.5"),
         "KIMI_FOR_CODING_API_KEY": ("Kimi for Coding API Key", "Kimi 编程版"),
     }
 

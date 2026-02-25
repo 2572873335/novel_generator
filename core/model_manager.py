@@ -172,23 +172,26 @@ class ModelManager:
             description="DeepSeek Coder - 代码能力强",
         ),
         # Anthropic 兼容服务
+        # Anthropic 兼容服务
         "minimax-m2.5": ModelConfig(
             name="minimax-m2.5",
             display_name="MiniMax-M2.5",
             provider=ModelProvider.ANTHROPIC_COMPATIBLE,
-            api_key_env="MINIMAX_API_KEY",
+            api_key_env="ANTHROPIC_AUTH_TOKEN",  # MiniMax 使用 AUTH_TOKEN 而非 API_KEY
             base_url="https://api.minimaxi.com/anthropic",
             max_tokens=4000,
             description="MiniMax-M2.5 - 国内大模型，Anthropic API兼容",
+            auth_token_env="ANTHROPIC_AUTH_TOKEN",
         ),
         "kimi-for-coding": ModelConfig(
             name="kimi-for-coding",
             display_name="Kimi for Coding",
             provider=ModelProvider.ANTHROPIC_COMPATIBLE,
-            api_key_env="KIMI_FOR_CODING_API_KEY",
+            api_key_env="ANTHROPIC_API_KEY",  # Kimi 使用标准的 API_KEY
             base_url="https://api.kimi.com/coding/",
             max_tokens=4000,
             description="Kimi for Coding - 专为编程优化，Anthropic API兼容",
+            auth_token_env=None,
         ),
     }
 
@@ -647,10 +650,22 @@ class ModelManager:
         try:
             import anthropic
 
-            client = anthropic.Anthropic(
-                api_key=self.get_api_key(),
-                base_url=self.config.base_url,
-            )
+            api_key = self.get_api_key()
+            if not api_key:
+                return f"[错误] {self.config.api_key_env} 未设置"
+
+            # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
+            if self.config.auth_token_env:
+                client = anthropic.Anthropic(
+                    api_key=api_key,
+                    base_url=self.config.base_url,
+                    default_headers={"Authorization": f"Bearer {api_key}"}
+                )
+            else:
+                client = anthropic.Anthropic(
+                    api_key=api_key,
+                    base_url=self.config.base_url,
+                )
 
             messages = [{"role": "user", "content": prompt}]
 
@@ -680,10 +695,23 @@ class ModelManager:
         try:
             import anthropic
 
-            client = anthropic.Anthropic(
-                api_key=self.get_api_key(),
-                base_url=self.config.base_url,
-            )
+            api_key = self.get_api_key()
+            if not api_key:
+                yield f"[错误] {self.config.api_key_env} 未设置"
+                return
+
+            # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
+            if self.config.auth_token_env:
+                client = anthropic.Anthropic(
+                    api_key=api_key,
+                    base_url=self.config.base_url,
+                    default_headers={"Authorization": f"Bearer {api_key}"}
+                )
+            else:
+                client = anthropic.Anthropic(
+                    api_key=api_key,
+                    base_url=self.config.base_url,
+                )
 
             if messages:
                 api_messages = messages
@@ -715,10 +743,22 @@ class ModelManager:
         try:
             import anthropic
 
-            client = anthropic.Anthropic(
-                api_key=self.get_api_key(),
-                base_url=self.config.base_url,
-            )
+            api_key = self.get_api_key()
+            if not api_key:
+                return f"[错误] {self.config.api_key_env} 未设置"
+
+            # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
+            if self.config.auth_token_env:
+                client = anthropic.Anthropic(
+                    api_key=api_key,
+                    base_url=self.config.base_url,
+                    default_headers={"Authorization": f"Bearer {api_key}"}
+                )
+            else:
+                client = anthropic.Anthropic(
+                    api_key=api_key,
+                    base_url=self.config.base_url,
+                )
 
             response = client.messages.create(
                 model=self.config.name,
