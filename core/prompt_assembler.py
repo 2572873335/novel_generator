@@ -262,6 +262,10 @@ class PromptAssembler:
         if custom_instructions:
             components.append(PromptComponent("custom", 5, custom_instructions))
 
+        # 6. 防截断规则（最高优先级）
+        anti_truncation_rule = """<rule>你必须完整地结束本章，严禁在句子中间或对话中间截断！如果接近字数上限，请立刻收尾并输出完整的句号。最后一段必须逻辑完整。绝对禁止输出被切断的句子！</rule>"""
+        components.append(PromptComponent("anti_truncation", 0, anti_truncation_rule))
+
         # 按优先级排序
         components.sort(key=lambda x: x.priority)
 
@@ -269,7 +273,7 @@ class PromptAssembler:
         header = f"""你是一位专业的网络小说作家。请根据以下信息创作第{chapter_num}章。
 
 【创作要求】
-- 字数：3000-5000字
+- 字数：3000-6000字
 - 语言：简体中文
 - 风格：网文风格，节奏明快
 
@@ -280,6 +284,7 @@ class PromptAssembler:
         footer = """
 【输出格式】
 请直接输出章节内容，无需额外说明。
+重要提醒：在输出任何内容之前，请确保你已经完整地构思了这一章的全部内容。
 """
 
         final_prompt = header + body + footer

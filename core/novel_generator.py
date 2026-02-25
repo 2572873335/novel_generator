@@ -275,6 +275,16 @@ class NovelGenerator:
         self.writer = WriterAgent(self.llm_client, self.project_dir, v7_constraints)
         self.consistency_checker = ConsistencyChecker(self.project_dir, self.llm_client)
 
+        # 初始化质量门
+        self.quality_gate = None
+        if self.config.get("enable_quality_gate", True):
+            try:
+                from core.quality_gate import QualityGate
+                self.quality_gate = QualityGate(self.project_dir, self.llm_client)
+                print("[OK] 质量门已启用")
+            except Exception as e:
+                print(f"[警告] 质量门初始化失败: {e}")
+
         progress = self.progress_manager.load_progress()
         if not progress:
             print("[错误] 无法加载进度文件")
@@ -283,88 +293,47 @@ class NovelGenerator:
         total_chapters = progress.total_chapters
         completed = progress.completed_chapters
 
-        current_day = 1
+        # 批次控制
+        batch_size = self.config.get("batch_size", 20)
+        batch_target = min(completed + batch_size, total_chapters)
 
         print(f"\n总章节: {total_chapters}")
         print(f"已完成: {completed}")
-        print(f"待完成: {total_chapters - completed}\n")
+        print(f"待完成: {total_chapters - completed}")
+        print(f"本批次: {batch_size}章 (目标到第{batch_target}章)\n")
 
         session_count = 0
-        max_sessions = total_chapters * 2
+        max_sessions = batch_target * 2
         last_consistency_check = 0
 
-        while completed < total_chapters and session_count < max_sessions:
+        while completed < batch_target and session_count < max_sessions:
             session_count += 1
+            current_chapter = completed + 1
 
-            print(f"\n--- 写作会话 #{session_count} ---")
+            print(f"\n--- 写作会话 #{session_count} - 第{current_chapter}章 ---")
 
-            result = self.writer.write_session()
+            # 单章处理
+            result = self._process_single_chapter(current_chapter)
 
-            if not result["success"]:
-                if result.get("status") == "completed":
-                    print("[完成] 所有章节已完成")
-                    break
-                else:
-                    print(f"❌ 写作失败: {result.get('error', '未知错误')}")
-                    break
+            if result["status"] == "completed":
+                completed += 1
 
-            completed += 1
+                # 每5章一致性检查
+                if completed % 5 == 0 and completed > last_consistency_check:
+                    last_consistency_check = completed
+                    self._perform_consistency_check(completed)
 
-            # 自动审查每章（如果启用）- 默认禁用避免编码问题
-            if self.config.get("auto_review", False):
-                revision_needed = self._review_and_revise(completed, max_revisions=2)
+            elif result["status"] == "suspended":
+                # 挂起：保存状态，等待人工介入
+                self._save_suspended_state(current_chapter, result["message"])
+                print(f"\n[暂停] 写作已在第{current_chapter}章暂停")
+                print(f"原因: {result.get('message', '质量检查未通过')}")
+                print(f"状态已保存，可使用 --project 续传")
+                return
 
-            if completed % 5 == 0 and completed > last_consistency_check:
-                last_consistency_check = completed
-                print(f"\n{'=' * 60}")
-                print(f"[审查] 一致性检查点: 第{completed}章完成")
-                print("=" * 60)
-
-                checkpoint_approved = self._human_checkpoint(completed)
-                if not checkpoint_approved:
-                    print("[警告] 检查点未通过，需要回滚重写")
-
-                # Phase 5: 调用资深编辑审核
-                editor_approved = self._senior_editor_audit(completed)
-                if not editor_approved:
-                    print("[警告] 资深编辑审核未通过，需要重写")
-                    # 触发重写流程
-                    self._trigger_rewrite_from_audit(completed)
-
-                check_result = self.consistency_checker.check_all_chapters()
-
-                critical_issues = check_result.get("hardcoded_issues", {}).get(
-                    "critical", []
-                )
-                warnings = check_result.get("hardcoded_issues", {}).get("warnings", [])
-
-                if critical_issues or not check_result.get("passed", True):
-                    print(
-                        f"\n[警告] 发现一致性问题 ({len(critical_issues)} 严重, {len(warnings)} 警告)"
-                    )
-
-                    for issue in critical_issues:
-                        print(f"  ❌ [严重] {issue.get('message', issue)}")
-
-                    for issue in warnings[:5]:
-                        print(f"  [警告] {issue.get('message', issue)}")
-
-                    report_dir = os.path.join(self.project_dir, "consistency_reports")
-                    os.makedirs(report_dir, exist_ok=True)
-
-                    report = self.consistency_checker.generate_report(check_result)
-                    report_path = os.path.join(
-                        report_dir, f"check_chapter_{completed}.md"
-                    )
-                    with open(report_path, "w", encoding="utf-8") as f:
-                        f.write(report)
-                    print(f"  详细报告已保存: {report_path}")
-
-                    self._flag_consistency_issue(completed, check_result)
-                else:
-                    print(f"[完成] 一致性检查通过")
-                    if warnings:
-                        print(f"   (有 {len(warnings)} 个警告，详见报告)")
+            elif result["status"] == "failed":
+                print(f"❌ 写作失败: {result.get('error', '未知错误')}")
+                break
 
             percentage = (completed / total_chapters) * 100
             print(f"\n总体进度: {completed}/{total_chapters} ({percentage:.1f}%)")
@@ -372,6 +341,214 @@ class NovelGenerator:
             time.sleep(0.5)
 
         print(f"\n[OK] 写作阶段完成，共完成 {completed} 章")
+
+        # 检查是否需要续传
+        if completed < total_chapters:
+            print(f"\n[提示] 还有 {total_chapters - completed} 章未完成")
+            print(f"可使用 --project {self.project_dir} --batch-size {batch_size} 继续")
+
+    def _process_single_chapter(self, chapter_number: int) -> Dict[str, Any]:
+        """
+        单章处理：写作→检查→重试
+
+        Returns:
+            {"status": "completed"|"suspended"|"failed", ...}
+        """
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            # 1. 写作
+            write_result = self.writer.write_chapter(chapter_number)
+
+            if not write_result.get("success"):
+                if attempt < max_retries - 1:
+                    print(f"[重试] 第{chapter_number}章写作失败，尝试 {attempt + 1}/{max_retries}")
+                    continue
+                else:
+                    return {
+                        "status": "failed",
+                        "error": write_result.get("error", "写作失败")
+                    }
+
+            # 2. 加载章节内容
+            chapter_file = os.path.join(
+                self.project_dir, "chapters", f"chapter-{chapter_number:03d}.md"
+            )
+            if not os.path.exists(chapter_file):
+                continue
+
+            with open(chapter_file, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # 3. 质量门检查（如果启用）
+            if self.quality_gate:
+                try:
+                    # 带滑动窗口的验证（每5章）
+                    if chapter_number % 5 == 0 or chapter_number == 1:
+                        check_result = self.quality_gate.validate_with_sliding_window(
+                            chapter_number, content, window_size=5
+                        )
+                    else:
+                        check_result = self.quality_gate.validate_or_raise(
+                            chapter_number, content
+                        )
+                    print(f"[OK] 质量门检查通过")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    if "suspended" in error_msg.lower() or attempt >= max_retries - 1:
+                        # 超过重试次数，需要挂起
+                        return {
+                            "status": "suspended",
+                            "message": error_msg,
+                            "chapter": chapter_number,
+                            "feedback": getattr(e, 'get_feedback', lambda: error_msg)()
+                        }
+                    else:
+                        # 需要重写
+                        print(f"[质量门] 发现问题，需要重写：{error_msg}")
+                        # 准备重写
+                        self._prepare_rewrite(chapter_number, error_msg)
+                        continue
+
+            return {"status": "completed", "chapter": chapter_number}
+
+        return {"status": "failed", "error": "超过最大重试次数"}
+
+    def _prepare_rewrite(self, chapter_number: int, feedback: str):
+        """准备重写"""
+        print(f"\n[重写] 准备重写第{chapter_number}章")
+
+        # 删除现有章节
+        chapter_file = os.path.join(
+            self.project_dir, "chapters", f"chapter-{chapter_number:03d}.md"
+        )
+        if os.path.exists(chapter_file):
+            os.remove(chapter_file)
+
+        # 删除元数据
+        meta_file = os.path.join(
+            self.project_dir, "chapters", f"chapter-{chapter_number:03d}.meta.json"
+        )
+        if os.path.exists(meta_file):
+            os.remove(meta_file)
+
+    def _perform_consistency_check(self, completed: int):
+        """执行一致性检查"""
+        print(f"\n{'=' * 60}")
+        print(f"[审查] 一致性检查点: 第{completed}章完成")
+        print("=" * 60)
+
+        # 使用滑动窗口检查（更高效）
+        check_result = self.consistency_checker.check_recent_n_chapters(
+            n=5,
+            before_chapter=completed
+        )
+
+        critical_issues = [v for v in check_result.get("violations", [])
+                          if v.get("severity") == "critical"]
+        warnings = [v for v in check_result.get("violations", [])
+                   if v.get("severity") == "warning"]
+
+        if critical_issues or not check_result.get("passed", True):
+            print(f"\n[警告] 发现一致性问题 ({len(critical_issues)} 严重, {len(warnings)} 警告)")
+
+            for issue in critical_issues:
+                print(f"  ❌ [严重] {issue.get('message', issue)}")
+
+            for issue in warnings[:5]:
+                print(f"  [警告] {issue.get('message', issue)}")
+
+            # 保存报告
+            report_dir = os.path.join(self.project_dir, "consistency_reports")
+            os.makedirs(report_dir, exist_ok=True)
+
+            report = self.consistency_checker.generate_report(check_result)
+            report_path = os.path.join(report_dir, f"check_window_{completed}.md")
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write(report)
+            print(f"  详细报告已保存: {report_path}")
+
+            self._flag_consistency_issue(completed, check_result)
+        else:
+            print(f"[完成] 滑动窗口一致性检查通过")
+            if warnings:
+                print(f"   (有 {len(warnings)} 个警告，详见报告)")
+
+    def _execute_write_with_feedback(self, chapter_number: int, feedback: str = "") -> dict:
+        """执行写作，携带审核反馈给 scene-writer skill"""
+        if feedback:
+            # 写入临时约束文件（WriterAgentV2 会在构建 Prompt 时读取）
+            tmp_file = os.path.join(self.project_dir, f".chapter_{chapter_number}_audit_feedback.json")
+            try:
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "chapter": chapter_number,
+                        "feedback": feedback,
+                        "source": "SeniorEditorV2",
+                        "timestamp": str(time.time())
+                    }, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"  [警告] 反馈写入失败: {e}")
+
+        try:
+            if hasattr(self.writer, 'write_chapter'):
+                return self.writer.write_chapter(chapter_number)
+            return self.writer.write_session()
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _senior_editor_audit_detailed(self, chapter_number: int) -> dict:
+        """调用 SeniorEditorV2 进行 6 维度语义分析"""
+        try:
+            from agents.senior_editor_v2 import SeniorEditorV2
+            editor = SeniorEditorV2(self.llm_client, self.project_dir)
+            report = editor.review_novel((chapter_number, chapter_number))
+
+            # 解构 6 维度报告
+            result = {
+                "passed": report.overall_score >= 7.0 and "不推荐" not in report.contract_recommendation,
+                "overall_score": report.overall_score,
+                "pacing_score": next((d.score for d in report.semantic_dimensions if "节奏" in d.name or "pacing" in d.name.lower()), 5.0),
+                "character_score": next((d.score for d in report.semantic_dimensions if "角色" in d.name or "character" in d.name.lower()), 5.0),
+                "market_score": next((d.score for d in report.semantic_dimensions if "市场" in d.name or "market" in d.name.lower()), 5.0),
+                "advice": report.editor_insights[:200] if hasattr(report, 'editor_insights') else "综合评分不足"
+            }
+            return result
+        except Exception as e:
+            return {"passed": False, "error": str(e), "overall_score": 0}
+
+    def _generate_skill_feedback(self, audit_result: dict) -> str:
+        """基于 6 维度分析，生成给 scene-writer 的具体修改指令"""
+        feedback_parts = []
+
+        if audit_result.get("pacing_score", 10) < 6:
+            feedback_parts.append("[节奏问题] 爽点密度不足或情节拖沓，请参考 rhythm-designer skill 调整章节起伏")
+
+        if audit_result.get("character_score", 10) < 6:
+            feedback_parts.append("[人设问题] 角色行为 OOC（崩坏），请参考 character-designer skill 检查一致性")
+
+        if audit_result.get("market_score", 10) < 6:
+            feedback_parts.append("[市场问题] 付费点或留存率预期低，请参考 web-novel-methodology skill 优化")
+
+        feedback_parts.append(f"综合建议: {audit_result.get('advice', '请全面优化本章质量')}")
+
+        return "\n".join(feedback_parts)
+
+    def _save_suspended_state(self, chapter: int, message: str):
+        """保存挂起状态"""
+        suspended_file = os.path.join(self.project_dir, ".suspended.json")
+        suspended_state = {
+            "chapter": chapter,
+            "message": message,
+            "timestamp": datetime.now().isoformat(),
+            "project_dir": self.project_dir
+        }
+
+        with open(suspended_file, "w", encoding="utf-8") as f:
+            json.dump(suspended_state, f, ensure_ascii=False, indent=2)
+
+        print(f"[OK] 挂起状态已保存: {suspended_file}")
 
     def _flag_consistency_issue(self, chapter: int, check_result: Dict):
         flag_file = os.path.join(self.project_dir, "consistency_issues.json")

@@ -11,8 +11,8 @@ AI Novel Generator - A fully automated AI novel generation system based on Anthr
 ## Commands
 
 ```bash
-# Web UI (recommended)
-streamlit run app.py
+# PyQt6 Dashboard (recommended)
+python -m ui.producer_dashboard novels/my_project
 
 # CLI modes
 python main.py --interactive                    # Interactive mode
@@ -24,9 +24,6 @@ python main.py --title "My Novel" --genre "Fantasy" --chapters 1000 --batch-size
 
 # Resume from checkpoint
 python main.py --project novels/my_novel --batch-size 20
-
-# Producer Dashboard (circuit breaker visualization)
-python -m ui.producer_dashboard novels/my_project
 ```
 
 ## System Architecture
@@ -357,10 +354,7 @@ python main.py --project novels/my_novel --batch-size 20
 # With config file
 python main.py --config config.json
 
-# Web UI
-streamlit run app.py
-
-# Producer Dashboard (circuit breaker visualization)
+# Producer Dashboard
 python -m ui.producer_dashboard novels/my_project
 ```
 

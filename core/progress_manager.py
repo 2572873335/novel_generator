@@ -21,6 +21,18 @@ class ChapterProgress:
     created_at: str = ""
     completed_at: str = ""
     notes: str = ""
+    # 兼容旧版本的额外字段
+    errors: list = None
+    warnings: list = None
+    opening_diagnosis_grade: str = None
+
+    def __post_init__(self):
+        if self.errors is None:
+            self.errors = []
+        if self.warnings is None:
+            self.warnings = []
+        if self.opening_diagnosis_grade is None:
+            self.opening_diagnosis_grade = ""
     
     def __post_init__(self):
         if not self.created_at:

@@ -640,7 +640,7 @@ class WritingConstraintManager:
                     "suggestion": f"将'{wrong_name}'改为'{protagonist_name}'"
                 })
 
-        for role, name in locked_name_values:
+        for name in locked_name_values:
             # 如果原姓名在文中出现，检查是否有变体
             if name in chapter_content and len(name) >= 2:
                 surname = name[0] if len(name) == 2 else name[:2]

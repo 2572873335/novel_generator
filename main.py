@@ -103,15 +103,21 @@ def main():
 示例:
   # 交互式模式
   python main.py --interactive
-  
+
   # 使用配置文件
   python main.py --config novel_config.json
-  
+
   # 命令行参数
   python main.py --title "我的科幻小说" --genre "科幻" --chapters 10
+
+  # 断点续传（继续之前项目）
+  python main.py --project novels/my_novel
+
+  # 批次续传（指定本批次写多少章）
+  python main.py --project novels/my_novel --batch-size 10
         """
     )
-    
+
     parser.add_argument('--config', '-c', type=str,
                        help='配置文件路径 (JSON格式)')
     parser.add_argument('--title', '-t', type=str,
@@ -128,16 +134,75 @@ def main():
                        help='交互式模式')
     parser.add_argument('--progress', '-p', type=str,
                        help='查看指定项目的进度')
-    
+    parser.add_argument('--project', type=str,
+                       help='项目目录，用于断点续传')
+    parser.add_argument('--batch-size', '-b', type=int, default=20,
+                       help='每批次写作章节数 (默认: 20，用于断点续传)')
+
     args = parser.parse_args()
-    
+
+    # 断点续传模式
+    if args.project:
+        if not os.path.exists(args.project):
+            print(f"[FAIL] 项目目录不存在: {args.project}")
+            return
+
+        # 检查是否有挂起状态
+        suspended_file = os.path.join(args.project, ".suspended.json")
+        if os.path.exists(suspended_file):
+            with open(suspended_file, "r", encoding="utf-8") as f:
+                suspended = json.load(f)
+            print(f"\n[恢复] 检测到挂起状态:")
+            print(f"  暂停章节: 第{suspended.get('chapter', '?')}章")
+            print(f"  原因: {suspended.get('message', '未知')}")
+            print(f"  时间: {suspended.get('timestamp', '未知')}")
+            print()
+
+        # 加载现有配置
+        config_file = os.path.join(args.project, "project-config.json")
+        if os.path.exists(config_file):
+            with open(config_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        else:
+            # 尝试从novel-progress.txt加载
+            progress_file = os.path.join(args.project, "novel-progress.txt")
+            if os.path.exists(progress_file):
+                with open(progress_file, "r", encoding="utf-8") as f:
+                    progress_data = json.load(f)
+                    config = {
+                        'title': progress_data.get('title', '未命名'),
+                        'genre': progress_data.get('genre', '通用'),
+                        'target_chapters': progress_data.get('total_chapters', 10),
+                        'project_dir': args.project,
+                        'batch_size': args.batch_size
+                    }
+            else:
+                print("[FAIL] 无法加载项目配置")
+                return
+
+        # 更新批次大小
+        config['batch_size'] = args.batch_size
+        config['project_dir'] = args.project
+
+        print(f"\n[续传] 继续项目: {config.get('title', '未命名')}")
+        print(f"[批次] 本次写作: {args.batch_size}章")
+
+        result = create_novel(config)
+
+        if result['success']:
+            print(f"\n[OK] 批次完成！")
+            print(f"项目位置: {result['project_dir']}")
+        else:
+            print(f"\n[FAIL] 续传失败")
+        return
+
     # 查看进度模式
     if args.progress:
         from core.progress_manager import ProgressManager
-        
+
         pm = ProgressManager(args.progress)
         progress = pm.load_progress()
-        
+
         if progress:
             print(pm.generate_progress_report())
         else:

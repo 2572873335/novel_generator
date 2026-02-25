@@ -46,6 +46,9 @@ class ConsistencyChecker:
         self.chapters_dir = self.project_dir / "chapters"
         self.config_file = Path("config/consistency_rules.yaml")
 
+        # 骨架缓存（避免重复IO）
+        self._skeleton_cache = {}
+
         # 加载配置
         self.config = self._load_config()
 
@@ -55,6 +58,38 @@ class ConsistencyChecker:
 
         # 加载所有章节索引
         self.chapter_index = self._build_chapter_index()
+
+    def _load_dynamic_dictionary(self) -> List[str]:
+        """动态加载官方设定字典，杜绝硬编码正则猜测"""
+        valid_names = set()
+
+        # 从 characters.json 读取（Level 2 Architect Skill 生成）
+        char_file = self.project_dir / "characters.json"
+        if char_file.exists():
+            try:
+                with open(char_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    chars = data if isinstance(data, list) else data.get("characters", [])
+                    for c in chars:
+                        if c.get("name"):
+                            valid_names.add(c.get("name"))
+            except Exception as e:
+                print(f"  [字典加载警告] characters.json: {e}")
+
+        # 从 writing_constraints.json 读取（Level 3 约束锁定）
+        constraint_file = self.project_dir / "writing_constraints.json"
+        if constraint_file.exists():
+            try:
+                with open(constraint_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    locked = data.get("locked_names", {})
+                    for name in locked.values():
+                        if isinstance(name, str):
+                            valid_names.add(name)
+            except Exception as e:
+                print(f"  [字典加载警告] writing_constraints.json: {e}")
+
+        return list(valid_names)
 
     def _load_config(self) -> Dict:
         """加载配置文件"""
@@ -1011,6 +1046,223 @@ class ConsistencyChecker:
         """导出违规记录到JSON"""
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
+
+    def check_recent_n_chapters(self, n: int = 5, before_chapter: int = None, skeletons: List[Dict] = None) -> Dict[str, Any]:
+        """
+        滑动窗口检查：只查最近N章（约 8000-10000 字），绝不全量扫描
+        支持骨架缓存和LLM语义检查
+
+        Args:
+            n: 滑动窗口大小（默认5章）
+            before_chapter: 检查到哪一章为止（默认最新章节）
+            skeletons: 传入骨架列表（可选，提高效率）
+
+        Returns:
+            检查结果字典
+        """
+        # 确定检查范围
+        all_chapters = sorted(self.chapter_index.keys())
+        if not all_chapters:
+            return {
+                "total_chapters_checked": 0,
+                "violations": [],
+                "critical_count": 0,
+                "warning_count": 0,
+                "passed": True,
+                "window_size": n,
+                "chapters_checked": []
+            }
+
+        if before_chapter is None:
+            before_chapter = max(all_chapters)
+
+        # 滑动窗口：取最后n章
+        recent_chapters = [ch for ch in all_chapters if ch <= before_chapter][-n:]
+        if not recent_chapters:
+            recent_chapters = [max(all_chapters)]
+
+        print(f"[滑动窗口] 检查范围: 第{recent_chapters}章")
+
+        # 使用传入的骨架或提取骨架
+        if skeletons:
+            target_skeletons = skeletons[-n:] if len(skeletons) >= n else skeletons
+        else:
+            target_skeletons = self._extract_skeletons(n, before_chapter)
+
+        all_violations = []
+        chapter_results = {}
+
+        # 基础规则检查
+        for skel in target_skeletons:
+            chapter_num = skel["chapter_number"]
+            result = self.check_single_chapter(chapter_num)
+            chapter_results[chapter_num] = result
+            all_violations.extend(result.get("violations", []))
+
+        # 跨窗口检查
+        if len(recent_chapters) > 1:
+            cross_window_violations = self._check_window_consistency(recent_chapters)
+            all_violations.extend(cross_window_violations)
+
+        # LLM 语义链检查（仅当有多个骨架时）
+        if self.llm and len(target_skeletons) >= 2:
+            semantic_issues = self._semantic_chain_check(target_skeletons)
+            all_violations.extend(semantic_issues)
+
+        return {
+            "total_chapters_checked": len(recent_chapters),
+            "violations": all_violations,
+            "critical_count": len([v for v in all_violations if v.get("severity") == "critical"]),
+            "warning_count": len([v for v in all_violations if v.get("severity") == "warning"]),
+            "chapter_results": chapter_results,
+            "passed": len([v for v in all_violations if v.get("severity") == "critical"]) == 0,
+            "window_size": n,
+            "chapters_checked": recent_chapters,
+            "window_range": f"{min(recent_chapters)}-{max(recent_chapters)}"
+        }
+
+    def _check_window_consistency(self, chapter_nums: List[int]) -> List[Dict]:
+        """
+        检查窗口内章节之间的一致性
+        只提取骨架（前800+后800字）进行对比
+        """
+        violations = []
+        if len(chapter_nums) < 2:
+            return violations
+
+        # 加载骨架
+        skeletons = {}
+        for ch in chapter_nums:
+            content = self._load_chapter_content(ch)
+            if content:
+                # 提取骨架：前800字 + 后800字
+                front = content[:800]
+                back = content[-800:] if len(content) > 800 else content
+                skeletons[ch] = front + back
+
+        # 检查境界变化连续性
+        realm_hierarchy = self.constraints.get("realm_hierarchy", {})
+        if realm_hierarchy:
+            prev_realm = None
+            prev_ch = None
+            for ch in sorted(skeletons.keys()):
+                content = skeletons[ch]
+                current_realm = None
+                for realm in realm_hierarchy.keys():
+                    if realm in content:
+                        current_realm = realm
+                        break
+
+                if prev_realm and current_realm:
+                    # 检查是否有境界跳跃
+                    prev_level = realm_hierarchy.get(prev_realm, 0)
+                    curr_level = realm_hierarchy.get(current_realm, 0)
+                    if curr_level > prev_level + 2:  # 跳跃超过2级
+                        violations.append({
+                            "type": "realm_jump_in_window",
+                            "severity": "warning",
+                            "message": f"窗口内境界跳跃过快：第{prev_ch}章{prev_realm}→第{ch}章{current_realm}",
+                            "chapter": ch,
+                            "details": f"窗口内{prev_ch}到{ch}章境界跨越太大",
+                            "suggestion": "增加境界过渡描写"
+                        })
+                prev_realm = current_realm
+                prev_ch = ch
+
+        return violations
+
+    def _extract_skeletons(self, n: int, before_chapter: int = None) -> List[Dict]:
+        """提取最近 N 章的骨架（前 800 + 后 800 字），并缓存"""
+        all_chapters = sorted(self.chapter_index.keys())
+        if not all_chapters:
+            return []
+
+        # 确定范围
+        if before_chapter is None:
+            before_chapter = max(all_chapters)
+
+        target_nums = [ch for ch in all_chapters if ch <= before_chapter][-n:]
+        if not target_nums:
+            target_nums = [max(all_chapters)]
+
+        skeletons = []
+        for num in target_nums:
+            # 检查缓存
+            if num in self._skeleton_cache:
+                skeletons.append(self._skeleton_cache[num])
+                continue
+
+            content = self._load_chapter_content(num)
+            if content:
+                # 骨架提取：前 800 + 后 800
+                if len(content) > 1600:
+                    skeleton = content[:800] + "\n\n...[中间内容省略]...\n\n" + content[-800:]
+                else:
+                    skeleton = content
+
+                skel_data = {
+                    "chapter_number": num,
+                    "content": skeleton,
+                    "full_content": content  # 保留完整内容供LLM分析
+                }
+                self._skeleton_cache[num] = skel_data
+                skeletons.append(skel_data)
+
+        return skeletons
+
+    def _semantic_chain_check(self, skeletons: List[Dict]) -> List[Dict]:
+        """LLM 语义链检查：剧情逻辑崩坏（死人复活、能力突变等）"""
+        issues = []
+
+        if not self.llm or len(skeletons) < 2:
+            return issues
+
+        context = "".join([
+            f"【第{skel['chapter_number']}章骨架】\n{skel['content']}\n\n"
+            for skel in skeletons
+        ])
+
+        prompt = f"""你是一位起点白金级网文编辑。请审查以下连续章节的【骨架摘要】（提取了开头和结尾），识别严重的剧情逻辑崩坏。
+
+### 待审查章节：
+{context}
+
+### 重点排查以下"毒点"：
+1. 【生死崩坏】：角色在前面明确死亡/重伤，后面突然生龙活虎且无治疗过程
+2. 【能力崩坏】：主角失去了某物/修为尽毁，下一章却依然使用
+3. 【时空瞬移】：上一章在 A 地，下一章无赶路描写直接出现在极远 B 地
+4. 【设定吃书】：刚才做出的重要决定或立下的誓言，下一章完全无视
+
+请以 JSON 格式输出审查结果。如果没有严重问题，issues 数组为空。
+格式规范：
+{{
+    "issues": [
+        {{
+            "type": "logic_break",
+            "severity": "critical",
+            "message": "具体描述第X章与第Y章的逻辑断裂",
+            "suggestion": "修改建议"
+        }}
+    ]
+}}
+"""
+
+        try:
+            print("  [LLM 语义分析] 检查剧情连贯性...")
+            response = self.llm.generate(prompt=prompt, temperature=0.1, max_tokens=800)
+
+            # 安全解析 JSON
+            import re as re_module
+            json_match = re_module.search(r'\{.*\}', response, re_module.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                for issue in data.get("issues", []):
+                    if issue.get("severity") == "critical":
+                        issues.append(issue)
+        except Exception as e:
+            print(f"  [LLM 语义核查异常] (已跳过): {e}")
+
+        return issues
 
 
 # 便捷函数

@@ -6,6 +6,9 @@ Orchestrator - 主循环组装
 1. 协调各组件工作流程
 2. 处理异常和熔断
 3. 管理检查点恢复
+4. 初始化项目（大纲、人物）
+5. 保存章节为Markdown
+6. 更新Agent状态
 """
 
 import os
@@ -41,10 +44,11 @@ class Orchestrator:
 
     工作流程：
     1. 初始化组件 (EmotionTracker, WorldBible, PromptAssembler, CreativeDirector, EmotionWriter)
-    2. 循环写作各章节
-    3. 每次写作后调用CreativeDirector仲裁
-    4. 处理熔断和重试
-    5. 保存检查点
+    2. 检查并初始化项目（大纲、人物）
+    3. 循环写作各章节
+    4. 每次写作后调用CreativeDirector仲裁
+    5. 处理熔断和重试
+    6. 保存检查点
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -58,6 +62,7 @@ class Orchestrator:
         self.prompt_assembler = None
         self.creative_director = None
         self.emotion_writer = None
+        self.initializer_agent = None
 
         # 状态
         self.current_chapter = 1
@@ -72,10 +77,57 @@ class Orchestrator:
         self.on_chapter_complete: Optional[Callable] = None
         self.on_error: Optional[Callable] = None
         self.on_suspended: Optional[Callable] = None
+        self.on_agent_status: Optional[Callable] = None
+        self.on_emotion_update: Optional[Callable] = None
+        self.on_log: Optional[Callable] = None
+
+    def set_ui_callbacks(self,
+                         on_log: Optional[Callable] = None,
+                         on_agent_status: Optional[Callable] = None,
+                         on_emotion_update: Optional[Callable] = None,
+                         on_chapter_complete: Optional[Callable] = None,
+                         on_error: Optional[Callable] = None,
+                         on_suspended: Optional[Callable] = None):
+        """
+        设置UI回调函数
+
+        Args:
+            on_log: 日志回调 (message: str)
+            on_agent_status: Agent状态回调 (data: dict)
+            on_emotion_update: 情绪更新回调 (data: dict)
+            on_chapter_complete: 章节完成回调 (result: dict)
+            on_error: 错误回调 (error: dict)
+            on_suspended: 暂停回调 (data: dict)
+        """
+        self.on_log = on_log
+        self.on_agent_status = on_agent_status
+        self.on_emotion_update = on_emotion_update
+        self.on_chapter_complete = on_chapter_complete
+        self.on_error = on_error
+        self.on_suspended = on_suspended
+
+    def _emit_log(self, message: str, level: str = "info"):
+        """发送日志回调"""
+        if self.on_log:
+            self.on_log(message)
+        logger.info(message)
+
+    def _emit_agent_status(self, name: str, status: str, chapter: int = 0):
+        """发送Agent状态回调"""
+        if self.on_agent_status:
+            self.on_agent_status({
+                "name": name,
+                "status": status,
+                "chapter": chapter
+            })
 
     def initialize(self):
         """初始化所有组件"""
         logger.info("Initializing Orchestrator...")
+
+        # 创建项目目录和章节目录
+        self.project_dir.mkdir(parents=True, exist_ok=True)
+        (self.project_dir / "chapters").mkdir(parents=True, exist_ok=True)
 
         # 创建LLM客户端
         self._init_llm_client()
@@ -116,6 +168,139 @@ class Orchestrator:
             logger.error(f"Failed to initialize LLM client: {e}")
             raise
 
+    def _initialize_project_if_needed(self):
+        """
+        Issue 3 Fix: 初始化项目（如果需要）
+        在开始写作前生成大纲和人物档案
+        """
+        outline_file = self.project_dir / "outline.md"
+        characters_file = self.project_dir / "characters.json"
+
+        # 如果大纲或人物文件不存在，则初始化
+        if not outline_file.exists() or not characters_file.exists():
+            logger.info("Project not initialized, generating outline and characters...")
+            self._emit_log("正在初始化项目：生成大纲和人物档案...")
+
+            # 更新Agent状态 - 使用UI中定义的agent名称
+            self._emit_agent_status("PromptAssembler", "working", 0)
+            self._emit_agent_status("ElasticArchitect", "thinking", 0)
+
+            try:
+                # 调用初始化Agent生成大纲和人物
+                self._run_initializer()
+
+                self._emit_log("项目初始化完成")
+                logger.info("Project initialization completed")
+
+            except Exception as e:
+                logger.error(f"Failed to initialize project: {e}")
+                self._emit_agent_status("PromptAssembler", "error", 0)
+                raise
+            finally:
+                # 重置状态
+                self._emit_agent_status("PromptAssembler", "idle", 0)
+                self._emit_agent_status("ElasticArchitect", "idle", 0)
+        else:
+            logger.info("Project already initialized, skipping...")
+
+    def _run_initializer(self):
+        """运行初始化Agent生成大纲和人物"""
+        # 获取项目配置
+        title = self.config.get("title", "未命名小说")
+        genre = self.config.get("genre", "奇幻")
+        description = self.config.get("description", "")
+        protagonist = self.config.get("protagonist", "")
+
+        system_prompt = """你是一个专业的小说策划助手，负责生成小说大纲和人物设定。
+请根据用户提供的信息，生成完整的：
+1. 小说大纲 (outline.md) - 包含故事主线、情节点、章节规划
+2. 人物设定 (characters.json) - 包含主角、配角设定
+
+请以JSON格式输出人物设定，大纲使用Markdown格式。"""
+
+        # 构建主角信息
+        protagonist_info = ""
+        if protagonist:
+            protagonist_info = f"\n主角：{protagonist}"
+
+        user_prompt = f"""请为以下小说生成大纲和人物设定：
+
+标题：{title}
+类型：{genre}
+简介：{description or '无'}{protagonist_info}
+
+目标章节数：{self.target_chapters}章
+
+请严格根据以上信息生成大纲和人物设定，不得擅自更改标题、类型和主角！
+
+请生成：
+1. 完整的故事大纲（包括主线剧情、各卷情节安排）
+2. 主角和重要配角的详细设定（包括姓名、性格、背景、能力等）
+
+注意：大纲应该有足够的细节，能够支撑{self.target_chapters}章的篇幅。"""
+
+        try:
+            response = self.llm_client.generate(
+                user_prompt,
+                system_prompt=system_prompt,
+                temperature=0.8
+            )
+
+            # 解析输出，分离大纲和人物
+            characters_content = ""
+            outline_content = ""
+
+            # 方式1: 查找 ```json ... ``` 格式
+            json_start = response.find("```json")
+            if json_start >= 0:
+                json_end = response.find("```", json_start + 7)
+                if json_end > json_start:
+                    characters_content = response[json_start + 7:json_end].strip()
+                    outline_content = response[:json_start].strip()
+
+            # 方式2: 如果没找到JSON，尝试查找 { ... } 格式
+            if not characters_content:
+                import re
+                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+                if json_match:
+                    potential_json = json_match.group(0)
+                    try:
+                        json.loads(potential_json)
+                        characters_content = potential_json
+                        outline_content = response[:json_match.start()].strip()
+                    except:
+                        pass
+
+            # 方式3: 如果完全没有JSON，整个响应作为大纲
+            if not characters_content:
+                outline_content = response
+
+            # 保存大纲
+            outline_file = self.project_dir / "outline.md"
+            outline_file.write_text(outline_content, encoding="utf-8")
+            logger.info(f"Outline saved to {outline_file}")
+
+            # 保存人物设定
+            if characters_content:
+                characters_file = self.project_dir / "characters.json"
+                # 尝试解析JSON
+                try:
+                    json_data = json.loads(characters_content)
+                    characters_file.write_text(
+                        json.dumps(json_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8"
+                    )
+                except json.JSONDecodeError:
+                    # 如果解析失败，作为文本保存
+                    characters_file.write_text(characters_content, encoding="utf-8")
+                logger.info(f"Characters saved to {characters_file}")
+
+            self._emit_log("大纲和人物设定已生成")
+
+        except Exception as e:
+            logger.error(f"Failed to run initializer: {e}")
+            raise
+
     def run(self, start_chapter: int = 1):
         """
         运行主循环
@@ -131,20 +316,42 @@ class Orchestrator:
         self.current_chapter = start_chapter
 
         logger.info(f"Starting writing loop from chapter {start_chapter}")
+        self._emit_log(f"开始生成小说，目标{self.target_chapters}章")
 
         try:
+            # Issue 3 Fix: 初始化项目（如果需要）
+            if start_chapter == 1:
+                self._initialize_project_if_needed()
+
             while self.current_chapter <= self.target_chapters and self.is_running:
                 # 写作章节
                 result = self._write_chapter(self.current_chapter)
 
                 if result["status"] == "completed":
+                    # 保存章节为Markdown（Issue 1 Fix）
+                    self._save_chapter_as_markdown(
+                        self.current_chapter,
+                        result["content"],
+                        result.get("emotion", {})
+                    )
+
                     # 检查是否需要仲裁
                     reports = result.get("reports", [])
+
+                    # Issue 2 Fix: 更新仲裁阶段Agent状态
+                    self._emit_agent_status("ConsistencyGuardian", "auditing", self.current_chapter)
+                    self._emit_agent_status("PayoffAuditor", "auditing", self.current_chapter)
+                    self._emit_agent_status("CreativeDirector", "thinking", self.current_chapter)
+
                     arbitration = self.creative_director.arbitrate(
                         self.current_chapter,
                         result["content"],
                         reports
                     )
+
+                    # 重置仲裁阶段状态
+                    self._emit_agent_status("ConsistencyGuardian", "idle", self.current_chapter)
+                    self._emit_agent_status("PayoffAuditor", "idle", self.current_chapter)
 
                     # 处理仲裁结果
                     self._handle_arbitration(arbitration, result)
@@ -176,10 +383,46 @@ class Orchestrator:
             self._save_checkpoint()
 
         logger.info("Writing loop completed")
+        self._emit_log("小说生成完成！")
+
+    def _save_chapter_as_markdown(self, chapter_num: int, content: str, emotion: Dict):
+        """
+        Issue 1 Fix: 将章节保存为Markdown格式
+
+        Args:
+            chapter_num: 章节编号
+            content: 章节内容
+            emotion: 情绪数据
+        """
+        # 确保章节目录存在
+        chapters_dir = self.project_dir / "chapters"
+        chapters_dir.mkdir(parents=True, exist_ok=True)
+
+        # 保存为Markdown文件
+        md_file = chapters_dir / f"chapter_{chapter_num:03d}.md"
+        md_file.write_text(content, encoding="utf-8")
+        logger.info(f"Chapter {chapter_num} saved as Markdown: {md_file}")
+
+        # 同时保存元数据JSON（用于情绪追踪）
+        meta_file = chapters_dir / f"chapter_{chapter_num:03d}.json"
+        meta_data = {
+            "chapter": chapter_num,
+            "emotion": emotion,
+            "saved_at": datetime.now().isoformat()
+        }
+        meta_file.write_text(
+            json.dumps(meta_data, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
 
     def _write_chapter(self, chapter_num: int) -> Dict[str, Any]:
         """写作单章"""
         logger.info(f"Writing chapter {chapter_num}/{self.target_chapters}")
+        self._emit_log(f"正在写作第{chapter_num}章...")
+
+        # Issue 2 Fix: 更新大纲阶段Agent状态
+        self._emit_agent_status("PromptAssembler", "working", chapter_num)
+        self._emit_agent_status("ElasticArchitect", "thinking", chapter_num)
 
         # 获取写作上下文
         context = self.emotion_writer.get_context_for_chapter(
@@ -187,21 +430,44 @@ class Orchestrator:
             target_chapters=self.target_chapters
         )
 
+        # 重置大纲阶段状态
+        self._emit_agent_status("PromptAssembler", "idle", chapter_num)
+        self._emit_agent_status("ElasticArchitect", "idle", chapter_num)
+
+        # Issue 2 Fix: 更新写作阶段Agent状态
+        self._emit_agent_status("EmotionWriter", "writing", chapter_num)
+        self._emit_agent_status("WorldBible", "recording", chapter_num)
+
         # 获取上一章内容
         previous_chapter = ""
         if chapter_num > 1:
-            prev_file = self.project_dir / "chapters" / f"chapter_{chapter_num - 1}.json"
-            if prev_file.exists():
-                try:
-                    data = json.loads(prev_file.read_text(encoding="utf-8"))
-                    previous_chapter = data.get("content", "")
-                except:
-                    pass
+            # 先尝试读取Markdown文件
+            prev_md = self.project_dir / "chapters" / f"chapter_{chapter_num - 1:03d}.md"
+            if prev_md.exists():
+                previous_chapter = prev_md.read_text(encoding="utf-8")
+            else:
+                # 回退到旧的JSON格式
+                prev_file = self.project_dir / "chapters" / f"chapter_{chapter_num - 1}.json"
+                if prev_file.exists():
+                    try:
+                        data = json.loads(prev_file.read_text(encoding="utf-8"))
+                        previous_chapter = data.get("content", "")
+                    except:
+                        pass
 
         # 写作
         result = self.emotion_writer.write_chapter(context, previous_chapter)
 
+        # 更新情绪追踪状态
+        self._emit_agent_status("EmotionTracker", "tracking", chapter_num)
+
+        # 重置写作状态
+        self._emit_agent_status("EmotionWriter", "idle", chapter_num)
+        self._emit_agent_status("WorldBible", "idle", chapter_num)
+
         if result["success"]:
+            # 重置情绪追踪状态
+            self._emit_agent_status("EmotionTracker", "idle", chapter_num)
             return {
                 "status": "completed",
                 "chapter": chapter_num,
@@ -210,6 +476,7 @@ class Orchestrator:
                 "reports": []
             }
         else:
+            self._emit_agent_status("EmotionWriter", "error", chapter_num)
             return {
                 "status": "failed",
                 "chapter": chapter_num,
@@ -222,21 +489,25 @@ class Orchestrator:
 
         if arbitration.decision == Decision.PASS:
             logger.info(f"Chapter {self.current_chapter} passed")
+            self._emit_log(f"第{self.current_chapter}章审核通过")
             if self.on_chapter_complete:
                 self.on_chapter_complete(write_result)
 
         elif arbitration.decision == Decision.REWRITE:
             logger.warning(f"Chapter {self.current_chapter} needs rewrite")
+            self._emit_log(f"第{self.current_chapter}章需要重写")
             # 触发重写
             self._trigger_rewrite(self.current_chapter, arbitration.actionable_feedback)
 
         elif arbitration.decision == Decision.ROLLBACK:
             logger.warning(f"Chapter {self.current_chapter} needs rollback")
+            self._emit_log(f"第{self.current_chapter}章需要回滚")
             # 触发回滚
             self._trigger_rollback(self.current_chapter, arbitration.actionable_feedback)
 
         elif arbitration.decision == Decision.SUSPEND:
             logger.critical(f"Chapter {self.current_chapter} triggered suspension!")
+            self._emit_log(f"触发熔断：第{self.current_chapter}章")
             self.is_running = False
             self.is_suspended = True
             if self.on_suspended:
@@ -248,6 +519,9 @@ class Orchestrator:
     def _trigger_rewrite(self, chapter: int, feedback: str):
         """触发重写"""
         logger.info(f"Rewriting chapter {chapter}")
+
+        # 更新Agent状态
+        self._emit_agent_status("EmotionWriter", "writing", chapter)
 
         # 获取上下文
         context = self.emotion_writer.get_context_for_chapter(
@@ -261,22 +535,45 @@ class Orchestrator:
         # 重写
         result = self.emotion_writer.write_chapter(context)
 
+        # 重置状态
+        self._emit_agent_status("EmotionWriter", "idle", chapter)
+
         if result["success"]:
+            # 保存为Markdown
+            self._save_chapter_as_markdown(
+                chapter,
+                result["content"],
+                result.get("emotion", {})
+            )
+
             # 再次仲裁
             reports = self.world_bible.check_consistency_violations(
                 result["content"], chapter
             )
+
+            # 更新仲裁状态
+            self._emit_agent_status("CreativeDirector", "thinking", chapter)
+
             arbitration = self.creative_director.arbitrate(
                 chapter, result["content"], reports
             )
+
+            self._emit_agent_status("CreativeDirector", "idle", chapter)
+
             self._handle_arbitration(arbitration, result)
 
     def _trigger_rollback(self, chapter: int, feedback: str):
         """触发回滚"""
         logger.warning(f"Rolling back chapter {chapter}")
 
+        # 更新Agent状态
+        self._emit_agent_status("CreativeDirector", "working", chapter)
+
         # 记录回滚
         self.creative_director.record_rollback(chapter, feedback[:100])
+
+        # 重置状态
+        self._emit_agent_status("CreativeDirector", "idle", chapter)
 
         # 重新写作
         self._trigger_rewrite(chapter, feedback)
@@ -336,6 +633,7 @@ class Orchestrator:
     def stop(self):
         """停止运行"""
         logger.info("Stopping orchestrator...")
+        self._emit_log("正在停止...")
         self.is_running = False
 
     def get_status(self) -> Dict[str, Any]:

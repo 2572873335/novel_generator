@@ -117,7 +117,8 @@ class EmotionWriter:
         # Step 2: 单次API调用
         try:
             logger.debug(f"Calling LLM for chapter {chapter_num}")
-            response = self.llm.generate(prompt, max_tokens=8000)
+            # 使用更大的max_tokens确保完整输出
+            response = self.llm.generate(prompt, max_tokens=8192)
 
             # 解析响应
             if hasattr(response, 'content'):
@@ -126,6 +127,9 @@ class EmotionWriter:
                 chapter_content = response.get('content', response.get('text', ''))
             else:
                 chapter_content = str(response)
+
+            # Step 2.5: 后处理 - 清理不完整的句子
+            chapter_content = self._clean_incomplete_sentences(chapter_content)
 
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
@@ -214,6 +218,65 @@ class EmotionWriter:
             "error": f"Failed after {max_retries} attempts",
             "chapter": context.chapter_num
         }
+
+    def _clean_incomplete_sentences(self, text: str) -> str:
+        """清理不完整的句子，防止章节被截断"""
+        if not text:
+            return text
+
+        # 移除可能的截断标记
+        text = text.strip()
+
+        # 检查是否被截断（没有以完整标点结尾）
+        last_char = text[-1] if text else ""
+        if last_char not in "。！？.":
+            # 尝试找到最后一个完整句子
+            # 查找最后一个句号、问号、感叹号
+            last_period = max(
+                text.rfind('。'),
+                text.rfind('！'),
+                text.rfind('？'),
+                text.rfind('."'),
+                text.rfind('!'),
+                text.rfind('?')
+            )
+
+            if last_period > len(text) * 0.5:  # 确保不是太短
+                text = text[:last_period + 1]
+
+        # 移除可能被切断的对话（如 "他说--" 或 "她说"""）
+        import re
+        # 移除不完整的对话（以引号开头但没有正确结尾）
+        lines = text.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # 检查是否有未闭合的引号
+            open_quotes = line.count('"') + line.count('"') + line.count('"')
+            if open_quotes % 2 != 0:
+                # 找到最后一个引号位置，截断
+                last_quote = max(line.rfind('"'), line.rfind('"'), line.rfind('"'))
+                if last_quote > 0:
+                    line = line[:last_quote + 1]
+            cleaned_lines.append(line)
+
+        text = '\n'.join(cleaned_lines)
+
+        # 最终确保以完整标点结尾
+        text = text.strip()
+        if text and text[-1] not in "。！？.!??"" ":
+            # 找到最后一个完整句子
+            last_punct = max(
+                text.rfind('。'),
+                text.rfind('！'),
+                text.rfind('？'),
+                text.rfind('."'),
+                text.rfind('!"'),
+                text.rfind('?"')
+            )
+            if last_punct > 0:
+                text = text[:last_punct + 1]
+
+        return text
 
     def _extract_summary(self, text: str, max_length: int = 300) -> str:
         """提取章节摘要"""

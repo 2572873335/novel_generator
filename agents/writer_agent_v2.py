@@ -356,6 +356,35 @@ class WriterAgentV2:
         
         return None
 
+    def _load_audit_feedback(self, chapter_number: int) -> str:
+        """加载审核反馈（如果有）"""
+        feedback_file = os.path.join(self.project_dir, f".chapter_{chapter_number}_audit_feedback.json")
+        if os.path.exists(feedback_file):
+            try:
+                with open(feedback_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    feedback = data.get("feedback", "")
+                    # 读取后删除，防止污染
+                    os.remove(feedback_file)
+                    return feedback
+            except Exception as e:
+                logger.warning(f"Failed to load audit feedback: {e}")
+        return ""
+
+    def _inject_feedback_to_prompt(self, prompt: str, feedback: str) -> str:
+        """将审核反馈注入 Prompt"""
+        if not feedback:
+            return prompt
+        injection = f"""
+### [资深主编强制修改指令]
+你上次提交的稿件被审核打回，必须严格按照以下意见重写：
+{feedback}
+
+注意：必须在保留主线剧情的前提下，彻底修复上述问题！
+"""
+        # 在 Prompt 末尾或约束部分插入
+        return prompt + injection
+
     def _handle_outline_stage(self, context: PipelineContext) -> Dict[str, Any]:
         """大纲阶段 - 生成章节详细大纲"""
         print("  Generating detailed chapter outline...")

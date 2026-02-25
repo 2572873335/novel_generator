@@ -343,6 +343,34 @@ class EntityGraph:
 
         return graph
 
+    def search_entities(self, name: str, chapter: int = None) -> List[EntityNode]:
+        """
+        根据名称搜索实体节点
+
+        Args:
+            name: 实体名称（支持模糊匹配）
+            chapter: 章节号，如果提供则返回该章节有效的实体
+
+        Returns:
+            匹配的实体节点列表
+        """
+        results = []
+
+        # 转换为小写进行模糊匹配
+        name_lower = name.lower()
+
+        for node in self._nodes.values():
+            # 名称匹配
+            if name_lower in node.name.lower():
+                # 如果提供了章节号，检查实体在该章节是否有效
+                if chapter is not None:
+                    if node.is_valid_at(chapter):
+                        results.append(node)
+                else:
+                    results.append(node)
+
+        return results
+
     def __len__(self) -> int:
         """返回实体数量"""
         return len(self._nodes)
