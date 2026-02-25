@@ -140,15 +140,24 @@ class ModelManager:
             max_tokens=4000,
             description="Moonshot V1 128K - 超长文本处理能力",
         ),
-        # DeepSeek 系列
-        "deepseek-v3": ModelConfig(
+        # DeepSeek 系列 (V3.2 - 128K上下文)
+        "deepseek-chat": ModelConfig(
             name="deepseek-chat",
-            display_name="DeepSeek V3",
+            display_name="DeepSeek V3.2 (非思考模式)",
             provider=ModelProvider.DEEPSEEK,
             api_key_env="DEEPSEEK_API_KEY",
             base_url="https://api.deepseek.com/v1",
             max_tokens=4000,
-            description="DeepSeek V3 - 国产大模型，中文能力强",
+            description="DeepSeek-V3.2 非思考模式 - 128K上下文，通用对话",
+        ),
+        "deepseek-reasoner": ModelConfig(
+            name="deepseek-reasoner",
+            display_name="DeepSeek V3.2 (思考模式)",
+            provider=ModelProvider.DEEPSEEK,
+            api_key_env="DEEPSEEK_API_KEY",
+            base_url="https://api.deepseek.com/v1",
+            max_tokens=4000,
+            description="DeepSeek-V3.2 思考模式 - 128K上下文，推理能力强",
         ),
         "deepseek-coder": ModelConfig(
             name="deepseek-coder",

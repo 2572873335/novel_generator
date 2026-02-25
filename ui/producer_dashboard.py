@@ -1550,7 +1550,8 @@ class SettingsDialog(QDialog):
 
     # 可用模型（与 model_manager.py 中的 AVAILABLE_MODELS 保持一致）
     MODELS = [
-        "deepseek-v3 (DeepSeek)",
+        "deepseek-chat (DeepSeek V3.2)",
+        "deepseek-reasoner (DeepSeek V3.2 思考模式)",
         "claude-3-5-sonnet (Anthropic)",
         "gpt-4o (OpenAI)",
         "moonshot-v1-8k (Moonshot)",
@@ -1768,7 +1769,7 @@ class SettingsDialog(QDialog):
             from core.config_manager import load_env_file, get_api_key
 
             env_config = load_env_file()
-            model_id = env_config.get("DEFAULT_MODEL_ID", "deepseek-v3")
+            model_id = env_config.get("DEFAULT_MODEL_ID", "deepseek-chat")
 
             # 确定需要检查的API Key
             key_name = env_config.get("DEFAULT_MODEL_API_KEY", "DEEPSEEK_API_KEY")
@@ -2548,7 +2549,7 @@ class ProducerDashboard(QMainWindow):
             from core.config_manager import load_env_file
 
             env_config = load_env_file()
-            model_id = env_config.get("DEFAULT_MODEL_ID", "deepseek-v3")
+            model_id = env_config.get("DEFAULT_MODEL_ID", "deepseek-chat")
             llm = create_model_manager(model_id)
 
             self.log_panel.append_log("Editor is evaluating...", "info", "SeniorEditor")
