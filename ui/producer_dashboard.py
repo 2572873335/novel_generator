@@ -1535,6 +1535,337 @@ class ChapterFeedbackDialog(QDialog):
 
 
 # ============================================================================
+# API Key 设置对话框
+# ============================================================================
+class SettingsDialog(QDialog):
+    """API Key设置对话框"""
+
+    # API Key配置
+    API_KEYS = {
+        "DEEPSEEK_API_KEY": ("DeepSeek API Key", "DeepSeek 模型"),
+        "ANTHROPIC_API_KEY": ("Anthropic API Key", "Claude 模型"),
+        "OPENAI_API_KEY": ("OpenAI API Key", "GPT 模型"),
+        "MOONSHOT_API_KEY": ("Moonshot API Key", "Kimi 模型"),
+    }
+
+    # 可用模型
+    MODELS = [
+        "deepseek-chat (DeepSeek)",
+        "claude-sonnet-4-20250514 (Anthropic)",
+        "gpt-4o (OpenAI)",
+        "moonshot-v1-8k (Moonshot)",
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+        self.load_current_settings()
+
+    def init_ui(self):
+        """初始化UI"""
+        self.setWindowTitle("API Key 设置")
+        self.setMinimumSize(550, 500)
+        self.setModal(True)
+
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {CyberpunkTheme.BG_DARK};
+            }}
+            QLabel {{
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                font-family: Consolas;
+            }}
+            QLineEdit {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 4px;
+                padding: 8px;
+                font-family: Consolas;
+            }}
+            QComboBox {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 4px;
+                padding: 8px;
+                font-family: Consolas;
+            }}
+            QPushButton {{
+                background-color: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.FG_PRIMARY};
+                border: 1px solid {CyberpunkTheme.FG_PRIMARY};
+                border-radius: 4px;
+                padding: 10px 20px;
+                font-family: Consolas;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {CyberpunkTheme.FG_PRIMARY};
+                color: {CyberpunkTheme.BG_DARK};
+            }}
+            QGroupBox {{
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 4px;
+                font-family: Consolas;
+                font-weight: bold;
+                margin-top: 10px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # 标题
+        title = QLabel("⚙️ API Key 设置")
+        title.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY};")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        # 当前模型状态
+        model_group = QGroupBox("当前模型")
+        model_layout = QFormLayout()
+
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(self.MODELS)
+        model_layout.addRow("选择模型:", self.model_combo)
+
+        self.model_status_label = QLabel("未设置")
+        self.model_status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
+        model_layout.addRow("状态:", self.model_status_label)
+
+        model_group.setLayout(model_layout)
+        layout.addWidget(model_group)
+
+        # API Key输入区
+        keys_group = QGroupBox("API Keys")
+        keys_layout = QFormLayout()
+        keys_layout.setSpacing(10)
+
+        self.key_inputs = {}
+        for key_name, (label, desc) in self.API_KEYS.items():
+            row_layout = QHBoxLayout()
+
+            input_field = QLineEdit()
+            input_field.setPlaceholderText(f"请输入 {desc}...")
+            input_field.setEchoMode(QLineEdit.EchoMode.Password)
+            input_field.setMinimumWidth(300)
+
+            # 状态指示
+            status_label = QLabel("❌ 未配置")
+            status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_DANGER};")
+            status_label.setFixedWidth(100)
+
+            row_layout.addWidget(input_field)
+            row_layout.addWidget(status_label)
+
+            self.key_inputs[key_name] = {"input": input_field, "status": status_label}
+            keys_layout.addRow(f"{label}:", row_layout)
+
+        keys_group.setLayout(keys_layout)
+        layout.addWidget(keys_group)
+
+        # 提示信息
+        tip_label = QLabel("💡 提示：API Key 仅保存在本地 .env 文件中，不会提交到 Git")
+        tip_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY}; font-size: 9px;")
+        layout.addWidget(tip_label)
+
+        layout.addStretch()
+
+        # 按钮区域
+        btn_layout = QHBoxLayout()
+
+        test_btn = QPushButton("🔗 测试连接")
+        test_btn.clicked.connect(self.test_connection)
+        btn_layout.addWidget(test_btn)
+
+        btn_layout.addStretch()
+
+        cancel_btn = QPushButton("✕ 取消")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+
+        save_btn = QPushButton("💾 保存设置")
+        save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_PRIMARY};
+                color: {CyberpunkTheme.BG_DARK};
+            }}
+        """)
+        save_btn.clicked.connect(self.save_settings)
+        btn_layout.addWidget(save_btn)
+
+        layout.addLayout(btn_layout)
+
+    def load_current_settings(self):
+        """加载当前设置"""
+        try:
+            from core.config_manager import get_api_key, check_api_key, load_env_file
+
+            # 加载环境变量
+            env_config = load_env_file()
+
+            # 加载当前模型
+            default_model = env_config.get("DEFAULT_MODEL_ID", "")
+            if default_model:
+                for i, model in enumerate(self.MODELS):
+                    if default_model in model.lower():
+                        self.model_combo.setCurrentIndex(i)
+                        break
+                self.model_status_label.setText("✅ 已配置")
+                self.model_status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
+            else:
+                self.model_status_label.setText("⚠️ 默认")
+                self.model_status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
+
+            # 加载API Key状态
+            for key_name in self.API_KEYS.keys():
+                is_configured = check_api_key(key_name)
+                if key_name in self.key_inputs:
+                    status_label = self.key_inputs[key_name]["status"]
+                    if is_configured:
+                        status_label.setText("✅ 已配置")
+                        status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
+                        # 不显示实际Key，只显示已配置
+                        self.key_inputs[key_name]["input"].setText("••••••••••••••••")
+                    else:
+                        status_label.setText("❌ 未配置")
+                        status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_DANGER};")
+
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+
+    def test_connection(self):
+        """测试API连接"""
+        # 检查是否有可用的API Key
+        from core.config_manager import check_api_key, get_api_key
+
+        available_keys = []
+        for key_name in self.API_KEYS.keys():
+            if check_api_key(key_name):
+                available_keys.append(key_name)
+
+        if not available_keys:
+            QMessageBox.warning(
+                self, "测试连接",
+                "请至少配置一个API Key后再测试连接",
+                QMessageBox.StandardButton.Ok
+            )
+            return
+
+        # 尝试使用配置的Key进行简单测试
+        try:
+            from core.model_manager import create_model_manager
+            from core.config_manager import load_env_file, get_api_key
+
+            env_config = load_env_file()
+            model_id = env_config.get("DEFAULT_MODEL_ID", "deepseek-chat")
+
+            # 确定需要检查的API Key
+            key_name = env_config.get("DEFAULT_MODEL_API_KEY", "DEEPSEEK_API_KEY")
+            api_key = get_api_key(key_name)
+
+            if not api_key or api_key.strip() == "":
+                QMessageBox.warning(
+                    self, "测试连接",
+                    f"❌ API Key未配置\n\n模型: {model_id}\n需要配置: {key_name}",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+
+            llm = create_model_manager(model_id)
+
+            # 简单测试
+            result = llm.generate("Say 'OK' if you receive this message.", temperature=0)
+
+            QMessageBox.information(
+                self, "测试连接",
+                f"✅ 连接成功！\n\n模型: {model_id}\nAPI Key: {key_name[:10]}...\n响应: {result[:50]}...",
+                QMessageBox.StandardButton.Ok
+            )
+
+        except Exception as e:
+            error_msg = str(e)
+            # 提供更友好的错误信息
+            if "Client.__init__()" in error_msg or "api key" in error_msg.lower():
+                error_msg = f"API Key可能无效或未正确配置\n\n详情: {error_msg}"
+            QMessageBox.critical(
+                self, "测试连接",
+                f"❌ 连接失败\n\n模型: {model_id}\n错误信息: {error_msg}",
+                QMessageBox.StandardButton.Ok
+            )
+
+    def save_settings(self):
+        """保存设置"""
+        try:
+            from core.config_manager import save_api_key, load_env_file
+
+            # 获取.env文件路径
+            current_dir = Path(__file__).parent.parent
+            env_path = current_dir / ".env"
+
+            # 保存模型设置
+            selected_model = self.model_combo.currentText()
+            model_id = selected_model.split(" ")[0]  # 提取模型ID
+
+            # 映射模型到API Key
+            model_key_map = {
+                "deepseek-chat": "DEEPSEEK_API_KEY",
+                "claude": "ANTHROPIC_API_KEY",
+                "gpt": "OPENAI_API_KEY",
+                "moonshot": "MOONSHOT_API_KEY",
+            }
+
+            # 保存选中的模型
+            for key, name in model_key_map.items():
+                if key in model_id.lower():
+                    save_api_key("DEFAULT_MODEL_ID", model_id, str(env_path))
+                    save_api_key("DEFAULT_MODEL_API_KEY", name, str(env_path))
+                    break
+
+            # 保存API Keys
+            saved_count = 0
+            for key_name in self.API_KEYS.keys():
+                input_field = self.key_inputs[key_name]["input"]
+                key_value = input_field.text().strip()
+
+                # 跳过默认的掩码字符
+                if key_value and key_value != "••••••••••••••••":
+                    save_api_key(key_name, key_value, str(env_path))
+                    saved_count += 1
+
+            if saved_count > 0:
+                QMessageBox.information(
+                    self, "保存成功",
+                    "✅ API Key设置已保存！\n\n请重启应用程序以使更改生效。",
+                    QMessageBox.StandardButton.Ok
+                )
+                self.accept()
+            else:
+                QMessageBox.warning(
+                    self, "未更改",
+                    "未能保存设置，请重试",
+                    QMessageBox.StandardButton.Ok
+                )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self, "保存失败",
+                f"❌ 保存设置时出错:\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+
+
+# ============================================================================
 # 文档查看对话框
 # ============================================================================
 class DocumentViewerDialog(QDialog):
@@ -1932,6 +2263,13 @@ class ProducerDashboard(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
+        # 设置菜单
+        settings_menu = menubar.addMenu("⚙️ 设置")
+
+        api_key_action = QAction("API Key设置", self)
+        api_key_action.triggered.connect(self.on_api_key_settings)
+        settings_menu.addAction(api_key_action)
+
         # 查看菜单
         view_menu = menubar.addMenu("👁️ 查看")
 
@@ -2048,6 +2386,11 @@ class ProducerDashboard(QMainWindow):
     def on_view_documents(self):
         """查看文档"""
         dialog = DocumentViewerDialog(self.project_dir, self)
+        dialog.exec()
+
+    def on_api_key_settings(self):
+        """API Key设置"""
+        dialog = SettingsDialog(self)
         dialog.exec()
 
     def on_about(self):

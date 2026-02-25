@@ -102,9 +102,10 @@ def check_api_key(key_name: str) -> bool:
         key_name: API密钥名称
 
     Returns:
-        是否已配置
+        是否已配置（非None且非空）
     """
-    return get_api_key(key_name) is not None
+    value = get_api_key(key_name)
+    return value is not None and value.strip() != ""
 
 
 def get_available_api_keys() -> Dict[str, bool]:
@@ -169,6 +170,7 @@ def save_api_key(key_name: str, key_value: str, env_path: Optional[str] = None) 
             # 写入默认模型设置
             model_settings = [
                 "DEFAULT_MODEL_ID",
+                "DEFAULT_MODEL_API_KEY",
                 "DEFAULT_TEMPERATURE",
                 "DEFAULT_MAX_TOKENS",
                 "CUSTOM_MODEL_NAME",

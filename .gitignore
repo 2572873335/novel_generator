@@ -48,3 +48,10 @@ test_*.json
 test_*.log
 demo.py
 nul
+
+# PyInstaller build output (exe packaging)
+build/
+dist/
+BUILD.md
+NovelForge.spec
+gui_entry.py
