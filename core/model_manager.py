@@ -681,7 +681,11 @@ class ModelManager:
                 system=system_prompt if system_prompt else "",
             )
 
-            return response.content[0].text
+            # 处理响应
+            if response.content and len(response.content) > 0:
+                return response.content[0].text
+            else:
+                return f"[错误] {self.config.display_name} 返回空响应"
         except ImportError:
             return f"[错误] 请安装 anthropic 包: pip install anthropic"
         except Exception as e:
@@ -780,7 +784,11 @@ class ModelManager:
                 system=system_prompt if system_prompt else "",
             )
 
-            return response.content[0].text
+            # 处理响应
+            if response.content and len(response.content) > 0:
+                return response.content[0].text
+            else:
+                return f"[错误] {self.config.display_name} 返回空响应"
         except ImportError:
             return f"[错误] 请安装 anthropic 包: pip install anthropic"
         except Exception as e:
