@@ -168,7 +168,7 @@ class ModelManager:
         初始化模型管理器
 
         Args:
-            model_id: 预定义模型ID 或 "custom"
+            model_id: 预定义模型ID、模型名称 或 "custom"
             custom_config: 自定义模型配置（当 model_id="custom" 时使用）
         """
         self.model_id = model_id
@@ -184,10 +184,21 @@ class ModelManager:
                 description=custom_config.get("description", "自定义模型"),
             )
         elif model_id in self.AVAILABLE_MODELS:
+            # 直接匹配模型ID
             self.config = self.AVAILABLE_MODELS[model_id]
         else:
-            # 默认使用 Claude
-            self.config = self.AVAILABLE_MODELS["claude-3-5-sonnet"]
+            # 尝试通过模型名称查找
+            found_config = None
+            for config in self.AVAILABLE_MODELS.values():
+                if config.name == model_id:
+                    found_config = config
+                    break
+
+            if found_config:
+                self.config = found_config
+            else:
+                # 默认使用 Claude
+                self.config = self.AVAILABLE_MODELS["claude-3-5-sonnet"]
 
     @classmethod
     def get_available_models(cls) -> List[Dict[str, str]]:

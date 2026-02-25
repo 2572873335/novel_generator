@@ -1548,10 +1548,10 @@ class SettingsDialog(QDialog):
         "MOONSHOT_API_KEY": ("Moonshot API Key", "Kimi 模型"),
     }
 
-    # 可用模型
+    # 可用模型（与 model_manager.py 中的 AVAILABLE_MODELS 保持一致）
     MODELS = [
-        "deepseek-chat (DeepSeek)",
-        "claude-sonnet-4-20250514 (Anthropic)",
+        "deepseek-v3 (DeepSeek)",
+        "claude-3-5-sonnet (Anthropic)",
         "gpt-4o (OpenAI)",
         "moonshot-v1-8k (Moonshot)",
     ]
@@ -1768,7 +1768,7 @@ class SettingsDialog(QDialog):
             from core.config_manager import load_env_file, get_api_key
 
             env_config = load_env_file()
-            model_id = env_config.get("DEFAULT_MODEL_ID", "deepseek-chat")
+            model_id = env_config.get("DEFAULT_MODEL_ID", "deepseek-v3")
 
             # 确定需要检查的API Key
             key_name = env_config.get("DEFAULT_MODEL_API_KEY", "DEEPSEEK_API_KEY")
@@ -1819,7 +1819,7 @@ class SettingsDialog(QDialog):
 
             # 映射模型到API Key
             model_key_map = {
-                "deepseek-chat": "DEEPSEEK_API_KEY",
+                "deepseek": "DEEPSEEK_API_KEY",
                 "claude": "ANTHROPIC_API_KEY",
                 "gpt": "OPENAI_API_KEY",
                 "moonshot": "MOONSHOT_API_KEY",
