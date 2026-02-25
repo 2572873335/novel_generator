@@ -1771,7 +1771,7 @@ class SettingsDialog(QDialog):
                 "claude": "ANTHROPIC_API_KEY",
                 "gpt": "OPENAI_API_KEY",
                 "moonshot": "MOONSHOT_API_KEY",
-                "minimax": "MINIMAX_API_KEY",
+                "minimax": "ANTHROPIC_AUTH_TOKEN",
                 "kimi-for-coding": "KIMI_FOR_CODING_API_KEY",
             }
 
