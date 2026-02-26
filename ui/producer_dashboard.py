@@ -888,126 +888,314 @@ class EmotionWavePanel(QWidget):
 
 
 # ============================================================================
-# 实时日志面板（带筛选）
+# 实时日志面板（带筛选和语法高亮）
 # ============================================================================
 class LogPanel(QWidget):
-    """实时日志面板 - 带Agent筛选"""
+    """实时日志面板 - 带Agent筛选和语法高亮 v2.0"""
+
+    # 日志级别图标映射
+    LEVEL_ICONS = {
+        "info": "ℹ️",
+        "warning": "⚠️",
+        "error": "❌",
+        "success": "✅",
+        "system": "⚡",
+    }
+
+    # 关键字高亮颜色
+    KEYWORD_COLORS = {
+        "PASS": CyberpunkTheme.FG_SUCCESS,
+        "FAIL": CyberpunkTheme.FG_DANGER,
+        "REWRITE": CyberpunkTheme.FG_WARNING,
+        "ROLLBACK": CyberpunkTheme.FG_DANGER,
+        "SUSPEND": CyberpunkTheme.FG_DANGER,
+        "Chapter": CyberpunkTheme.FG_PRIMARY,
+        "Emotion": CyberpunkTheme.FG_ACCENT,
+        "ERROR": CyberpunkTheme.FG_DANGER,
+        "completed": CyberpunkTheme.FG_SUCCESS,
+        "generating": CyberpunkTheme.FG_INFO,
+        "auditing": CyberpunkTheme.FG_ACCENT,
+    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.log_count = 0
+        self.max_logs = 1000  # 最大日志条数，防止内存溢出
         self.init_ui()
 
     def init_ui(self):
-        """初始化UI"""
+        """初始化UI - v2.0"""
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: {CyberpunkTheme.BG_DARK};
             }}
-            QTextEdit {{
+            QFrame {{
                 background-color: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                font-family: Consolas, monospace;
-                font-size: 10px;
+                border-radius: {Spacing.RADIUS_MD}px;
             }}
             QComboBox {{
                 background-color: {CyberpunkTheme.BG_MEDIUM};
                 color: {CyberpunkTheme.TEXT_PRIMARY};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                font-family: Consolas;
+                border-radius: {Spacing.RADIUS_SM}px;
+                padding: 4px 8px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_SMALL}px;
+            }}
+            QComboBox:hover {{
+                border-color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+            QPushButton {{
+                background: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+                padding: 6px 12px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_SMALL}px;
+            }}
+            QPushButton:hover {{
+                background: {CyberpunkTheme.BG_HOVER};
+                border-color: {CyberpunkTheme.FG_PRIMARY};
             }}
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
+        layout.setSpacing(Spacing.SM)
 
-        # 标题行
-        title_layout = QHBoxLayout()
+        # === 标题栏 ===
+        header = QFrame()
+        header.setFixedHeight(40)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(Spacing.MD, 0, Spacing.MD, 0)
+        header_layout.setSpacing(Spacing.SM)
 
+        # 标题
         title = QLabel("📋 ARBITRATION LOG")
-        title.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        title.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
         title.setStyleSheet(f"color: {CyberpunkTheme.FG_SECONDARY};")
-        title_layout.addWidget(title)
+        header_layout.addWidget(title)
 
-        title_layout.addStretch()
+        # 日志计数
+        self.count_label = QLabel("0 entries")
+        self.count_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_TINY))
+        self.count_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY};")
+        header_layout.addWidget(self.count_label)
 
-        # Agent筛选下拉框
+        header_layout.addStretch()
+
+        # Agent筛选
+        filter_label = QLabel("Filter:")
+        filter_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
+        filter_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
+        header_layout.addWidget(filter_label)
+
         self.filter_combo = QComboBox()
         self.filter_combo.addItems(["全部", "EmotionWriter", "CreativeDirector", "EmotionTracker",
                                      "ConsistencyGuardian", "StyleAnchor", "WorldBible", "InitializerAgent"])
-        self.filter_combo.setFont(QFont("Consolas", 8))
-        self.filter_combo.setFixedWidth(150)
-        title_layout.addWidget(self.filter_combo)
+        self.filter_combo.setFixedWidth(140)
+        header_layout.addWidget(self.filter_combo)
 
-        layout.addLayout(title_layout)
+        # 清空按钮
+        clear_btn = QPushButton("🗑️ 清空")
+        clear_btn.setFixedWidth(70)
+        clear_btn.clicked.connect(self.clear)
+        header_layout.addWidget(clear_btn)
 
-        # 副标题
-        subtitle = QLabel("Real-time Decision Log")
-        subtitle.setFont(QFont("Consolas", 8))
-        subtitle.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
-        layout.addWidget(subtitle)
+        layout.addWidget(header)
 
-        layout.addSpacing(5)
+        # === 日志区域 ===
+        self.log_frame = QFrame()
+        self.log_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {CyberpunkTheme.BG_DEEP};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_MD}px;
+            }}
+        """)
+        log_layout = QVBoxLayout(self.log_frame)
+        log_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 日志区域
-        self.log_text = QTextEdit()
+        self.log_text = QTextBrowser()
         self.log_text.setReadOnly(True)
-        layout.addWidget(self.log_text, stretch=1)
+        self.log_text.setOpenExternalLinks(False)
+        self.log_text.setStyleSheet(f"""
+            QTextBrowser {{
+                background-color: {CyberpunkTheme.BG_DEEP};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: none;
+                border-radius: {Spacing.RADIUS_MD}px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_SMALL}px;
+                line-height: 1.5;
+                padding: 8px;
+            }}
+            QTextBrowser::viewport {{
+                background-color: {CyberpunkTheme.BG_DEEP};
+            }}
+        """)
+        log_layout.addWidget(self.log_text, stretch=1)
+
+        layout.addWidget(self.log_frame, stretch=1)
+
+        # === 底部工具栏 ===
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(Spacing.SM)
+
+        # 级别筛选按钮
+        self.level_filter = "all"
+        self.level_buttons = {}
+        for level, icon in [("all", "全部"), ("info", "ℹ️"), ("warning", "⚠️"), ("error", "❌"), ("success", "✅")]:
+            btn = QPushButton(icon)
+            btn.setFixedSize(32, 28)
+            btn.setCheckable(True)
+            btn.setChecked(level == "all")
+            btn.clicked.connect(lambda checked, l=level: self.set_level_filter(l))
+            self.level_buttons[level] = btn
+            toolbar.addWidget(btn)
+
+        toolbar.addStretch()
 
         # 导出按钮
-        export_btn = QPushButton("📥 导出日志")
-        export_btn.setFont(QFont("Consolas", 9))
+        export_btn = QPushButton("📥 导出")
+        export_btn.setFixedWidth(70)
         export_btn.clicked.connect(self.export_log)
-        layout.addWidget(export_btn)
+        toolbar.addWidget(export_btn)
+
+        layout.addLayout(toolbar)
+
+    def set_level_filter(self, level: str):
+        """设置日志级别筛选"""
+        self.level_filter = level
+        for lvl, btn in self.level_buttons.items():
+            btn.setChecked(lvl == level)
+
+    def highlight_keywords(self, message: str) -> str:
+        """高亮关键字"""
+        result = message
+        for keyword, color in self.KEYWORD_COLORS.items():
+            # 使用正则表达式替换，保留原文本
+            if keyword in result:
+                result = result.replace(
+                    keyword,
+                    f'<span style="color: {color}; font-weight: bold;">{keyword}</span>'
+                )
+        return result
 
     def append_log(self, message: str, level: str = "info", agent: str = None):
-        """追加日志"""
+        """追加日志 - v2.0 增强版"""
         # 检查筛选
         current_filter = self.filter_combo.currentText()
         if current_filter != "全部" and agent and agent != current_filter:
             return
 
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        # 级别筛选
+        if self.level_filter != "all" and level != self.level_filter:
+            return
 
-        # 颜色映射
+        self.log_count += 1
+
+        # 限制日志数量
+        if self.log_count > self.max_logs:
+            self._trim_logs()
+
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # 带毫秒
+
+        # 级别颜色映射
         colors = {
-            "info": CyberpunkTheme.TEXT_PRIMARY,
+            "info": CyberpunkTheme.TEXT_SECONDARY,
             "warning": CyberpunkTheme.FG_WARNING,
             "error": CyberpunkTheme.FG_DANGER,
             "success": CyberpunkTheme.FG_SUCCESS,
             "system": CyberpunkTheme.FG_PRIMARY,
         }
+        color = colors.get(level, CyberpunkTheme.TEXT_SECONDARY)
 
-        color = colors.get(level, CyberpunkTheme.TEXT_PRIMARY)
+        # 图标
+        icon = self.LEVEL_ICONS.get(level, "•")
 
-        # Agent标签
-        agent_tag = f"[{agent}] " if agent else ""
+        # Agent样式化
+        if agent:
+            agent_html = f'<span style="color: {CyberpunkTheme.FG_ACCENT}; font-weight: bold;">[{agent}]</span>'
+        else:
+            agent_html = ""
 
-        # HTML格式化
-        html = f'<span style="color: {CyberpunkTheme.TEXT_DIM};">[{timestamp}]</span> '
-        html += f'<span style="color: {color};">{agent_tag}{message}</span><br>'
+        # 高亮关键字
+        highlighted_message = self.highlight_keywords(message)
 
+        # 构建HTML
+        html = f'<div style="margin: 2px 0;">'
+        html += f'<span style="color: {CyberpunkTheme.TEXT_DIM};">{icon} [{timestamp}]</span> '
+        if agent_html:
+            html += f'{agent_html} '
+        html += f'<span style="color: {color};">{highlighted_message}</span>'
+        html += '</div>'
+
+        # 插入到文档末尾
         self.log_text.append(html)
 
+        # 更新计数
+        self.count_label.setText(f"{self.log_count} entries")
+
         # 自动滚动到底部
-        cursor = self.log_text.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        self.log_text.setTextCursor(cursor)
+        scrollbar = self.log_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _trim_logs(self):
+        """修剪日志数量"""
+        document = self.log_text.document()
+        block = document.begin()
+
+        # 删除前 100 条
+        for _ in range(100):
+            if block.isValid():
+                cursor = QTextCursor(block)
+                cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+                cursor.removeSelectedText()
+                block = document.begin()
+
+        self.log_count -= 100
 
     def clear(self):
         """清空日志"""
         self.log_text.clear()
+        self.log_count = 0
+        self.count_label.setText("0 entries")
 
     def export_log(self):
         """导出日志到文件"""
         filename, _ = QFileDialog.getSaveFileName(
-            self, "导出日志", f"novel_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
-            "Log Files (*.log);;Text Files (*.txt)"
+            self, "导出日志", f"novel_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+            "HTML Files (*.html);;Log Files (*.log);;Text Files (*.txt)"
         )
         if filename:
             with open(filename, 'w', encoding='utf-8') as f:
-                f.write(self.log_text.toPlainText())
+                if filename.endswith('.html'):
+                    # 导出带样式的HTML
+                    f.write(f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>NovelForge Log</title>
+    <style>
+        body {{
+            background: {CyberpunkTheme.BG_DARK};
+            color: {CyberpunkTheme.TEXT_PRIMARY};
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            padding: 20px;
+        }}
+    </style>
+</head>
+<body>
+{self.log_text.toHtml()}
+</body>
+</html>""")
+                else:
+                    # 导出纯文本
+                    f.write(self.log_text.toPlainText())
 
 
 # ============================================================================
