@@ -125,8 +125,15 @@ novel_generator/
 │   ├── world_bible.py         # [NEW v4.0] Event traceability
 │   └── prompt_assembler.py    # [NEW v4.0] Prompt aggregation
 │
-├── ui/                        # [NEW v4.0] UI components
-│   └── producer_dashboard.py  # Circuit breaker visualization
+├── ui/                        # [NEW v5.0] UI components (modularized)
+│   ├── __init__.py            # Package exports
+│   ├── themes.py              # Theme system (CyberpunkTheme, Typography, etc.)
+│   ├── views.py               # View components (GlobalStatusBar, PreProductionView, etc.)
+│   ├── components.py           # UI components (Agent cards, EmotionWavePanel, LogPanel)
+│   ├── dialogs.py             # Dialogs (Settings, Progress, Feedback)
+│   ├── main_window.py         # Main window (ProducerDashboard)
+│   ├── producer_dashboard.py  # Legacy import (backward compatible)
+│   └── avatars/                # Agent avatars
 │
 ├── config/                    # Configuration files
 │   ├── consistency_rules.yaml # Consistency rules
@@ -185,6 +192,30 @@ novel_generator/
 | SkillContextBus | `skill_context_bus.py` | Cross-skill context |
 | CheckpointManager | `checkpoint_manager.py` | Enhanced checkpoints |
 | TimeAwareRAG | `time_aware_rag.py` | Temporal RAG retrieval |
+
+### UI Components (`ui/`)
+
+**NovelForge v5.0** - Modularized UI architecture with 6 modules:
+
+| Module | File | Description |
+|--------|------|-------------|
+| **Themes** | `themes.py` | CyberpunkTheme, Typography, Spacing, Layout, ThemeManager, ThemeSelector |
+| **Views** | `views.py` | GlobalStatusBar, MainNavigationBar, PreProductionView, ProjectVaultView |
+| **Components** | `components.py` | FlipCard, MiniAgentBadge, MinimalistBadge, EmotionWavePanel, LogPanel, CircuitBreakerPanel, TopControlPanel |
+| **Dialogs** | `dialogs.py` | ProgressResumeDialog, PreProductionPanel, ChapterFeedbackDialog, SettingsDialog, DocumentViewerDialog |
+| **MainWindow** | `main_window.py` | ProducerDashboard - Main window orchestration |
+| **Package** | `__init__.py` | Unified exports for all UI classes |
+
+**Import Examples:**
+```python
+# New modular imports (recommended)
+from ui import ProducerDashboard
+from ui.themes import CyberpunkTheme, ThemeManager
+from ui.components import EmotionWavePanel, LogPanel
+
+# Legacy import (backward compatible)
+from ui.producer_dashboard import ProducerDashboard
+```
 
 ## NovelForge v4.0 Key Features
 
