@@ -187,7 +187,7 @@ class ModelManager:
             name="kimi-for-coding",
             display_name="Kimi for Coding",
             provider=ModelProvider.ANTHROPIC_COMPATIBLE,
-            api_key_env="ANTHROPIC_API_KEY",  # Kimi 使用标准的 API_KEY
+            api_key_env="KIMI_FOR_CODING_API_KEY",  # Kimi 使用自己的 API_KEY
             base_url="https://api.kimi.com/coding/",
             max_tokens=4000,
             description="Kimi for Coding - 专为编程优化，Anthropic API兼容",
