@@ -44,6 +44,7 @@ from ui.views import (
     GlobalStatusBar,
     MainNavigationBar,
     PreProductionView,
+    ProductionView,
     ProjectVaultView
 )
 
@@ -86,6 +87,7 @@ __all__ = [
     'GlobalStatusBar',
     'MainNavigationBar',
     'PreProductionView',
+    'ProductionView',
     'ProjectVaultView',
 
     # 主窗口

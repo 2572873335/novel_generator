@@ -1,10 +1,11 @@
 """
-视图组件 - 全局状态栏、主导航栏、前期筹备视图、项目仓库视图
+视图组件 - 全局状态栏、主导航栏、前期筹备视图、生产视图、项目仓库视图
 """
 
 import sys
 import json
 from pathlib import Path
+from typing import Optional
 
 # PyQt6 导入
 try:
@@ -12,9 +13,10 @@ try:
         QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
         QFrame, QStackedWidget, QGroupBox, QFormLayout, QTextEdit,
         QLineEdit, QComboBox, QSpinBox, QTextBrowser, QListWidget,
-        QListWidgetItem, QScrollArea, QSplitter, QTabWidget, QTextBrowser
+        QListWidgetItem, QScrollArea, QSplitter, QTabWidget, QTextBrowser,
+        QApplication
     )
-    from PyQt6.QtCore import Qt
+    from PyQt6.QtCore import Qt, pyqtSignal, QTimer
     from PyQt6.QtGui import QFont, QCursor
     PYQT_AVAILABLE = True
 except ImportError:
@@ -30,10 +32,10 @@ except ImportError:
 
 
 # ============================================================================
-# 全局状态栏 (Tier 2)
+# 全局状态栏 (Tier 2) - 仅显示信息，无操作按钮
 # ============================================================================
 class GlobalStatusBar(QFrame):
-    """全局状态栏 - 显示当前项目、进度、模型等信息"""
+    """全局状态栏 - 显示当前项目、进度、模型等信息（无操作按钮）"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -148,14 +150,114 @@ class MainNavigationBar(QFrame):
 
 
 # ============================================================================
-# 前期筹备视图 (PreProductionView)
+# 前期筹备视图 (PreProductionView) - 包含操作按钮和信号
 # ============================================================================
 class PreProductionView(QWidget):
-    """前期筹备视图 - 双轨构思法"""
+    """前期筹备视图 - 双轨构思法，带操作按钮和自定义信号"""
+
+    # 信号：视图层发出请求
+    request_generate = pyqtSignal()      # 请求生成设置
+    request_evaluate = pyqtSignal()     # 请求评估
+    request_start = pyqtSignal()         # 请求开始写作
+    status_changed = pyqtSignal(str)      # 状态变更信号
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.project_dir = "novels/default"
         self.init_ui()
+
+    def set_project_dir(self, project_dir: str):
+        """设置项目目录"""
+        self.project_dir = project_dir
+        self.reload_data()
+
+    def reload_data(self):
+        """重新加载项目数据"""
+        # 加载大纲
+        outline_file = Path(self.project_dir) / "outline.md"
+        if outline_file.exists():
+            try:
+                self.edit_outline.setText(outline_file.read_text(encoding="utf-8"))
+            except:
+                pass
+
+        # 加载人物设定
+        chars_file = Path(self.project_dir) / "characters.json"
+        if chars_file.exists():
+            try:
+                self.edit_chars.setText(chars_file.read_text(encoding="utf-8"))
+            except:
+                pass
+
+        # 加载项目配置
+        config_file = Path(self.project_dir) / "project_config.json"
+        if config_file.exists():
+            try:
+                config = json.loads(config_file.read_text(encoding="utf-8"))
+                self.edit_title.setText(config.get("title", ""))
+                self.edit_protagonist.setText(config.get("protagonist", ""))
+                idx = self.edit_genre.findText(config.get("genre", ""))
+                if idx >= 0:
+                    self.edit_genre.setCurrentIndex(idx)
+                self.edit_chapters.setValue(config.get("target_chapters", 50))
+            except:
+                pass
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # 内部堆叠窗口
+        self.stack = QStackedWidget()
+        layout.addWidget(self.stack)
+
+        # ===== Page 0: 选择页 =====
+        self.page_selection = self._create_selection_page()
+        self.stack.addWidget(self.page_selection)
+
+        # ===== Page 1: 手动填表页 =====
+        self.page_manual = self._create_manual_page()
+        self.stack.addWidget(self.page_manual)
+
+        # ===== Page 2: AI对话引导页 =====
+        self.page_ai_chat = self._create_ai_chat_page()
+        self.stack.addWidget(self.page_ai_chat)
+
+    def get_project_config(self) -> dict:
+        """获取项目配置"""
+        return {
+            "title": self.edit_title.text().strip() or "未命名项目",
+            "genre": self.edit_genre.currentText(),
+            "protagonist": self.edit_protagonist.text().strip() or "主角",
+            "target_chapters": self.edit_chapters.value(),
+            "outline": self.edit_outline.toPlainText(),
+            "characters": self.edit_chars.toPlainText()
+        }
+
+    def save_project(self):
+        """保存项目到磁盘"""
+        config = self.get_project_config()
+        safe_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in config["title"])
+        project_dir = f"novels/{safe_name}"
+        project_path = Path(project_dir)
+        project_path.mkdir(parents=True, exist_ok=True)
+
+        # 保存配置
+        config_path = project_path / "project_config.json"
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        # 保存大纲
+        outline_file = project_path / "outline.md"
+        outline_file.write_text(config["outline"], encoding="utf-8")
+
+        # 保存人物
+        chars_file = project_path / "characters.json"
+        chars_file.write_text(config["characters"], encoding="utf-8")
+
+        self.project_dir = project_dir
+        return project_dir
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -230,7 +332,7 @@ class PreProductionView(QWidget):
         return page
 
     def _create_manual_page(self):
-        """创建手动填表页"""
+        """创建手动填表页 - 带操作按钮"""
         from PyQt6.QtWidgets import QFormLayout
         page = QWidget()
         layout = QHBoxLayout(page)
@@ -278,19 +380,53 @@ class PreProductionView(QWidget):
         outline_layout.addWidget(self.edit_outline)
         form_layout.addWidget(outline_group)
 
-        # 诊断按钮
-        btn_diagnose = QPushButton("🔍 资深编辑诊断")
-        btn_diagnose.setStyleSheet(f"""
+        # 人物设定区
+        chars_group = QGroupBox("👤 人物设定")
+        chars_layout = QVBoxLayout(chars_group)
+        self.edit_chars = QTextEdit()
+        self.edit_chars.setPlaceholderText("在这里编辑人物设定...")
+        chars_layout.addWidget(self.edit_chars)
+        form_layout.addWidget(chars_group)
+
+        # 操作按钮区（生成、评估）
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+
+        self.btn_generate = QPushButton("🎲 生成设置")
+        self.btn_generate.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+        self.btn_generate.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_PRIMARY};
+                color: #000;
+                border: 2px solid {CyberpunkTheme.FG_PRIMARY};
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #00ccff;
+            }}
+        """)
+        self.btn_generate.clicked.connect(self._on_generate)
+        btn_layout.addWidget(self.btn_generate)
+
+        self.btn_evaluate = QPushButton("🧐 资深编辑诊断")
+        self.btn_evaluate.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+        self.btn_evaluate.setStyleSheet(f"""
             QPushButton {{
                 background-color: {CyberpunkTheme.FG_WARNING};
                 color: #000;
+                border: 2px solid {CyberpunkTheme.FG_WARNING};
+                border-radius: 6px;
+                padding: 10px 20px;
                 font-weight: bold;
-                padding: 15px;
-                border-radius: 8px;
             }}
         """)
-        btn_diagnose.clicked.connect(self._on_diagnose)
-        form_layout.addWidget(btn_diagnose)
+        self.btn_evaluate.clicked.connect(self._on_diagnose)
+        btn_layout.addWidget(self.btn_evaluate)
+
+        btn_layout.addStretch()
+        form_layout.addLayout(btn_layout)
 
         layout.addWidget(form_container, stretch=3)
 
@@ -306,22 +442,40 @@ class PreProductionView(QWidget):
         self.diagnose_result.setPlaceholderText("诊断结果将在这里显示...")
         result_layout.addWidget(self.diagnose_result)
 
-        # 确认并开始按钮
-        btn_confirm = QPushButton("✅ 确认设定并开机")
-        btn_confirm.setStyleSheet(f"""
+        # 确认并开始写作按钮 - 发出 request_start 信号
+        self.btn_start = QPushButton("✅ 确认设定并开始写作")
+        self.btn_start.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        self.btn_start.setStyleSheet(f"""
             QPushButton {{
                 background-color: {CyberpunkTheme.FG_SUCCESS};
                 color: #000;
-                font-weight: bold;
-                padding: 15px;
+                border: 2px solid {CyberpunkTheme.FG_SUCCESS};
                 border-radius: 8px;
+                padding: 15px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #00cc55;
             }}
         """)
-        result_layout.addWidget(btn_confirm)
+        self.btn_start.clicked.connect(self._on_start)
+        result_layout.addWidget(self.btn_start)
 
         layout.addWidget(result_container, stretch=2)
 
         return page
+
+    def _on_generate(self):
+        """点击生成设置按钮"""
+        self.status_changed.emit("生成中...")
+        self.request_generate.emit()
+
+    def _on_start(self):
+        """点击开始写作按钮"""
+        # 先保存项目
+        self.save_project()
+        self.status_changed.emit("准备开始写作...")
+        self.request_start.emit()
 
     def _create_ai_chat_page(self):
         """创建AI对话引导页"""
@@ -451,6 +605,248 @@ class PreProductionView(QWidget):
 
 
 # ============================================================================
+# 生产视图 (ProductionView) - 包含操作按钮和信号
+# ============================================================================
+class ProductionView(QWidget):
+    """生产视图 - 带操作按钮和自定义信号"""
+
+    # 信号：视图层发出请求
+    request_start = pyqtSignal()      # 请求开始写作
+    request_pause = pyqtSignal()     # 请求暂停
+    request_resume = pyqtSignal()    # 请求恢复
+    status_changed = pyqtSignal(str)  # 状态变更信号
+    save_config = pyqtSignal()       # 保存配置信号
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.project_dir = "novels/default"
+        self.init_ui()
+
+    def set_project_dir(self, project_dir: str):
+        """设置项目目录"""
+        self.project_dir = project_dir
+
+    def reload_data(self):
+        """重新加载项目数据"""
+        # 加载大纲
+        outline_file = Path(self.project_dir) / "outline.md"
+        if outline_file.exists():
+            try:
+                self.outline_edit.setPlainText(outline_file.read_text(encoding="utf-8"))
+            except:
+                pass
+
+        # 加载人物
+        chars_file = Path(self.project_dir) / "characters.json"
+        if chars_file.exists():
+            try:
+                self.chars_edit.setPlainText(chars_file.read_text(encoding="utf-8"))
+            except:
+                pass
+
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # ===== 生产控制栏 =====
+        control_bar = QFrame()
+        control_bar.setFixedHeight(50)
+        control_bar.setStyleSheet(f"""
+            QFrame {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
+            }}
+            QPushButton {{
+                background-color: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-family: Consolas;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {CyberpunkTheme.BG_HOVER};
+                border-color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+        """)
+        control_layout = QHBoxLayout(control_bar)
+        control_layout.setContentsMargins(20, 0, 20, 0)
+
+        # 状态标签
+        self.status_label = QLabel("🟢 等待开始")
+        self.status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS}; font-weight: bold;")
+        control_layout.addWidget(self.status_label)
+
+        control_layout.addStretch()
+
+        # 保存按钮
+        self.btn_save = QPushButton("💾 保存设定")
+        self.btn_save.clicked.connect(self._on_save)
+        control_layout.addWidget(self.btn_save)
+
+        # 开始/暂停按钮
+        self.btn_start = QPushButton("▶ 确认开机 (START)")
+        self.btn_start.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_SUCCESS};
+                color: #000;
+                font-weight: bold;
+            }}
+        """)
+        self.btn_start.clicked.connect(self._on_start)
+        control_layout.addWidget(self.btn_start)
+
+        self.btn_pause = QPushButton("⏸ 暂停 (PAUSE)")
+        self.btn_pause.setEnabled(False)
+        self.btn_pause.clicked.connect(self._on_pause)
+        control_layout.addWidget(self.btn_pause)
+
+        self.btn_resume = QPushButton("⏩ 恢复 (RESUME)")
+        self.btn_resume.setEnabled(False)
+        self.btn_resume.clicked.connect(self._on_resume)
+        control_layout.addWidget(self.btn_resume)
+
+        layout.addWidget(control_bar)
+
+        # ===== 核心三栏布局 =====
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # 左侧：情绪图+工牌
+        left_panel = QSplitter(Qt.Orientation.Vertical)
+
+        # 情绪波浪图
+        try:
+            from ui.components import EmotionWavePanel
+            self.emotion_panel = EmotionWavePanel()
+        except ImportError:
+            from components import EmotionWavePanel
+            self.emotion_panel = EmotionWavePanel()
+        left_panel.addWidget(self.emotion_panel)
+
+        # Agent 列表
+        agent_container = QWidget()
+        agent_layout = QVBoxLayout(agent_container)
+        agent_layout.setContentsMargins(5, 5, 5, 5)
+        agent_label = QLabel("👥 AGENT CLUSTER")
+        agent_label.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; font-weight: bold; font-family: Consolas;")
+        agent_layout.addWidget(agent_label)
+        left_panel.addWidget(agent_container)
+
+        left_panel.setStretchFactor(0, 2)
+        left_panel.setStretchFactor(1, 1)
+        main_splitter.addWidget(left_panel)
+
+        # 中间：文稿区+日志
+        center_panel = QSplitter(Qt.Orientation.Vertical)
+
+        # 文稿查看器
+        editor_container = QWidget()
+        editor_layout = QVBoxLayout(editor_container)
+        editor_layout.setContentsMargins(10, 10, 10, 0)
+
+        self.manuscript_viewer = QTextBrowser()
+        self.manuscript_viewer.setStyleSheet(f"""
+            background-color: #1e1e1e; color: #d4d4d4;
+            font-family: 'Microsoft YaHei', Consolas; font-size: 15px;
+            line-height: 1.8; padding: 20px; border-radius: 8px; border: 1px solid #333;
+        """)
+        self.manuscript_viewer.setPlaceholderText(">> AI 实时生成正文将在这里显示...")
+        # 性能优化
+        self.manuscript_viewer.setUndoRedoEnabled(False)
+        self.manuscript_viewer.document().setMaximumBlockCount(1000)
+        editor_layout.addWidget(self.manuscript_viewer)
+        center_panel.addWidget(editor_container)
+
+        # 日志面板
+        try:
+            from ui.components import LogPanel
+            self.log_panel = LogPanel()
+        except ImportError:
+            from components import LogPanel
+            self.log_panel = LogPanel()
+        center_panel.addWidget(self.log_panel)
+        center_panel.setStretchFactor(0, 7)
+        center_panel.setStretchFactor(1, 3)
+
+        main_splitter.addWidget(center_panel)
+
+        # 右侧：设定参考区
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(5, 5, 10, 5)
+
+        self.right_tabs = QTabWidget()
+        self.right_tabs.setStyleSheet(f"""
+            QTabBar::tab {{ background: {CyberpunkTheme.BG_DARK}; color: white; padding: 8px 12px; }}
+        """)
+
+        self.outline_edit = QTextEdit()
+        self.chars_edit = QTextEdit()
+        self.rules_edit = QTextEdit()
+        self.eval_browser = QTextBrowser()
+
+        for widget in [self.outline_edit, self.chars_edit, self.rules_edit]:
+            widget.setStyleSheet(f"background-color: {CyberpunkTheme.BG_MEDIUM}; color: {CyberpunkTheme.TEXT_PRIMARY}; font-size: 13px; font-family: Consolas;")
+
+        self.right_tabs.addTab(self.outline_edit, "📖 剧情大纲")
+        self.right_tabs.addTab(self.chars_edit, "👤 角色档案")
+        self.right_tabs.addTab(self.rules_edit, "⚙️ 世界法则")
+        self.right_tabs.addTab(self.eval_browser, "🧐 诊断报告")
+
+        right_layout.addWidget(self.right_tabs)
+        right_panel.setMinimumWidth(300)
+
+        main_splitter.addWidget(right_panel)
+        main_splitter.setStretchFactor(0, 2)
+        main_splitter.setStretchFactor(1, 6)
+        main_splitter.setStretchFactor(2, 2)
+
+        layout.addWidget(main_splitter)
+
+    def _on_start(self):
+        """开始写作"""
+        self.status_changed.emit("写作中...")
+        self.request_start.emit()
+
+    def _on_pause(self):
+        """暂停"""
+        self.status_changed.emit("已暂停")
+        self.request_pause.emit()
+
+    def _on_resume(self):
+        """恢复"""
+        self.status_changed.emit("写作中...")
+        self.request_resume.emit()
+
+    def _on_save(self):
+        """保存配置"""
+        self.save_config.emit()
+
+    def append_log(self, message: str, level: str = "info", agent: str = None):
+        """添加日志"""
+        self.log_panel.append_log(message, level, agent)
+
+    def append_text(self, text: str):
+        """追加文本到文稿区"""
+        cursor = self.manuscript_viewer.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(text)
+        self.manuscript_viewer.setTextCursor(cursor)
+        self.manuscript_viewer.ensureCursorVisible()
+
+    def clear_text(self):
+        """清空文稿区"""
+        self.manuscript_viewer.clear()
+
+    def update_emotion_curve(self, expected: list, actual: list, chapter: int, total: int):
+        """更新情绪曲线"""
+        self.emotion_panel.update_curve(expected, actual, chapter, total)
+
+
+# ============================================================================
 # 项目仓库视图 (ProjectVaultView)
 # ============================================================================
 class ProjectVaultView(QWidget):
@@ -460,6 +856,10 @@ class ProjectVaultView(QWidget):
         super().__init__(parent)
         self.project_dir = project_dir
         self.init_ui()
+        self.load_projects()
+
+    def reload_data(self):
+        """重新加载数据"""
         self.load_projects()
 
     def init_ui(self):

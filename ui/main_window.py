@@ -1,5 +1,5 @@
 """
-主窗口 - ProducerDashboard
+主窗口 - ProducerDashboard (v5.0 架构优化版)
 """
 
 import sys
@@ -39,36 +39,24 @@ except ImportError:
 
 # 导入视图
 try:
-    from ui.views import GlobalStatusBar, MainNavigationBar, PreProductionView, ProjectVaultView
-except ImportError:
-    from views import GlobalStatusBar, MainNavigationBar, PreProductionView, ProjectVaultView
-
-# 导入组件
-try:
-    from ui.components import (
-        FlipCard, AgentCardBack, MiniAgentBadge, MinimalistBadge,
-        AgentDetailPanel, AgentMatrixPanel, EmotionWavePanel,
-        AutoSaveIndicator, EvaluationCard, LogPanel,
-        CircuitBreakerPanel, StatusLightIndicator, RollbackHistoryBars, TopControlPanel
+    from ui.views import (
+        GlobalStatusBar, MainNavigationBar, PreProductionView,
+        ProductionView, ProjectVaultView
     )
 except ImportError:
-    from components import (
-        FlipCard, AgentCardBack, MiniAgentBadge, MinimalistBadge,
-        AgentDetailPanel, AgentMatrixPanel, EmotionWavePanel,
-        AutoSaveIndicator, EvaluationCard, LogPanel,
-        CircuitBreakerPanel, StatusLightIndicator, RollbackHistoryBars, TopControlPanel
+    from views import (
+        GlobalStatusBar, MainNavigationBar, PreProductionView,
+        ProductionView, ProjectVaultView
     )
 
 # 导入对话框
 try:
     from ui.dialogs import (
-        ProgressResumeDialog, PreProductionPanel, ChapterFeedbackDialog,
-        SettingsDialog, DocumentViewerDialog
+        ProgressResumeDialog, SettingsDialog, DocumentViewerDialog
     )
 except ImportError:
     from dialogs import (
-        ProgressResumeDialog, PreProductionPanel, ChapterFeedbackDialog,
-        SettingsDialog, DocumentViewerDialog
+        ProgressResumeDialog, SettingsDialog, DocumentViewerDialog
     )
 
 
@@ -89,14 +77,17 @@ class PreProdWorker(QThread):
 
 
 # ============================================================================
-# 主窗口 - 全面升级版
+# 主窗口 - v5.0 架构优化版
 # ============================================================================
 class ProducerDashboard(QMainWindow):
     """
-    制片人仪表板主窗口 - v4.2 UI优化版
-    """
+    制片人仪表板主窗口 - v5.0 架构优化版
 
-    start_generation = pyqtSignal(dict)
+    架构特点：
+    1. 按钮迁移：操作按钮移入对应视图
+    2. 信号解耦：视图通过信号与主窗口通信
+    3. 数据同步：切换视图时自动重新加载数据
+    """
 
     def __init__(self, project_dir: str = None):
         super().__init__()
@@ -104,7 +95,7 @@ class ProducerDashboard(QMainWindow):
         self.project_dir = project_dir or "novels/default"
         self.worker = None
         self.project_config = None
-        self.start_chapter = 1  # 起始章节
+        self.start_chapter = 1
 
         self.init_ui()
 
@@ -115,7 +106,7 @@ class ProducerDashboard(QMainWindow):
         self.display_project_info()
 
     def init_ui(self):
-        """初始化UI - v5.0 终极创作套件"""
+        """初始化UI - v5.0 架构优化版"""
         self.setWindowTitle("NovelForge v5.0 - Ultimate Creator Suite")
         self.setMinimumSize(1600, 900)
         self.setStyleSheet(f"QMainWindow {{ background-color: {CyberpunkTheme.BG_DEEP}; }}")
@@ -136,16 +127,17 @@ class ProducerDashboard(QMainWindow):
         # ====== 3. 主堆叠窗口 ======
         self.main_stack = QStackedWidget()
 
-        # === Page A: 前期筹备 ===
+        # === Page A: 前期筹备 (带操作按钮) ===
         self.view_preprod = PreProductionView()
+        self.view_preprod.set_project_dir(self.project_dir)
         self.main_stack.addWidget(self.view_preprod)
 
-        # === Page B: 生产监控 (现有的三栏布局) ===
-        self.view_prod = QWidget()
-        self._setup_production_view(self.view_prod)
+        # === Page B: 生产监控 (带操作按钮) ===
+        self.view_prod = ProductionView()
+        self.view_prod.set_project_dir(self.project_dir)
         self.main_stack.addWidget(self.view_prod)
 
-        # === Page C: 项目仓库 ===
+        # === Page C: 项目仓库 (带数据同步) ===
         self.view_vault = ProjectVaultView(self.project_dir)
         self.main_stack.addWidget(self.view_vault)
 
@@ -160,148 +152,84 @@ class ProducerDashboard(QMainWindow):
         self.nav_bar.btn_prod.clicked.connect(lambda: self.main_stack.setCurrentIndex(1))
         self.nav_bar.btn_vault.clicked.connect(lambda: self.main_stack.setCurrentIndex(2))
 
-    def _setup_production_view(self, parent_widget):
-        """设置生产监控视图"""
-        layout = QVBoxLayout(parent_widget)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # ====== 6. 连接视图信号 ======
+        self._connect_view_signals()
 
-        # === 顶部控制栏 ===
-        self.top_bar = TopControlPanel()
-        layout.addWidget(self.top_bar)
+        # ====== 7. 数据同步：切换视图时重新加载 ======
+        self.main_stack.currentChanged.connect(self._on_view_changed)
 
-        # === 核心 IDE 三栏布局 (Splitter) ===
-        main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_splitter.setStyleSheet(f"QSplitter::handle {{ background-color: {CyberpunkTheme.BORDER_COLOR}; width: 2px; }}")
+    def _connect_view_signals(self):
+        """连接视图信号 - 实现信号解耦"""
 
-        # 左侧：微缩工牌 + 情绪图 + 大工牌展示区
-        left_panel = QSplitter(Qt.Orientation.Vertical)
-        left_panel.setMinimumWidth(300)
-        left_panel.setMaximumWidth(400)
+        # === PreProductionView 信号 ===
+        self.view_preprod.request_generate.connect(self._on_request_generate)
+        self.view_preprod.request_evaluate.connect(self._on_request_evaluate)
+        self.view_preprod.request_start.connect(self._on_request_start)
+        self.view_preprod.status_changed.connect(self._on_status_changed)
 
-        # 左上：情绪波浪图
-        self.emotion_panel = EmotionWavePanel()
-        left_panel.addWidget(self.emotion_panel)
+        # === ProductionView 信号 ===
+        self.view_prod.request_start.connect(self._on_prod_request_start)
+        self.view_prod.request_pause.connect(self._on_prod_request_pause)
+        self.view_prod.request_resume.connect(self._on_prod_request_resume)
+        self.view_prod.save_config.connect(self._on_save_config)
+        self.view_prod.status_changed.connect(self._on_status_changed)
 
-        # 左中：迷你工牌列表
-        mini_badge_container = QWidget()
-        mini_layout = QVBoxLayout(mini_badge_container)
-        mini_layout.setContentsMargins(5, 5, 5, 5)
-        mini_layout.addWidget(QLabel("👥 AGENT CLUSTER", styleSheet=f"color: {CyberpunkTheme.FG_PRIMARY}; font-weight: bold; font-family: Consolas;"))
+    def _on_view_changed(self, index: int):
+        """视图切换时重新加载数据"""
+        if index == 0:
+            # 切换到前期筹备视图
+            self.view_preprod.reload_data()
+        elif index == 1:
+            # 切换到生产视图
+            self.view_prod.reload_data()
+        elif index == 2:
+            # 切换到项目仓库视图
+            self.view_vault.reload_data()
 
-        self.mini_badges = {}
-        self.large_badges = {}
-        AVATAR_DIR = str(Path(__file__).resolve().parent.parent / "avatars")
+    def _on_status_changed(self, status: str):
+        """状态变更处理"""
+        self.global_status_bar.update_status(status)
 
-        agent_defs = [
-            ("InitializerAgent", "建组设定", "🏗️", "avatar_08.png"),
-            ("PromptAssembler", "指令聚合", "🎛️", "pixel_avatar_01.png"),
-            ("ElasticArchitect", "迷雾开图", "🗺️", "pixel_avatar_02.png"),
-            ("EmotionWriter", "场景生成", "✍️", "pixel_avatar_03.png"),
-            ("PayoffAuditor", "情绪核算", "🧮", "pixel_avatar_04.png"),
-            ("ConsistencyGuardian", "一致性守护", "🛡️", "pixel_avatar_05.png"),
-            ("CreativeDirector", "仲裁回滚", "👑", "pixel_avatar_07.png"),
-            ("StyleAnchor", "特征对齐", "🎨", "pixel_avatar_08.png")
-        ]
+    # === PreProductionView 信号处理 ===
+    def _on_request_generate(self):
+        """处理生成请求"""
+        self.global_status_bar.update_status("生成中...", "info")
+        # TODO: 实现实际生成逻辑
+        self.global_status_bar.update_status("系统待命", "success")
 
-        mini_scroll = QScrollArea()
-        mini_scroll.setWidgetResizable(True)
-        mini_scroll.setStyleSheet("border: none; background: transparent;")
-        mini_scroll_widget = QWidget()
-        mini_scroll_layout = QVBoxLayout(mini_scroll_widget)
+    def _on_request_evaluate(self):
+        """处理评估请求"""
+        self.global_status_bar.update_status("评估中...", "warning")
+        # TODO: 实现实际评估逻辑
+        self.global_status_bar.update_status("系统待命", "success")
 
-        for name, role, emoji, avatar in agent_defs:
-            mini_badge = MiniAgentBadge(name, emoji)
-            mini_badge.clicked.connect(self.switch_large_badge)
-            self.mini_badges[name] = mini_badge
-            mini_scroll_layout.addWidget(mini_badge)
+    def _on_request_start(self):
+        """处理开始写作请求"""
+        self.global_status_bar.update_status("准备开始...", "info")
+        # 切换到生产视图
+        self.main_stack.setCurrentIndex(1)
+        # 触发生产视图的开始
+        self.view_prod.btn_start.click()
 
-            large_badge = MinimalistBadge(name, role, f"Core Logic for {name}", f"{AVATAR_DIR}/{avatar}", emoji)
-            large_badge.hide()
-            self.large_badges[name] = large_badge
+    # === ProductionView 信号处理 ===
+    def _on_prod_request_start(self):
+        """生产视图请求开始"""
+        self.do_start_generation()
 
-        mini_scroll_layout.addStretch()
-        mini_scroll.setWidget(mini_scroll_widget)
-        mini_layout.addWidget(mini_scroll)
-        left_panel.addWidget(mini_badge_container)
+    def _on_prod_request_pause(self):
+        """生产视图请求暂停"""
+        self.on_pause_generation()
 
-        # 左下：大工牌展示区
-        self.large_badge_area = QWidget()
-        self.large_badge_layout = QVBoxLayout(self.large_badge_area)
-        self.large_badge_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.large_badge_layout.addWidget(QLabel("Click a mini badge to inspect", styleSheet=f"color: {CyberpunkTheme.TEXT_DIM};"))
-        left_panel.addWidget(self.large_badge_area)
+    def _on_prod_request_resume(self):
+        """生产视图请求恢复"""
+        self.on_resume_generation()
 
-        # 中间：沉浸式创作区
-        center_panel = QSplitter(Qt.Orientation.Vertical)
-        center_panel.setMinimumWidth(600)
-
-        editor_container = QWidget()
-        editor_layout = QVBoxLayout(editor_container)
-        editor_layout.setContentsMargins(10, 10, 10, 0)
-
-        self.manuscript_viewer = QTextBrowser()
-        self.manuscript_viewer.setStyleSheet(f"""
-            background-color: #1e1e1e; color: #d4d4d4;
-            font-family: 'Microsoft YaHei', Consolas; font-size: 15px;
-            line-height: 1.8; padding: 20px; border-radius: 8px; border: 1px solid #333;
-        """)
-        self.manuscript_viewer.setPlaceholderText(">> AI 实时生成正文将在这里显示...")
-        editor_layout.addWidget(self.manuscript_viewer)
-        center_panel.addWidget(editor_container)
-
-        self.log_panel = LogPanel()
-        center_panel.addWidget(self.log_panel)
-        center_panel.setStretchFactor(0, 7)
-        center_panel.setStretchFactor(1, 3)
-
-        # 右侧：常驻设定参考区
-        right_panel = QWidget()
-        right_panel.setMinimumWidth(350)
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(5, 5, 10, 5)
-
-        self.right_tabs = QTabWidget()
-        self.right_tabs.setStyleSheet(f"QTabBar::tab {{ background: {CyberpunkTheme.BG_DARK}; color: white; padding: 8px 12px; }}")
-
-        self.outline_edit = QTextEdit()
-        self.chars_edit = QTextEdit()
-        self.rules_edit = QTextEdit()
-        self.eval_browser = QTextBrowser()
-
-        for widget in [self.outline_edit, self.chars_edit, self.rules_edit]:
-            widget.setStyleSheet(f"background-color: {CyberpunkTheme.BG_MEDIUM}; color: {CyberpunkTheme.TEXT_PRIMARY}; font-size: 13px; font-family: Consolas;")
-
-        self.right_tabs.addTab(self.outline_edit, "📖 剧情大纲")
-        self.right_tabs.addTab(self.chars_edit, "👤 角色档案")
-        self.right_tabs.addTab(self.rules_edit, "⚙️ 世界法则")
-        self.right_tabs.addTab(self.eval_browser, "🧐 诊断报告")
-
-        right_layout.addWidget(self.right_tabs)
-
-        # 组装三栏
-        main_splitter.addWidget(left_panel)
-        main_splitter.addWidget(center_panel)
-        main_splitter.addWidget(right_panel)
-        main_splitter.setStretchFactor(0, 2)
-        main_splitter.setStretchFactor(1, 6)
-        main_splitter.setStretchFactor(2, 2)
-
-        layout.addWidget(main_splitter)
-
-        # 绑定按钮事件
-        self.top_bar.btn_start.clicked.connect(self.do_start_generation)
-        self.top_bar.btn_pause.clicked.connect(self.on_pause_generation)
-        self.top_bar.btn_resume.clicked.connect(self.on_resume_generation)
-        self.top_bar.btn_save_config.clicked.connect(self.save_right_panel_configs)
-        self.top_bar.btn_generate.clicked.connect(self.trigger_generate_settings)
-        self.top_bar.btn_evaluate.clicked.connect(self.trigger_evaluate_settings)
-
-    def save_right_panel_configs(self):
-        """保存右侧面板配置"""
+    def _on_save_config(self):
+        """保存配置"""
         try:
-            outline = self.outline_edit.toPlainText()
-            chars = self.chars_edit.toPlainText()
-            rules = self.rules_edit.toPlainText()
+            outline = self.view_prod.outline_edit.toPlainText()
+            chars = self.view_prod.chars_edit.toPlainText()
+            rules = self.view_prod.rules_edit.toPlainText()
 
             if self.project_dir:
                 project_path = Path(self.project_dir)
@@ -314,40 +242,11 @@ class ProducerDashboard(QMainWindow):
                 if rules:
                     (project_path / "rules_edit.md").write_text(rules, encoding="utf-8")
 
-                self.log_panel.append_log("设定修改已保存", "success")
+                self.view_prod.append_log("设定修改已保存", "success")
         except Exception as e:
-            self.log_panel.append_log(f"保存失败: {e}", "error")
+            self.view_prod.append_log(f"保存失败: {e}", "error")
 
-    def switch_large_badge(self, agent_name: str):
-        """点击迷你工牌，在左下方召唤对应的 3D 翻转大卡片"""
-        for i in reversed(range(self.large_badge_layout.count())):
-            widget = self.large_badge_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
-
-        if agent_name in self.large_badges:
-            card = self.large_badges[agent_name]
-            card.show()
-            self.large_badge_layout.addWidget(card)
-
-    def on_text_stream(self, text_chunk: str):
-        """接收打字机文本流"""
-        cursor = self.manuscript_viewer.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(text_chunk)
-        self.manuscript_viewer.setTextCursor(cursor)
-        self.manuscript_viewer.ensureCursorVisible()
-
-    def update_agent_status(self, name: str, status: str, task: str = ""):
-        """同步更新大卡片和迷你卡片的状态灯"""
-        colors = {"idle": CyberpunkTheme.FG_SUCCESS, "thinking": CyberpunkTheme.FG_INFO, "writing": CyberpunkTheme.FG_PRIMARY, "auditing": CyberpunkTheme.FG_ACCENT, "conflict": CyberpunkTheme.FG_DANGER}
-        color_hex = colors.get(status.lower(), CyberpunkTheme.FG_SUCCESS)
-
-        if name in self.large_badges:
-            self.large_badges[name].set_status(status, task)
-        if name in self.mini_badges:
-            self.mini_badges[name].set_status(color_hex)
-
+    # === 菜单功能 ===
     def setup_menu(self):
         """设置菜单栏"""
         menubar = self.menuBar()
@@ -379,11 +278,6 @@ class ProducerDashboard(QMainWindow):
         docs_action.triggered.connect(self.on_view_documents)
         view_menu.addAction(docs_action)
 
-        view_menu.addSeparator()
-        log_action = QAction("清空日志", self)
-        log_action.triggered.connect(self.log_panel.clear)
-        view_menu.addAction(log_action)
-
         # 帮助菜单
         help_menu = menubar.addMenu("❓ 帮助")
         about_action = QAction("关于", self)
@@ -397,13 +291,6 @@ class ProducerDashboard(QMainWindow):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     self.project_config = json.load(f)
-
-                config = self.project_config
-                if config:
-                    self.outline_edit.setPlainText(config.get("outline", ""))
-                    self.chars_edit.setPlainText(config.get("characters", ""))
-                    self.rules_edit.setPlainText(config.get("rules", config.get("settings", "")))
-
             except Exception as e:
                 print(f"Warning: Failed to load project config: {e}")
                 self.project_config = None
@@ -411,31 +298,25 @@ class ProducerDashboard(QMainWindow):
             self.project_config = None
 
     def display_project_info(self):
-        """显示项目信息到日志"""
+        """显示项目信息"""
         if self.project_config:
             title = self.project_config.get("title", "Unknown")
             genre = self.project_config.get("genre", "Unknown")
-            protagonist = self.project_config.get("protagonist", "Unknown")
             chapters = self.project_config.get("target_chapters", 0)
 
-            self.log_panel.append_log(f"=== PROJECT LOADED ===", "system")
-            self.log_panel.append_log(f"Title: {title}", "info")
-            self.log_panel.append_log(f"Genre: {genre}", "info")
-            self.log_panel.append_log(f"Protagonist: {protagonist}", "info")
-            self.log_panel.append_log(f"Target Chapters: {chapters}", "info")
-
-            metrics = self.project_config.get("metrics", [])
-            if metrics:
-                self.log_panel.append_log(f"Metrics: {', '.join(metrics)}", "info")
-            self.log_panel.append_log(f"=====================", "system")
+            self.view_prod.append_log(f"=== PROJECT LOADED ===", "system")
+            self.view_prod.append_log(f"Title: {title}", "info")
+            self.view_prod.append_log(f"Genre: {genre}", "info")
+            self.view_prod.append_log(f"Target Chapters: {chapters}", "info")
+            self.view_prod.append_log(f"=====================", "system")
         else:
-            self.log_panel.append_log("No project config found - starting in demo mode", "warning")
+            self.view_prod.append_log("No project config found - starting in demo mode", "warning")
 
     def on_new_project(self):
         """新建项目"""
         self.project_dir = "novels/default"
         self.project_config = {}
-        self.log_panel.append_log("新建项目 - 请在前期筹备室填写项目信息", "info")
+        self.view_prod.append_log("新建项目 - 请在前期筹备室填写项目信息", "info")
         self.display_project_info()
 
     def on_open_project(self):
@@ -456,75 +337,26 @@ class ProducerDashboard(QMainWindow):
         dialog = SettingsDialog(self)
         dialog.exec()
 
-    def on_theme_changed(self, theme_key: str):
-        """主题切换事件"""
-        theme = ThemeManager.get_theme(theme_key)
-        for color_name, color_value in theme["colors"].items():
-            if hasattr(CyberpunkTheme, color_name):
-                setattr(CyberpunkTheme, color_name, color_value)
-        self.setStyleSheet("")
-        self.update()
-        QMessageBox.information(
-            self, "主题切换",
-            f"已切换到「{theme['name']}」主题",
-            QMessageBox.StandardButton.Ok
-        )
-
     def on_about(self):
         """关于"""
         QMessageBox.about(
             self, "关于 NovelForge",
-            "NovelForge v4.2 - AI小说生成系统\n\n"
+            "NovelForge v5.0 - AI小说生成系统\n\n"
             "基于Anthropic长运行代理最佳实践的全自动小说创作系统"
         )
-
-    def on_start_generation(self):
-        """开始生成"""
-        self.check_and_prompt_resume()
-
-    def check_and_prompt_resume(self):
-        """检查并提示是否续写"""
-        progress_file = Path(self.project_dir) / "novel-progress.txt"
-        chapters_dir = Path(self.project_dir) / "chapters"
-
-        has_progress = False
-
-        if progress_file.exists():
-            try:
-                with open(progress_file, 'r', encoding="utf-8") as f:
-                    data = json.load(f)
-                if data.get('completed_chapters', 0) > 0:
-                    has_progress = True
-            except:
-                pass
-
-        if chapters_dir.exists():
-            chapter_files = list(chapters_dir.glob("chapter-*.md"))
-            if len(chapter_files) > 0:
-                has_progress = True
-
-        if has_progress:
-            dialog = ProgressResumeDialog(self.project_dir, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.start_chapter = dialog.get_start_chapter()
-                self.log_panel.append_log(f"Continuing from chapter {self.start_chapter}", "info")
-            else:
-                self.start_chapter = 1
-
-        self.do_start_generation()
 
     def do_start_generation(self):
         """执行开始生成"""
         if GenerationWorker is None:
-            self.log_panel.append_log("ERROR: GenerationWorker not available", "error")
+            self.view_prod.append_log("ERROR: GenerationWorker not available", "error")
             return
 
-        self.log_panel.append_log("Initializing generation task...", "system")
+        self.view_prod.append_log("Initializing generation task...", "system")
 
         config = self.project_config or {}
         target_chapters = config.get("target_chapters", 10)
 
-        self.log_panel.append_log(f"Creating worker for {target_chapters} chapters starting from {self.start_chapter}...", "info")
+        self.view_prod.append_log(f"Creating worker for {target_chapters} chapters...", "info")
 
         worker_config = {
             "target_chapters": target_chapters,
@@ -535,9 +367,6 @@ class ProducerDashboard(QMainWindow):
         self.worker = GenerationWorker(self.project_dir, worker_config)
         self.connect_worker(self.worker)
 
-        # 更新Agent状态
-        self.update_agent_status("EmotionWriter", "thinking")
-
         # 启动worker
         self.worker.start()
 
@@ -545,77 +374,27 @@ class ProducerDashboard(QMainWindow):
         """暂停生成"""
         if self.worker:
             self.worker.stop()
-        self.log_panel.append_log("Generation paused", "warning")
-        self.update_agent_status("EmotionWriter", "idle")
+        self.view_prod.append_log("Generation paused", "warning")
 
     def on_resume_generation(self):
         """恢复生成"""
-        self.log_panel.append_log("Resuming generation...", "system")
+        self.view_prod.append_log("Resuming generation...", "system")
 
     def connect_worker(self, worker):
+        """连接worker信号"""
         self.worker = worker
-        worker.log_signal.connect(self.on_log)
-        worker.agent_status_signal.connect(lambda d: self.update_agent_status(d["name"], d["status"], d.get("task", "")))
-        worker.emotion_curve_signal.connect(self.on_emotion_curve)
-        worker.text_stream_signal.connect(self.on_text_stream)
+        worker.log_signal.connect(self.view_prod.append_log)
+        worker.text_stream_signal.connect(self.view_prod.append_text)
+        worker.emotion_curve_signal.connect(self._on_emotion_curve)
 
-    def on_log(self, message: str, agent: str = None):
-        """日志信号处理"""
-        if "ERROR" in message.upper():
-            level = "error"
-        elif "WARNING" in message.upper():
-            level = "warning"
-        elif "completed" in message.lower():
-            level = "success"
-        else:
-            level = "info"
-
-        self.log_panel.append_log(message, level, agent)
-
-    def on_emotion_curve(self, data: dict):
+    def _on_emotion_curve(self, data: dict):
         """情绪曲线更新"""
         expected = data.get("expected", [])
         actual = data.get("actual", [])
         chapter = data.get("chapter", 0)
-
         total = self.worker.config.get("target_chapters", 10) if self.worker else 10
 
-        self.emotion_panel.update_curve(expected, actual, chapter, total)
-
-    def trigger_generate_settings(self):
-        """触发生成设定"""
-        self.top_bar.btn_generate.setText("生成中...")
-        self.top_bar.btn_generate.setEnabled(False)
-        self.top_bar.status_indicator.setText("🔵 Agent 生成设定中...")
-        self.right_tabs.setCurrentIndex(0)
-
-        self.pre_worker = PreProdWorker(self.project_dir, action="generate")
-        self.pre_worker.finished_signal.connect(self.on_preprod_finished)
-        self.pre_worker.start()
-
-    def trigger_evaluate_settings(self):
-        """触发毒舌诊断"""
-        self.top_bar.btn_evaluate.setText("评估中...")
-        self.top_bar.btn_evaluate.setEnabled(False)
-        self.top_bar.status_indicator.setText("🟣 编辑审查中...")
-        self.right_tabs.setCurrentIndex(3)
-
-        self.pre_worker = PreProdWorker(self.project_dir, action="evaluate")
-        self.pre_worker.finished_signal.connect(self.on_preprod_finished)
-        self.pre_worker.start()
-
-    def on_preprod_finished(self, data: dict):
-        """前期筹备完成回调"""
-        self.top_bar.btn_generate.setText("1. 🎲 生成基础设定")
-        self.top_bar.btn_generate.setEnabled(True)
-        self.top_bar.btn_evaluate.setText("2. 🧐 资深编辑诊断")
-        self.top_bar.btn_evaluate.setEnabled(True)
-        self.top_bar.status_indicator.setText("🟢 系统待命")
-
-        if "outline" in data: self.outline_edit.setText(data["outline"])
-        if "characters" in data: self.chars_edit.setText(data["characters"])
-        if "rules" in data: self.rules_edit.setText(data["rules"])
-        if "evaluation" in data: self.eval_browser.setHtml(data["evaluation"])
+        self.view_prod.update_emotion_curve(expected, actual, chapter, total)
 
 
 # ============================================================================
@@ -637,7 +416,7 @@ def run_dashboard(project_dir: str = None):
     Path(project_dir).mkdir(parents=True, exist_ok=True)
     app.setQuitOnLastWindowClosed(True)
 
-    print("[System] 正在点火，启动赛博编辑部中控大屏 v4.2...")
+    print("[System] 正在点火，启动赛博编辑部中控大屏 v5.0...")
 
     window = ProducerDashboard(project_dir)
     window.show()
