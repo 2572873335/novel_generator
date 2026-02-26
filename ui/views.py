@@ -733,6 +733,57 @@ class ProductionView(QWidget):
         agent_label = QLabel("👥 AGENT CLUSTER")
         agent_label.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; font-weight: bold; font-family: Consolas;")
         agent_layout.addWidget(agent_label)
+
+        # Agent 定义
+        AVATAR_DIR = str(Path(__file__).resolve().parent.parent / "avatars")
+        agent_defs = [
+            ("InitializerAgent", "建组设定", "🏗️", "avatar_08.png"),
+            ("PromptAssembler", "指令聚合", "🎛️", "pixel_avatar_01.png"),
+            ("ElasticArchitect", "迷雾开图", "🗺️", "pixel_avatar_02.png"),
+            ("EmotionWriter", "场景生成", "✍️", "pixel_avatar_03.png"),
+            ("PayoffAuditor", "情绪核算", "🧮", "pixel_avatar_04.png"),
+            ("ConsistencyGuardian", "一致性守护", "🛡️", "pixel_avatar_05.png"),
+            ("CreativeDirector", "仲裁回滚", "👑", "pixel_avatar_07.png"),
+            ("StyleAnchor", "特征对齐", "🎨", "pixel_avatar_08.png")
+        ]
+
+        # 迷你工牌滚动区域
+        mini_scroll = QScrollArea()
+        mini_scroll.setWidgetResizable(True)
+        mini_scroll.setStyleSheet("border: none; background: transparent;")
+        mini_scroll_widget = QWidget()
+        mini_scroll_layout = QVBoxLayout(mini_scroll_widget)
+
+        # 导入并创建工牌
+        try:
+            from ui.components import MiniAgentBadge, MinimalistBadge
+        except ImportError:
+            from components import MiniAgentBadge, MinimalistBadge
+
+        self.mini_badges = {}
+        self.large_badges = {}
+
+        for name, role, emoji, avatar in agent_defs:
+            mini_badge = MiniAgentBadge(name, emoji)
+            mini_badge.clicked.connect(lambda n=name: self._on_agent_badge_clicked(n))
+            self.mini_badges[name] = mini_badge
+            mini_scroll_layout.addWidget(mini_badge)
+
+            large_badge = MinimalistBadge(name, role, f"Core Logic for {name}", f"{AVATAR_DIR}/{avatar}", emoji)
+            large_badge.hide()
+            self.large_badges[name] = large_badge
+
+        mini_scroll_layout.addStretch()
+        mini_scroll.setWidget(mini_scroll_widget)
+        agent_layout.addWidget(mini_scroll)
+
+        # 大工牌展示区
+        self.large_badge_area = QWidget()
+        self.large_badge_layout = QVBoxLayout(self.large_badge_area)
+        self.large_badge_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.large_badge_layout.addWidget(QLabel("Click a mini badge to inspect", styleSheet=f"color: {CyberpunkTheme.TEXT_DIM};"))
+        agent_layout.addWidget(self.large_badge_area)
+
         left_panel.addWidget(agent_container)
 
         left_panel.setStretchFactor(0, 2)
@@ -820,6 +871,32 @@ class ProductionView(QWidget):
         """恢复"""
         self.status_changed.emit("写作中...")
         self.request_resume.emit()
+
+    def _on_agent_badge_clicked(self, agent_name: str):
+        """点击迷你工牌，显示大工牌"""
+        # 清除布局中旧的卡片
+        for i in reversed(range(self.large_badge_layout.count())):
+            widget = self.large_badge_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+
+        # 添加新的卡片
+        if agent_name in self.large_badges:
+            card = self.large_badges[agent_name]
+            card.show()
+            self.large_badge_layout.addWidget(card)
+
+    def update_agent_status(self, name: str, status: str, task: str = ""):
+        """更新 Agent 状态"""
+        colors = {"idle": CyberpunkTheme.FG_SUCCESS, "thinking": CyberpunkTheme.FG_INFO,
+                  "writing": CyberpunkTheme.FG_PRIMARY, "auditing": CyberpunkTheme.FG_ACCENT,
+                  "conflict": CyberpunkTheme.FG_DANGER}
+        color_hex = colors.get(status.lower(), CyberpunkTheme.FG_SUCCESS)
+
+        if name in self.large_badges:
+            self.large_badges[name].set_status(status, task)
+        if name in self.mini_badges:
+            self.mini_badges[name].set_status(color_hex)
 
     def _on_save(self):
         """保存配置"""

@@ -386,6 +386,15 @@ class ProducerDashboard(QMainWindow):
         worker.log_signal.connect(self.view_prod.append_log)
         worker.text_stream_signal.connect(self.view_prod.append_text)
         worker.emotion_curve_signal.connect(self._on_emotion_curve)
+        # 连接 Agent 状态信号
+        worker.agent_status_signal.connect(self._on_agent_status)
+
+    def _on_agent_status(self, data: dict):
+        """Agent 状态更新"""
+        name = data.get("name", "")
+        status = data.get("status", "idle")
+        task = data.get("task", "")
+        self.view_prod.update_agent_status(name, status, task)
 
     def _on_emotion_curve(self, data: dict):
         """情绪曲线更新"""
