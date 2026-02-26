@@ -291,7 +291,7 @@ class ProducerDashboard(QMainWindow):
         # 绑定按钮事件
         self.top_bar.btn_start.clicked.connect(self.do_start_generation)
         self.top_bar.btn_pause.clicked.connect(self.on_pause_generation)
-        self.top_bar.btn_resume.connect(self.on_resume_generation)
+        self.top_bar.btn_resume.clicked.connect(self.on_resume_generation)
         self.top_bar.btn_save_config.clicked.connect(self.save_right_panel_configs)
         self.top_bar.btn_generate.clicked.connect(self.trigger_generate_settings)
         self.top_bar.btn_evaluate.clicked.connect(self.trigger_evaluate_settings)
