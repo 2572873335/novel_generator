@@ -3960,23 +3960,20 @@ class ProducerDashboard(QMainWindow):
         self.setMinimumSize(1600, 900)
         self.setStyleSheet(f"QMainWindow {{ background-color: {CyberpunkTheme.BG_DEEP}; }}")
 
-        # ====== 1. 菜单栏 ======
-        self.setup_menu()
-
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # ====== 2. 全局状态栏 (Tier 2) ======
+        # ====== 1. 全局状态栏 (Tier 2) ======
         self.global_status_bar = GlobalStatusBar()
         main_layout.addWidget(self.global_status_bar)
 
-        # ====== 3. 主导航栏 (Tier 3) ======
+        # ====== 2. 主导航栏 (Tier 3) ======
         self.nav_bar = MainNavigationBar()
         main_layout.addWidget(self.nav_bar)
 
-        # ====== 4. 主堆叠窗口 (Tier 4) ======
+        # ====== 3. 主堆叠窗口 (Tier 4) ======
         self.main_stack = QStackedWidget()
 
         # === Page A: 前期筹备 ===
@@ -3994,6 +3991,9 @@ class ProducerDashboard(QMainWindow):
 
         main_layout.addWidget(self.main_stack)
         self.setCentralWidget(central_widget)
+
+        # ====== 4. 菜单栏 (需要在log_panel创建后) ======
+        self.setup_menu()
 
         # ====== 5. 连接导航按钮 ======
         self.nav_bar.btn_preprod.clicked.connect(lambda: self.main_stack.setCurrentIndex(0))
