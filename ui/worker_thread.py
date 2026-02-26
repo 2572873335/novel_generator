@@ -7,6 +7,33 @@ from pathlib import Path
 from typing import Dict, Any
 from PyQt6.QtCore import QThread, pyqtSignal
 
+class PreProdWorker(QThread):
+    """前期筹备专用线程（生成大纲、人物、评估）"""
+    finished_signal = pyqtSignal(dict)
+    
+    def __init__(self, project_dir: str, action: str, data: dict = None):
+        super().__init__()
+        self.project_dir = project_dir
+        self.action = action  # "generate" 或 "evaluate"
+        self.data = data or {}
+
+    def run(self):
+        import time
+        # 模拟大模型思考时间（这里后续可接入你的 InitializerAgent 和 SeniorEditor）
+        time.sleep(2) 
+        
+        if self.action == "generate":
+            result = {
+                "outline": "# 故事大纲\n\n## 核心冲突\n这是由AI自动生成的初始大纲，请制片人进行修改完善。",
+                "characters": '{\n  "characters": [\n    {\n      "name": "主角",\n      "role": "天命之子"\n    }\n  ]\n}',
+                "rules": "1. 严禁出现魔法\n2. 遵循黑暗森林法则"
+            }
+        else: # evaluate
+            result = {
+                "evaluation": "<h3 style='color:#F44336;'>⚠️ 资深编辑毒舌诊断</h3><p>当前大纲前三章缺少核心爆点，建议在第二章加入直接的生死危机！人物设定过于扁平。</p>"
+            }
+        self.finished_signal.emit(result)
+
 class GenerationWorker(QThread):
     # --- 核心信号定义 ---
     log_signal = pyqtSignal(str)  
@@ -63,7 +90,7 @@ class GenerationWorker(QThread):
         
         # 🔥 将打字机信号注入给后端
         self.orchestrator.on_text_stream = lambda text: self.text_stream_signal.emit(text)
-        self.orchestrator.on_agent_status = lambda name, status, task="": self.agent_status_signal.emit({"name": name, "status": status, "task": task})
+        self.orchestrator.on_agent_status = lambda data: self.agent_status_signal.emit(data)
 
     def _run_generation(self):
         start_chapter = self.config.get("start_chapter", 1)
