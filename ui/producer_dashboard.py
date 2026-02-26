@@ -32,10 +32,10 @@ try:
         QSpinBox, QCheckBox, QProgressBar, QDialog, QFormLayout,
         QLineEdit, QTextBrowser, QMessageBox, QTabWidget, QMenuBar,
         QMenu, QFileDialog, QListWidget, QListWidgetItem, QStackedWidget,
-        QGridLayout, QSizePolicy, QDialogButtonBox
+        QGridLayout, QSizePolicy, QDialogButtonBox, QGraphicsDropShadowEffect
     )
-    from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, QSize, QPropertyAnimation, QEasingCurve, QPoint
-    from PyQt6.QtGui import QFont, QColor, QPalette, QTextCursor, QAction, QCursor, QPainter, QPicture
+    from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, QSize, QPropertyAnimation, QEasingCurve, QPoint, QRect, QSequentialAnimationGroup
+    from PyQt6.QtGui import QFont, QColor, QPalette, QTextCursor, QAction, QCursor, QPainter, QPicture, QPixmap
     PYQT_AVAILABLE = True
 except ImportError:
     PYQT_AVAILABLE = False
@@ -479,482 +479,326 @@ class AgentCardBack(QWidget):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
 
-
-class AgentCard(QFrame):
-    """Agent 员工工牌 - 赛博朋克ID卡风格 v2.0（可翻转 + 发光效果）"""
-
-    # 状态颜色映射 (使用新的霓虹色彩)
-    STATUS_COLORS = {
-        "idle": CyberpunkTheme.FG_SUCCESS,        # 翠绿
-        "thinking": CyberpunkTheme.FG_INFO,       # 天蓝
-        "writing": CyberpunkTheme.FG_PRIMARY,     # 青色
-        "auditing": CyberpunkTheme.FG_ACCENT,     # 紫色
-        "conflict": CyberpunkTheme.FG_DANGER,     # 红色
-        "error": CyberpunkTheme.FG_DANGER,        # 红色
-        "suspended": CyberpunkTheme.FG_WARNING,   # 琥珀
-    }
-
-    card_clicked = pyqtSignal(str)  # 工牌点击信号
-
-    def __init__(self, name: str, role: str, emoji: str = "🤖", agent_info: dict = None, parent=None):
+# ============================================================================
+# 极简 3D 翻转实体工牌 - 纯正血统版
+# ============================================================================
+class MinimalistBadge(QFrame):
+    """极简实体工牌组件 - 纵向比例 3:4，带物理挂绳，按压翻面"""
+    
+    card_clicked = pyqtSignal(str)
+    
+    def __init__(self, name: str, role: str, description: str, 
+                 avatar_path: str = None, emoji: str = "🤖", parent=None):
         super().__init__(parent)
         self.agent_name = name
         self.agent_role = role
-        self.agent_emoji = emoji
-        self.agent_info = agent_info or {
-            "description": role,
-            "last_activity": "无",
-            "chapters_processed": 0,
-            "error_count": 0,
-            "logs": []
-        }
-        self.current_task = ""
+        self.agent_desc = description
+        self.avatar_path = avatar_path
+        self.emoji = emoji
         self.current_status = "idle"
-        self.pulse_timer = None  # 脉冲动画定时器
-        self.pulse_opacity = 1.0
-        self.pulse_direction = -1
-
+        self.current_task = ""
+        self.is_back = False
+        
+        # 尺寸设定 (纵向ID卡)
+        self.BADGE_WIDTH = 220
+        self.BADGE_HEIGHT = 300
+        self.ROPE_HEIGHT = 50
+        
         self.init_ui()
-        self.set_status("idle")
-        self.setup_pulse_animation()
-
+        self.init_animations()
+        
     def init_ui(self):
-        """初始化UI - 赛博朋克ID卡风格 v2.0"""
-        self.setFixedSize(Layout.AGENT_CARD_WIDTH, Layout.AGENT_CARD_HEIGHT)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setFrameShadow(QFrame.Shadow.Raised)
-
-        # 基础样式 (使用新主题)
-        self.base_style = f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {CyberpunkTheme.BG_LIGHT},
-                    stop:1 {CyberpunkTheme.BG_MEDIUM});
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: {Spacing.RADIUS_LG}px;
-            }}
-        """
-
-        # 悬停样式 (带发光效果)
-        self.hover_style = f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {CyberpunkTheme.BG_HOVER},
-                    stop:1 {CyberpunkTheme.BG_LIGHT});
-                border: 2px solid {CyberpunkTheme.FG_PRIMARY};
-                border-radius: {Spacing.RADIUS_LG}px;
-            }}
-        """
-
-        self.setStyleSheet(self.base_style)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        # 左侧霓虹边框（6px宽，圆角适配）
-        self.left_border = QFrame()
-        self.left_border.setFixedWidth(6)
-        self.left_border.setStyleSheet(f"""
-            QFrame {{
-                background-color: {self.STATUS_COLORS["idle"]};
-                border-top-left-radius: {Spacing.RADIUS_LG}px;
-                border-bottom-left-radius: {Spacing.RADIUS_LG}px;
-            }}
-        """)
-        layout.addWidget(self.left_border)
-
-        # 右侧内容区
-        content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(12, 10, 12, 10)
-        content_layout.setSpacing(6)
-
-        # 顶部：Emoji + Agent名称
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(8)
-
-        self.emoji_label = QLabel(self.agent_emoji)
-        self.emoji_label.setStyleSheet("font-size: 16px;")
-        top_layout.addWidget(self.emoji_label)
-
-        self.name_label = QLabel(self.agent_name)
-        self.name_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
-        self.name_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY};")
-        self.name_label.setMaximumWidth(140)
-        self.name_label.setWordWrap(True)
-        top_layout.addWidget(self.name_label)
-
-        top_layout.addStretch()
-        content_layout.addLayout(top_layout)
-
-        # 中部：职位角色
-        self.role_label = QLabel(self.agent_role)
-        self.role_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
-        self.role_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
-        self.role_label.setMaximumWidth(160)
-        self.role_label.setWordWrap(True)
-        content_layout.addWidget(self.role_label)
-
-        # 底部：状态指示灯 + 状态文字
-        bottom_layout = QHBoxLayout()
-        bottom_layout.setSpacing(8)
-
-        # 状态指示灯 (带脉冲效果)
-        self.status_indicator = QLabel("●")
-        self.status_indicator.setFixedWidth(20)
-        self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_indicator.setStyleSheet(f"""
-            QLabel {{
-                color: {self.STATUS_COLORS["idle"]};
-                font-size: 14px;
-            }}
-        """)
-        bottom_layout.addWidget(self.status_indicator)
-
-        # 状态文字
-        self.status_label = QLabel("IDLE")
-        self.status_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL, Typography.WEIGHT_BOLD))
-        self.status_label.setStyleSheet(f"color: {self.STATUS_COLORS["idle"]};")
-        bottom_layout.addWidget(self.status_label)
-
-        # 当前任务 (如果是活跃状态)
-        self.task_label = QLabel("")
-        self.task_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_TINY))
-        self.task_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY};")
-        self.task_label.setMaximumWidth(100)
-        self.task_label.setWordWrap(True)
-        self.task_label.setVisible(False)
-        bottom_layout.addWidget(self.task_label)
-
-        bottom_layout.addStretch()
-
-        content_layout.addLayout(bottom_layout)
-
-        layout.addLayout(content_layout, stretch=1)
-
-        # 点击事件和悬停效果
+        self.setFixedSize(self.BADGE_WIDTH, self.BADGE_HEIGHT + self.ROPE_HEIGHT)
+        self.setStyleSheet("background: transparent; border: none;")
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setMouseTracking(True)
-
-    def setup_pulse_animation(self):
-        """设置脉冲动画定时器"""
-        self.pulse_timer = QTimer(self)
-        self.pulse_timer.timeout.connect(self._pulse_step)
-        self.pulse_timer.start(50)  # 50ms 更新一次
-
-    def _pulse_step(self):
-        """脉冲动画步进"""
-        # 只在非 idle 状态时播放脉冲
-        if self.current_status == "idle":
-            self.status_indicator.setStyleSheet(f"""
-                QLabel {{
-                    color: {self.STATUS_COLORS["idle"]};
-                    font-size: 14px;
-                }}
-            """)
-            return
-
-        # 脉冲效果：透明度变化
-        self.pulse_opacity += self.pulse_direction * 0.1
-        if self.pulse_opacity <= 0.3:
-            self.pulse_opacity = 0.3
-            self.pulse_direction = 1
-        elif self.pulse_opacity >= 1.0:
-            self.pulse_opacity = 1.0
-            self.pulse_direction = -1
-
-        # 获取当前状态颜色
-        color = self.STATUS_COLORS.get(self.current_status, self.STATUS_COLORS["idle"])
-
-        # 应用带透明度的样式
-        self.status_indicator.setStyleSheet(f"""
-            QLabel {{
-                color: {color};
-                font-size: 14px;
-                opacity: {self.pulse_opacity};
-            }}
-        """)
-
-    def enterEvent(self, event):
-        """鼠标进入 - 显示发光效果"""
-        self.setStyleSheet(self.hover_style)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        """鼠标离开 - 恢复普通样式"""
-        self.setStyleSheet(self.base_style)
-        super().leaveEvent(event)
-
-    def mousePressEvent(self, event):
-        """点击事件"""
-        self.card_clicked.emit(self.agent_name)
-        super().mousePressEvent(event)
-
-    def set_status(self, status: str, task: str = ""):
-        """设置状态 - v2.0 优化版"""
-        status = status.lower()
-        self.current_status = status
-        self.current_task = task
-
-        # 获取状态颜色
-        color = self.STATUS_COLORS.get(status, self.STATUS_COLORS["idle"])
-
-        # 状态文字映射
-        status_text_map = {
-            "idle": "IDLE",
-            "thinking": "THINKING",
-            "writing": "WRITING",
-            "auditing": "AUDITING",
-            "conflict": "CONFLICT",
-            "error": "ERROR",
-            "suspended": "SUSPENDED",
-            "active": "ACTIVE",
-        }
-        status_text = status_text_map.get(status, "IDLE")
-
-        # 更新霓虹边框颜色 (使用新圆角)
-        self.left_border.setStyleSheet(f"""
+        
+        # 核心翻转容器
+        self.container = QFrame(self)
+        self.container.setGeometry(0, self.ROPE_HEIGHT, self.BADGE_WIDTH, self.BADGE_HEIGHT)
+        
+        # --- 正面 (Front) ---
+        self.front = QFrame(self.container)
+        self.front.setGeometry(0, 0, self.BADGE_WIDTH, self.BADGE_HEIGHT)
+        self.front_style = f"""
             QFrame {{
-                background-color: {color};
-                border-top-left-radius: {Spacing.RADIUS_LG}px;
-                border-bottom-left-radius: {Spacing.RADIUS_LG}px;
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border-radius: 12px;
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-left: 4px solid {CyberpunkTheme.FG_SUCCESS};
             }}
-        """)
-
-        # 更新状态文字
-        self.status_label.setText(status_text)
-        self.status_label.setStyleSheet(f"""
-            QLabel {{
-                color: {color};
-                font-size: {Typography.SIZE_SMALL}px;
-                font-weight: {Typography.WEIGHT_BOLD};
-            }}
-        """)
-
-        # 更新任务显示
-        if task and status != "idle":
-            self.task_label.setText(task[:20] + "..." if len(task) > 20 else task)
-            self.task_label.setVisible(True)
+            QLabel {{ border: none; background: transparent; }}
+        """
+        self.front.setStyleSheet(self.front_style)
+        
+        # 阴影
+        self.shadow = QGraphicsDropShadowEffect()
+        self.shadow.setBlurRadius(20)
+        self.shadow.setColor(QColor(0, 0, 0, 100))
+        self.shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(self.shadow)
+        
+        # 挂绳 (Rope)
+        self.rope = QFrame(self)
+        self.rope.setGeometry(int(self.BADGE_WIDTH/2 - 15), 0, 30, self.ROPE_HEIGHT)
+        self.rope.setStyleSheet(f"background-color: {CyberpunkTheme.BG_DEEP}; border-radius: 4px;")
+        self.clip = QFrame(self)
+        self.clip.setGeometry(int(self.BADGE_WIDTH/2 - 20), self.ROPE_HEIGHT - 5, 40, 12)
+        self.clip.setStyleSheet("background-color: #333333; border-radius: 3px; border: 1px solid #555;")
+        
+        fl = QVBoxLayout(self.front)
+        fl.setContentsMargins(15, 15, 15, 15)
+        fl.setSpacing(15)
+        
+        # 顶部标签
+        self.name_tag = QLabel(self.agent_name)
+        self.name_tag.setFont(QFont(Typography.FONT_MONO, 13, QFont.Weight.Bold))
+        self.name_tag.setStyleSheet(f"color: {CyberpunkTheme.BG_DEEP}; background-color: {CyberpunkTheme.TEXT_SECONDARY}; padding: 6px; border-radius: 4px;")
+        self.name_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        fl.addWidget(self.name_tag)
+        
+        # 头像区
+        self.avatar_container = QFrame()
+        self.avatar_container.setFixedSize(80, 80)
+        self.avatar_container.setStyleSheet(f"background-color: {CyberpunkTheme.BG_DARK}; border-radius: 12px; border: 2px solid {CyberpunkTheme.BORDER_COLOR};")
+        self.avatar_label = QLabel()
+        self.avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        if self.avatar_path and os.path.exists(self.avatar_path):
+            pixmap = QPixmap(self.avatar_path)
+            if not pixmap.isNull():
+                self.avatar_label.setPixmap(pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.FastTransformation))
         else:
-            self.task_label.setVisible(False)
-
-        # 脉冲动画会在 _pulse_step 中自动更新指示灯样式
-
-    def update_info(self, **kwargs):
-        """更新Agent信息"""
-        for key, value in kwargs.items():
-            if key in self.agent_info:
-                self.agent_info[key] = value
-
+            self.avatar_label.setText(self.emoji)
+            self.avatar_label.setFont(QFont("Segoe UI Emoji", 32))
+            
+        al = QVBoxLayout(self.avatar_container)
+        al.setContentsMargins(0,0,0,0)
+        al.addWidget(self.avatar_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        fl.addWidget(self.avatar_container, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        # 职位
+        self.role_label = QLabel(self.agent_role)
+        self.role_label.setFont(QFont(Typography.FONT_BODY, 11, QFont.Weight.Bold))
+        self.role_label.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY};")
+        self.role_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        fl.addWidget(self.role_label)
+        
+        fl.addStretch()
+        
+        # 状态区
+        bl = QHBoxLayout()
+        self.status_dot = QLabel("●")
+        self.status_dot.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS}; font-size: 14px;")
+        self.status_text = QLabel("IDLE")
+        self.status_text.setFont(QFont(Typography.FONT_MONO, 10, QFont.Weight.Bold))
+        self.status_text.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
+        bl.addWidget(self.status_dot)
+        bl.addWidget(self.status_text)
+        bl.addStretch()
+        fl.addLayout(bl)
+        
+        # --- 背面 (Back) ---
+        self.back = QFrame(self.container)
+        self.back.setGeometry(0, 0, self.BADGE_WIDTH, self.BADGE_HEIGHT)
+        self.back.setStyleSheet(f"background-color: {CyberpunkTheme.BG_DEEP}; border-radius: 12px; border: 1px solid {CyberpunkTheme.FG_PRIMARY};")
+        self.back.hide()
+        
+        bkl = QVBoxLayout(self.back)
+        bkl.setContentsMargins(15, 15, 15, 15)
+        
+        hl = QHBoxLayout()
+        hl.addWidget(QLabel("←", styleSheet=f"color: {CyberpunkTheme.FG_PRIMARY}; font-size: 16px; font-weight: bold;"))
+        hl.addWidget(QLabel("SYS_ARCHIVE", styleSheet=f"color: {CyberpunkTheme.FG_PRIMARY}; font-size: 11px; font-weight: bold;"))
+        hl.addStretch()
+        bkl.addLayout(hl)
+        
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet(f"background-color: {CyberpunkTheme.BORDER_COLOR};")
+        bkl.addWidget(line)
+        
+        self.desc_label = QLabel(self.agent_desc)
+        self.desc_label.setFont(QFont(Typography.FONT_BODY, 9))
+        self.desc_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY}; line-height: 1.5;")
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        bkl.addWidget(self.desc_label)
+        
+        self.task_label = QLabel("Task: None")
+        self.task_label.setFont(QFont(Typography.FONT_MONO, 9))
+        self.task_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY}; font-style: italic;")
+        self.task_label.setWordWrap(True)
+        bkl.addWidget(self.task_label)
+        
+        bkl.addStretch()
+        barcode = QLabel("||||| || | |||| || |")
+        barcode.setFont(QFont("Consolas", 12))
+        barcode.setStyleSheet(f"color: {CyberpunkTheme.TEXT_DIM};")
+        barcode.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bkl.addWidget(barcode)
+        
+    def init_animations(self):
+        self.anim_group = QSequentialAnimationGroup()
+        self.press_anim = QPropertyAnimation(self.container, b"geometry")
+        self.press_anim.setDuration(120)
+        self.release_anim = QPropertyAnimation(self.container, b"geometry")
+        self.release_anim.setDuration(300)
+        self.release_anim.setEasingCurve(QEasingCurve.Type.OutBack)
+        self.anim_group.addAnimation(self.press_anim)
+        self.anim_group.addAnimation(self.release_anim)
+        
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            cg = self.container.geometry()
+            cx, cy = cg.x() + cg.width()//2, cg.y() + cg.height()//2
+            sw, sh = cg.width() - 20, cg.height() - 20
+            
+            self.press_anim.setStartValue(cg)
+            self.press_anim.setEndValue(QRect(cx - sw//2, cy - sh//2, sw, sh))
+            self.release_anim.setStartValue(QRect(cx - sw//2, cy - sh//2, sw, sh))
+            self.release_anim.setEndValue(cg)
+            
+            try: self.press_anim.finished.disconnect()
+            except: pass
+            self.press_anim.finished.connect(self.switch_face)
+            self.anim_group.start()
+            
+            self.card_clicked.emit(self.agent_name)
+            
+    def switch_face(self):
+        self.is_back = not self.is_back
+        if self.is_back:
+            self.front.hide()
+            self.back.show()
+            self.shadow.setColor(QColor(0, 0, 0, 30))
+        else:
+            self.back.hide()
+            self.front.show()
+            self.shadow.setColor(QColor(0, 0, 0, 100))
+            
+    def set_status(self, status: str, task: str = ""):
+        colors = {
+            "idle": CyberpunkTheme.FG_SUCCESS, "thinking": CyberpunkTheme.FG_INFO,
+            "writing": CyberpunkTheme.FG_PRIMARY, "auditing": CyberpunkTheme.FG_ACCENT,
+            "conflict": CyberpunkTheme.FG_DANGER, "error": CyberpunkTheme.FG_DANGER,
+            "suspended": CyberpunkTheme.FG_WARNING
+        }
+        color = colors.get(status.lower(), CyberpunkTheme.FG_SUCCESS)
+        
+        # 变色灯条
+        self.front.setStyleSheet(self.front_style.replace(CyberpunkTheme.FG_SUCCESS, color))
+        self.status_dot.setStyleSheet(f"color: {color}; font-size: 14px;")
+        
+        dt = status.upper()
+        if task: dt += f": {task[:8]}..." if len(task)>8 else f": {task}"
+        self.status_text.setText(dt)
+        self.status_text.setStyleSheet(f"color: {color if status.lower() != 'idle' else CyberpunkTheme.TEXT_SECONDARY};")
+        
+        self.task_label.setText(f"Task: {task}" if task else "Task: None")
+        self.task_label.setStyleSheet(f"color: {color};" if task else f"color: {CyberpunkTheme.TEXT_TERTIARY};")
+        
+    def update_info(self, agent_info: dict):
+        self.agent_desc = agent_info.get("description", self.agent_desc)
+        self.desc_label.setText(self.agent_desc)
 
 # ============================================================================
-# Agent 详细信息面板
+# Agent 详细信息面板 (原样保留，修复依赖)
 # ============================================================================
 class AgentDetailPanel(QWidget):
-    """Agent详细信息面板"""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_agent = None
         self.init_ui()
 
     def init_ui(self):
-        """初始化UI"""
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: 4px;
-            }}
-            QLabel {{
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                font-family: Consolas;
-            }}
-            QTextEdit {{
-                background-color: {CyberpunkTheme.BG_DARK};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                font-family: Consolas;
-                font-size: 9px;
-            }}
-        """)
-
+        self.setStyleSheet(f"QWidget {{ background-color: {CyberpunkTheme.BG_MEDIUM}; border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 4px; }}")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-
-        # 标题
         title = QLabel("📋 Agent 详细信息")
-        title.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY};")
+        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; font-weight: bold; border:none;")
         layout.addWidget(title)
-
-        # Agent选择
+        
         self.agent_combo = QComboBox()
-        self.agent_combo.setFont(QFont("Consolas", 9))
         layout.addWidget(self.agent_combo)
-
-        # 详细信息显示
+        
         self.info_text = QTextEdit()
         self.info_text.setReadOnly(True)
         self.info_text.setMaximumHeight(150)
         layout.addWidget(self.info_text)
-
-        # 日志区域
-        log_label = QLabel("📝 工作日志")
-        log_label.setFont(QFont("Consolas", 10))
-        log_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
-        layout.addWidget(log_label)
-
+        
+        layout.addWidget(QLabel("📝 工作日志", styleSheet="border:none; color:"+CyberpunkTheme.TEXT_SECONDARY))
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         layout.addWidget(self.log_text, stretch=1)
 
-    def set_agents(self, agents: Dict[str, AgentCard]):
-        """设置Agent列表"""
+    def set_agents(self, agents: Dict[str, MinimalistBadge]):
         self.agent_combo.clear()
         self.agent_combo.addItems(agents.keys())
         self.agent_cards = agents
         self.agent_combo.currentTextChanged.connect(self.on_agent_selected)
 
     def on_agent_selected(self, name: str):
-        """选择Agent"""
         self.selected_agent = name
         if name in self.agent_cards:
             card = self.agent_cards[name]
-            info = card.agent_info
-
-            # 显示详细信息
-            detail_text = f"""
-【{card.agent_emoji} {name}】
-
-职位: {card.agent_role}
-状态: {card.status_label.text()}
-当前任务: {card.current_task or '无'}
-
-功能描述: {info.get('description', 'N/A')}
-
-统计信息:
-  - 处理章节数: {info.get('', 0)}
-chapters_processed  - 错误次数: {info.get('error_count', 0)}
-  - 最后活动: {info.get('last_activity', '无')}
-"""
-            self.info_text.setPlainText(detail_text)
-
-            # 显示日志
-            logs = info.get('logs', [])
-            if logs:
-                log_text = "\n".join([f"• {log}" for log in logs[-10:]])
-            else:
-                log_text = "暂无日志"
-            self.log_text.setPlainText(log_text)
+            self.info_text.setPlainText(f"【{card.emoji} {name}】\n角色: {card.agent_role}\n状态: {card.current_status}\n当前任务: {card.current_task or '无'}\n\n描述: {card.agent_desc}")
 
     def add_log(self, agent_name: str, log: str):
-        """添加日志"""
-        if agent_name in self.agent_cards:
-            info = self.agent_cards[agent_name].agent_info
-            if 'logs' not in info:
-                info['logs'] = []
-            info['logs'].append(f"{datetime.now().strftime('%H:%M:%S')} - {log}")
-
-            # 如果当前选中该Agent，刷新显示
-            if self.selected_agent == agent_name:
-                self.on_agent_selected(agent_name)
-
+        if self.selected_agent == agent_name:
+            self.log_text.append(f"{datetime.now().strftime('%H:%M:%S')} - {log}")
 
 # ============================================================================
-# Agent 矩阵面板（使用流式布局）
+# Agent 矩阵面板 (核心替换区)
 # ============================================================================
 class AgentMatrixPanel(QWidget):
-    """Agent 员工矩阵 - 使用流式布局避免重叠"""
-
-    agent_clicked = pyqtSignal(str)  # Agent点击信号
+    agent_clicked = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
 
     def init_ui(self):
-        """初始化UI"""
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {CyberpunkTheme.BG_DARK};
-            }}
-        """)
-
+        self.setStyleSheet(f"QWidget {{ background-color: {CyberpunkTheme.BG_DARK}; border: none; }}")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-
-        # 标题
-        title = QLabel("🤖 AGENT MATRIX")
-        title.setFont(QFont("Consolas", 12, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY};")
-        layout.addWidget(title)
-
-        # 副标题
-        subtitle = QLabel("Agent Workers Status (点击查看详情)")
-        subtitle.setFont(QFont("Consolas", 9))
-        subtitle.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
-        layout.addWidget(subtitle)
-
-        layout.addSpacing(10)
-
-        # Agent 列表 - 使用流式布局
+        layout.addWidget(QLabel("🤖 AGENT MATRIX", styleSheet=f"color: {CyberpunkTheme.FG_PRIMARY}; font-size: 16px; font-weight: bold;"))
+        
         self.agent_scroll = QScrollArea()
         self.agent_scroll.setWidgetResizable(True)
-        self.agent_scroll.setStyleSheet(f"""
-            QScrollArea {{
-                background-color: {CyberpunkTheme.BG_DARK};
-                border: none;
-            }}
-        """)
-
         self.agent_container = QWidget()
         self.agent_flow_layout = QGridLayout(self.agent_container)
-        self.agent_flow_layout.setSpacing(10)
-        self.agent_flow_layout.setContentsMargins(0, 0, 0, 0)
-
+        self.agent_flow_layout.setSpacing(20)
         self.agent_scroll.setWidget(self.agent_container)
-
-        self.agent_cards = {}
-
-        # v4.0 核心Agent（带Emoji）
+        
+        # 自动定位头像路径 (如果代码在 ui/ 下，头像在ui/avatars 下)
+        AVATAR_DIR = str(Path(__file__).resolve().parent / "avatars")
+        
         self.agents_config = {
-            "InitializerAgent": AgentCard("InitializerAgent", "初始建组设定", "🏗️"),
-            "PromptAssembler": AgentCard("PromptAssembler", "中控(指令聚合)", "🎛️"),
-            "ElasticArchitect": AgentCard("ElasticArchitect", "架构(迷雾开图)", "🗺️"),
-            "EmotionWriter": AgentCard("EmotionWriter", "写手(场景生成)", "✍️"),
-            "PayoffAuditor": AgentCard("PayoffAuditor", "审计(情绪差核算)", "🧮"),
-            "ConsistencyGuardian": AgentCard("ConsistencyGuardian", "守护(一致性检测)", "🛡️"),
-            "CreativeDirector": AgentCard("CreativeDirector", "总监(仲裁回滚)", "👑"),
-            "StyleAnchor": AgentCard("StyleAnchor", "文风(特征对齐)", "🎨"),
-            "WorldBible": AgentCard("WorldBible", "圣经(事件溯源)", "📚"),
-            "EmotionTracker": AgentCard("EmotionTracker", "债务(Python计算)", "📉"),
+            "InitializerAgent": MinimalistBadge("Initializer", "建组设定", "负责项目初始化和基础设定构建", f"{AVATAR_DIR}/avatar_08.png", "🏗️"),
+            "PromptAssembler": MinimalistBadge("PromptMixer", "指令聚合", "将多Agent意图聚合为单次Prompt，防止Token爆炸", f"{AVATAR_DIR}/pixel_avatar_01.png", "🎛️"),
+            "ElasticArchitect": MinimalistBadge("ElasticArch", "迷雾开图", "动态生成剧情。近景清晰，远景仅保留情绪目标", f"{AVATAR_DIR}/pixel_avatar_02.png", "🗺️"),
+            "EmotionWriter": MinimalistBadge("EmotionWriter", "场景生成", "注入情绪张量，依据预期爽点动态调整文字节奏", f"{AVATAR_DIR}/pixel_avatar_03.png", "✍️"),
+            "PayoffAuditor": MinimalistBadge("PayoffAuditor", "情绪核算", "精准核算预期张力与实际生成张力的Gap值", f"{AVATAR_DIR}/pixel_avatar_04.png", "🧮"),
+            "ConsistencyGuardian": MinimalistBadge("Consistency", "一致性守护", "滑动窗口检测。严防死而复生、时间倒流等毒点", f"{AVATAR_DIR}/pixel_avatar_05.png", "🛡️"),
+            "CreativeDirector": MinimalistBadge("CreativeDir", "仲裁回滚", "掌握生杀大权。超阈值强制回滚，触发全局熔断", f"{AVATAR_DIR}/pixel_avatar_07.png", "👑"),
+            "StyleAnchor": MinimalistBadge("StyleAnchor", "特征对齐", "提取黄金三章特征向量，确保百万字文风统一", f"{AVATAR_DIR}/pixel_avatar_08.png", "🎨"),
+            "WorldBible": MinimalistBadge("WorldBible", "事件溯源", "Event Sourcing状态机。记录实体属性变迁", f"{AVATAR_DIR}/20150225214245_JW4Uh.jpeg", "📚"),
+            "EmotionTracker": MinimalistBadge("EmotionTracker", "情绪债务", "使用纯Python逻辑计算情绪债务，拒绝LLM算术灾难", f"{AVATAR_DIR}/20220411174400_1997f.jpg", "📉")
         }
 
-        # 使用GridLayout排列工牌（每行3个）
         row, col = 0, 0
         for name, card in self.agents_config.items():
             self.agent_flow_layout.addWidget(card, row, col)
             card.card_clicked.connect(lambda n=name: self.agent_clicked.emit(n))
-            self.agent_cards[name] = card
+            self.agent_cards = self.agents_config
             col += 1
-            if col >= 3:
+            if col >= 3:  # 因为卡片变宽变高了，每行排2个最佳
                 col = 0
                 row += 1
 
         layout.addWidget(self.agent_scroll)
 
     def update_agent_status(self, name: str, status: str, task: str = ""):
-        """更新Agent状态"""
         if name in self.agent_cards:
             self.agent_cards[name].set_status(status, task)
-
-            # 添加到日志
-            if hasattr(self, 'detail_panel') and self.detail_panel:
-                self.detail_panel.add_log(name, f"状态变更: {status}")
-
 
 # ============================================================================
 # 情绪波浪图面板 v2.0（美化版）
