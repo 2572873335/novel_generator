@@ -17,7 +17,7 @@ try:
         QApplication
     )
     from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-    from PyQt6.QtGui import QFont, QCursor
+    from PyQt6.QtGui import QFont, QCursor, QTextCursor
     PYQT_AVAILABLE = True
 except ImportError:
     PYQT_AVAILABLE = False
