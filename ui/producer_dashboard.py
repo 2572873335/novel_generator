@@ -1489,8 +1489,8 @@ class SettingsDialog(QDialog):
         "ANTHROPIC_API_KEY": ("Anthropic API Key", "Claude 模型"),
         "OPENAI_API_KEY": ("OpenAI API Key", "GPT 模型"),
         "MOONSHOT_API_KEY": ("Moonshot API Key", "Kimi 模型"),
-        "ANTHROPIC_AUTH_TOKEN": ("MiniMax Auth Token", "MiniMax M2.5"),
-        "KIMI_FOR_CODING_API_KEY": ("Kimi for Coding API Key", "Kimi 编程版"),
+        "ANTHROPIC_AUTH_TOKEN": ("MiniMax/Kimi Auth Token", "MiniMax & Kimi 编程版"),
+        "KIMI_FOR_CODING_API_KEY": ("Kimi for Coding API Key (备用)", "Kimi 编程版"),
     }
 
     # 可用模型（与 model_manager.py 中的 AVAILABLE_MODELS 保持一致）

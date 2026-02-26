@@ -187,11 +187,11 @@ class ModelManager:
             name="kimi-for-coding",
             display_name="Kimi for Coding",
             provider=ModelProvider.ANTHROPIC_COMPATIBLE,
-            api_key_env="KIMI_FOR_CODING_API_KEY",  # Kimi 使用自己的 API_KEY
+            api_key_env="ANTHROPIC_AUTH_TOKEN",  # Kimi 使用 Authorization: Bearer
             base_url="https://api.kimi.com/coding/",
             max_tokens=4000,
             description="Kimi for Coding - 专为编程优化，Anthropic API兼容",
-            auth_token_env=None,
+            auth_token_env="ANTHROPIC_AUTH_TOKEN",  # 需要Bearer认证
         ),
     }
 

@@ -194,7 +194,7 @@ def save_api_key(key_name: str, key_value: str, env_path: Optional[str] = None) 
                 "Moonshot Kimi 系列": ["MOONSHOT_API_KEY"],
                 "DeepSeek 系列": ["DEEPSEEK_API_KEY"],
                 "MiniMax 系列": ["ANTHROPIC_AUTH_TOKEN"],
-                "Kimi for Coding": ["KIMI_FOR_CODING_API_KEY"],
+                "Kimi for Coding": ["ANTHROPIC_AUTH_TOKEN"],
                 "自定义模型": ["CUSTOM_API_KEY"],
             }
 
