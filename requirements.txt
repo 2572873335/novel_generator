@@ -6,14 +6,13 @@
 
 # 数据处理
 pyyaml>=6.0.0     # YAML 章节状态存储
-# pydantic>=2.0.0
-# dataclasses>=0.6; python_version < "3.7"
+
+# GUI 依赖 (NovelForge v4.2 Dashboard)
+PyQt6>=6.6.0      # PyQt6 图形界面
+pyqtgraph>=0.13.0  # 图表绘制
 
 # 工具库
 # gitpython>=3.1.0   # Git操作
-
-# Web UI
-streamlit>=1.28.0    # Web界面
 
 # 开发依赖（可选）
 # pytest>=7.0.0      # 测试

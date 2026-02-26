@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AI Novel Generator - A fully automated AI novel generation system based on Anthropic's long-running agent architecture. Supports multiple AI providers (Anthropic Claude, OpenAI, Moonshot, DeepSeek).
 
-**Latest: NovelForge v4.0** - Production-ready with circuit breaker mechanism, emotion tracking, and single-API-call architecture.
+**Latest: NovelForge v4.2** - Production-ready with circuit breaker mechanism, emotion tracking, single-API-call architecture, and enhanced PyQt6 UI.
 
 ## Commands
 

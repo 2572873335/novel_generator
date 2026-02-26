@@ -1,12 +1,24 @@
-# AI Novel Generator - NovelForge v4.0
+# AI Novel Generator - NovelForge v4.2
 
 A fully automated AI novel generation system built based on [Anthropic's best practices for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents).
 
-**Latest Version: NovelForge v4.0** - Production-ready with circuit breaker mechanism, emotion tracking, and single-API-call architecture.
+**Latest Version: NovelForge v4.2** - Production-ready with circuit breaker mechanism, emotion tracking, single-API-call architecture, and enhanced PyQt6 UI.
 
 [中文文档](README.zh_CN.md)
 
-## What's New in v4.0
+## What's New in v4.2
+
+- **All v4.0 Features** (see below)
+- **Enhanced Producer Dashboard UI (v4.2)**:
+  - Cyberpunk theme v2.0 with improved color contrast
+  - Top status bar with theme selector
+  - Advanced log panel with search & filtering
+  - Emotion wave chart with threshold lines
+  - Circuit breaker panel with rollback history
+  - Pre-production panel with auto-save indicator
+  - 4 built-in themes: Cyberpunk, Neon Blue, Sunset, Forest
+
+## Core Features (v4.0)
 
 - **Single-API-Call Writing**: Reduced API calls from 8-12 to 1 per chapter
 - **Circuit Breaker**: Prevents infinite rewrite loops (force SUSPEND after threshold)
@@ -195,15 +207,7 @@ cp .env.example .env
 
 ## Usage
 
-### 1. Web UI (Recommended)
-
-```bash
-streamlit run app.py
-```
-
-Then open http://localhost:8501 in your browser.
-
-### 2. Command Line Mode
+### 1. Command Line Mode
 
 ```bash
 # Interactive mode
@@ -225,7 +229,7 @@ python main.py --project novels/my_novel --batch-size 20
 python main.py --progress novels/my_novel
 ```
 
-### 3. Producer Dashboard (v4.0)
+### 2. Producer Dashboard (v4.0)
 
 ```bash
 # Run circuit breaker visualization UI

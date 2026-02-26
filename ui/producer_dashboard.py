@@ -1,6 +1,6 @@
 """
-Producer Dashboard - 赛博朋克UI重构 (v4.1)
-NovelForge v4.0 制片人控制台 - 全面升级版
+Producer Dashboard - 赛博朋克UI重构 (v4.2)
+NovelForge v4.2 制片人控制台 - 全面升级版
 
 功能：
 1. 左侧：Agent工牌矩阵（带翻转功能）+ 详细信息面板
@@ -173,6 +173,195 @@ class Layout:
     # Agent 工牌尺寸
     AGENT_CARD_WIDTH = 280
     AGENT_CARD_HEIGHT = 120
+
+
+# ============================================================================
+# 主题管理器 - 支持多主题切换
+# ============================================================================
+class ThemeManager:
+    """主题管理器 - 支持动态切换主题"""
+
+    # 主题定义
+    THEMES = {
+        "cyberpunk": {
+            "name": "赛博朋克",
+            "colors": {
+                "BG_DEEP": "#050508",
+                "BG_DARK": "#0a0a0f",
+                "BG_MEDIUM": "#12121a",
+                "BG_LIGHT": "#1a1a25",
+                "BG_HOVER": "#252535",
+                "FG_PRIMARY": "#00f5f5",
+                "FG_SECONDARY": "#ff00ff",
+                "FG_ACCENT": "#b829dd",
+                "FG_GOLD": "#ffd700",
+                "FG_SUCCESS": "#00e676",
+                "FG_WARNING": "#ffb300",
+                "FG_DANGER": "#ff1744",
+                "FG_INFO": "#00b0ff",
+                "TEXT_PRIMARY": "#ffffff",
+                "TEXT_SECONDARY": "#b0b0d0",
+                "TEXT_TERTIARY": "#8080a0",
+                "BORDER_COLOR": "#2a2a40",
+            }
+        },
+        "neon_blue": {
+            "name": "霓虹蓝",
+            "colors": {
+                "BG_DEEP": "#030712",
+                "BG_DARK": "#0f172a",
+                "BG_MEDIUM": "#1e293b",
+                "BG_LIGHT": "#334155",
+                "BG_HOVER": "#475569",
+                "FG_PRIMARY": "#38bdf8",
+                "FG_SECONDARY": "#818cf8",
+                "FG_ACCENT": "#c084fc",
+                "FG_GOLD": "#fbbf24",
+                "FG_SUCCESS": "#22c55e",
+                "FG_WARNING": "#f59e0b",
+                "FG_DANGER": "#ef4444",
+                "FG_INFO": "#0ea5e9",
+                "TEXT_PRIMARY": "#f8fafc",
+                "TEXT_SECONDARY": "#cbd5e1",
+                "TEXT_TERTIARY": "#94a3b8",
+                "BORDER_COLOR": "#334155",
+            }
+        },
+        "sunset": {
+            "name": "日落",
+            "colors": {
+                "BG_DEEP": "#1a0a0a",
+                "BG_DARK": "#2d1515",
+                "BG_MEDIUM": "#3d2020",
+                "BG_LIGHT": "#4d2a2a",
+                "BG_HOVER": "#5d3535",
+                "FG_PRIMARY": "#fb923c",
+                "FG_SECONDARY": "#f472b6",
+                "FG_ACCENT": "#a78bfa",
+                "FG_GOLD": "#fbbf24",
+                "FG_SUCCESS": "#4ade80",
+                "FG_WARNING": "#fbbf24",
+                "FG_DANGER": "#f87171",
+                "FG_INFO": "#38bdf8",
+                "TEXT_PRIMARY": "#fef3c7",
+                "TEXT_SECONDARY": "#fcd34d",
+                "TEXT_TERTIARY": "#d97706",
+                "BORDER_COLOR": "#7f1d1d",
+            }
+        },
+        "forest": {
+            "name": "森林",
+            "colors": {
+                "BG_DEEP": "#052e16",
+                "BG_DARK": "#064e3b",
+                "BG_MEDIUM": "#065f46",
+                "BG_LIGHT": "#047857",
+                "BG_HOVER": "#059669",
+                "FG_PRIMARY": "#34d399",
+                "FG_SECONDARY": "#a7f3d0",
+                "FG_ACCENT": "#6ee7b7",
+                "FG_GOLD": "#fcd34d",
+                "FG_SUCCESS": "#10b981",
+                "FG_WARNING": "#f59e0b",
+                "FG_DANGER": "#ef4444",
+                "FG_INFO": "#06b6d4",
+                "TEXT_PRIMARY": "#ecfdf5",
+                "TEXT_SECONDARY": "#a7f3d0",
+                "TEXT_TERTIARY": "#6ee7b7",
+                "BORDER_COLOR": "#064e3b",
+            }
+        },
+    }
+
+    current_theme = "cyberpunk"
+
+    @classmethod
+    def get_theme(cls, theme_name: str = None) -> dict:
+        """获取主题配置"""
+        if theme_name is None:
+            theme_name = cls.current_theme
+        return cls.THEMES.get(theme_name, cls.THEMES["cyberpunk"])
+
+    @classmethod
+    def set_theme(cls, theme_name: str):
+        """设置当前主题"""
+        if theme_name in cls.THEMES:
+            cls.current_theme = theme_name
+
+    @classmethod
+    def get_theme_names(cls) -> list:
+        """获取所有主题名称"""
+        return [f"{v['name']} ({k})" for k, v in cls.THEMES.items()]
+
+    @classmethod
+    def get_color(cls, color_name: str) -> str:
+        """获取当前主题的指定颜色"""
+        theme = cls.get_theme()
+        return theme["colors"].get(color_name, "#000000")
+
+
+# ============================================================================
+# 主题切换组件
+# ============================================================================
+class ThemeSelector(QWidget):
+    """主题选择器组件"""
+
+    theme_changed = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+
+    def init_ui(self):
+        """初始化UI"""
+        self.setFixedHeight(32)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+            }}
+            QLabel {{
+                background: transparent;
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_SMALL}px;
+            }}
+            QComboBox {{
+                background-color: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+                padding: 4px 8px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_SMALL}px;
+            }}
+            QComboBox:hover {{
+                border-color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setSpacing(6)
+
+        # 标签
+        label = QLabel("主题:")
+        layout.addWidget(label)
+
+        # 主题选择下拉框
+        self.combo = QComboBox()
+        for theme_key, theme_data in ThemeManager.THEMES.items():
+            self.combo.addItem(theme_data["name"], theme_key)
+        self.combo.setCurrentText(ThemeManager.THEMES[ThemeManager.current_theme]["name"])
+        self.combo.currentIndexChanged.connect(self._on_theme_changed)
+        layout.addWidget(self.combo)
+
+    def _on_theme_changed(self):
+        """主题切换事件"""
+        theme_key = self.combo.currentData()
+        ThemeManager.set_theme(theme_key)
+        self.theme_changed.emit(theme_key)
 
 
 # ============================================================================
@@ -768,10 +957,343 @@ class AgentMatrixPanel(QWidget):
 
 
 # ============================================================================
-# 情绪波浪图面板（缩小版）
+# 情绪波浪图面板 v2.0（美化版）
 # ============================================================================
 class EmotionWavePanel(QWidget):
-    """情绪波浪图面板 - 缩小版放在右侧"""
+    """情绪波浪图面板 - 美化版"""
+
+    # 阈值线颜色
+    THRESHOLD_DANGER = 70
+    THRESHOLD_WARNING = 40
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+
+    def init_ui(self):
+        """初始化UI - v2.0"""
+        self.setStyleSheet(f"""
+            QWidget {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {CyberpunkTheme.BG_MEDIUM},
+                    stop:1 {CyberpunkTheme.BG_DARK});
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_LG}px;
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
+        layout.setSpacing(Spacing.SM)
+
+        # === 标题栏 ===
+        header = QFrame()
+        header.setStyleSheet(f"background: transparent; border: none;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 标题
+        title = QLabel("📈 EMOTION WAVE")
+        title.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
+        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY};")
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        # 图例
+        legend = QLabel("<span style='color: {0};'>● Expected</span> <span style='color: {1};'>● Actual</span>".format(
+            CyberpunkTheme.FG_PRIMARY, CyberpunkTheme.FG_DANGER
+        ))
+        legend.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_TINY))
+        header_layout.addWidget(legend)
+
+        layout.addWidget(header)
+
+        # 副标题
+        subtitle = QLabel("Expected vs Actual Tension Curve")
+        subtitle.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_TINY))
+        subtitle.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY};")
+        layout.addWidget(subtitle)
+
+        if PYQTGRAPH_AVAILABLE:
+            # 创建图表容器
+            chart_frame = QFrame()
+            chart_frame.setStyleSheet(f"""
+                QFrame {{
+                    background: {CyberpunkTheme.BG_DEEP};
+                    border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                    border-radius: {Spacing.RADIUS_MD}px;
+                }}
+            """)
+            chart_layout = QVBoxLayout(chart_frame)
+            chart_layout.setContentsMargins(4, 4, 4, 4)
+
+            # 创建图表
+            self.plot_widget = pg.PlotWidget()
+            self.plot_widget.setBackground(CyberpunkTheme.BG_DEEP)
+            self.plot_widget.setMinimumHeight(180)
+            self.plot_widget.setMaximumHeight(250)
+
+            # 配置图表样式
+            self.plot_widget.getAxis('bottom').setTextPen(pg.mkPen(color=CyberpunkTheme.TEXT_TERTIARY))
+            self.plot_widget.getAxis('left').setTextPen(pg.mkPen(color=CyberpunkTheme.TEXT_TERTIARY))
+            self.plot_widget.getAxis('bottom').setPen(pg.mkPen(color=CyberpunkTheme.BORDER_COLOR))
+            self.plot_widget.getAxis('left').setPen(pg.mkPen(color=CyberpunkTheme.BORDER_COLOR))
+
+            # 配置标签
+            self.plot_widget.setLabel('bottom', 'Chapter', color=CyberpunkTheme.TEXT_SECONDARY, size='8pt')
+            self.plot_widget.setLabel('left', 'Tension', color=CyberpunkTheme.TEXT_SECONDARY, size='8pt')
+
+            # 网格线 - 虚线样式
+            self.plot_widget.showGrid(x=True, y=True, alpha=0.2)
+
+            # 阈值线 - 危险级别
+            self.danger_line = pg.InfiniteLine(
+                pos=self.THRESHOLD_DANGER, angle=0,
+                pen=pg.mkPen(color=CyberpunkTheme.FG_DANGER, width=1, style=Qt.PenStyle.DashLine),
+                label='Danger', labelOpts={'color': CyberpunkTheme.FG_DANGER, 'position': 0.95}
+            )
+            self.plot_widget.addItem(self.danger_line)
+
+            # 阈值线 - 警告级别
+            self.warning_line = pg.InfiniteLine(
+                pos=self.THRESHOLD_WARNING, angle=0,
+                pen=pg.mkPen(color=CyberpunkTheme.FG_WARNING, width=1, style=Qt.PenStyle.DashLine),
+                label='Warning', labelOpts={'color': CyberpunkTheme.FG_WARNING, 'position': 0.95}
+            )
+            self.plot_widget.addItem(self.warning_line)
+
+            # 预期曲线 - 霓虹青色 (发光效果通过更宽的线模拟)
+            self.expected_curve = self.plot_widget.plot(
+                [], [],
+                pen=pg.mkPen(color=CyberpunkTheme.FG_PRIMARY, width=3),
+                name='Expected',
+                symbol=None
+            )
+            # 添加发光效果 (较细的高亮线)
+            self.expected_glow = self.plot_widget.plot(
+                [], [],
+                pen=pg.mkPen(color=CyberpunkTheme.FG_PRIMARY, width=1, alpha=0.3),
+            )
+
+            # 实际曲线 - 霓虹红色
+            self.actual_curve = self.plot_widget.plot(
+                [], [],
+                pen=pg.mkPen(color=CyberpunkTheme.FG_DANGER, width=3),
+                name='Actual',
+                symbol='o',
+                symbolSize=6,
+                symbolBrush=CyberpunkTheme.FG_DANGER,
+                symbolPen=None
+            )
+            # 发光效果
+            self.actual_glow = self.plot_widget.plot(
+                [], [],
+                pen=pg.mkPen(color=CyberpunkTheme.FG_DANGER, width=1, alpha=0.3),
+            )
+
+            # 数据点标记 (最新点)
+            self.current_point = self.plot_widget.plot(
+                [], [],
+                symbol='star',
+                symbolSize=12,
+                symbolBrush=CyberpunkTheme.FG_GOLD,
+                symbolPen=pg.mkPen(color=CyberpunkTheme.TEXT_PRIMARY, width=2),
+                pen=None
+            )
+
+            # 设置Y轴范围 (给标签留出空间)
+            self.plot_widget.setYRange(0, 100, padding=0.1)
+            self.plot_widget.setXRange(0, 50, padding=0.05)
+
+            chart_layout.addWidget(self.plot_widget)
+            layout.addWidget(chart_frame, stretch=1)
+        else:
+            # 备用显示
+            self.fallback_label = QLabel("⚠️ pyqtgraph not available")
+            self.fallback_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY))
+            self.fallback_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
+            self.fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(self.fallback_label, stretch=1)
+
+        # === 统计信息栏 ===
+        stats_frame = QFrame()
+        stats_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {CyberpunkTheme.BG_MEDIUM};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+            }}
+            QLabel {{
+                padding: 4px 8px;
+            }}
+        """)
+        stats_layout = QHBoxLayout(stats_frame)
+        stats_layout.setContentsMargins(Spacing.SM, Spacing.XS, Spacing.SM, Spacing.XS)
+        stats_layout.setSpacing(0)
+
+        # 章节进度
+        self.chapter_label = QLabel("📖 Ch: 0/0")
+        self.chapter_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
+        self.chapter_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY};")
+        stats_layout.addWidget(self.chapter_label)
+
+        stats_layout.addStretch()
+
+        # 情绪债务 - 带颜色指示
+        debt_container = QFrame()
+        debt_layout = QHBoxLayout(debt_container)
+        debt_layout.setContentsMargins(0, 0, 0, 0)
+        debt_layout.setSpacing(4)
+
+        debt_icon = QLabel("⚡")
+        debt_icon.setStyleSheet(f"font-size: {Typography.SIZE_SMALL}px;")
+        debt_layout.addWidget(debt_icon)
+
+        self.debt_label = QLabel("Debt: 0.0")
+        self.debt_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL, Typography.WEIGHT_BOLD))
+        self.debt_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
+        debt_layout.addWidget(self.debt_label)
+
+        stats_layout.addWidget(debt_container)
+
+        # 状态指示
+        self.status_label = QLabel("🟢 Normal")
+        self.status_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_TINY))
+        self.status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
+        stats_layout.addWidget(self.status_label)
+
+        layout.addWidget(stats_frame)
+
+    def update_curve(self, expected: List[float], actual: List[float], chapter: int, total: int):
+        """更新曲线 - v2.0"""
+        if not PYQTGRAPH_AVAILABLE:
+            return
+
+        # 更新数据
+        x = list(range(1, len(expected) + 1))
+
+        # 主曲线
+        self.expected_curve.setData(x, expected)
+        self.actual_curve.setData(x, actual)
+
+        # 发光效果 (略微偏移的数据)
+        if len(x) > 0:
+            self.expected_glow.setData(x, [y + 1 for y in expected])
+            self.actual_glow.setData(x, [y + 1 for y in actual])
+
+        # 当前点标记 (最后一个点)
+        if actual and len(actual) > 0:
+            self.current_point.setData([len(actual)], [actual[-1]])
+
+        # 动态调整X轴范围
+        max_x = max(50, len(expected) + 5)
+        self.plot_widget.setXRange(0, max_x, padding=0.05)
+
+        # 更新统计
+        self.chapter_label.setText(f"📖 Ch: {chapter}/{total}")
+
+        # 计算当前债务
+        if actual:
+            current_debt = actual[-1]
+            self.debt_label.setText(f"Debt: {current_debt:.1f}")
+
+            # 根据债务值改变颜色和状态
+            if current_debt > self.THRESHOLD_DANGER:
+                color = CyberpunkTheme.FG_DANGER
+                status_text = "🔴 CRITICAL"
+                status_color = CyberpunkTheme.FG_DANGER
+            elif current_debt > self.THRESHOLD_WARNING:
+                color = CyberpunkTheme.FG_WARNING
+                status_text = "🟡 Warning"
+                status_color = CyberpunkTheme.FG_WARNING
+            else:
+                color = CyberpunkTheme.FG_SUCCESS
+                status_text = "🟢 Normal"
+                status_color = CyberpunkTheme.FG_SUCCESS
+
+            self.debt_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+            self.status_label.setText(status_text)
+            self.status_label.setStyleSheet(f"color: {status_color};")
+
+
+# ============================================================================
+# 自动保存指示器
+# ============================================================================
+class AutoSaveIndicator(QWidget):
+    """自动保存状态指示器"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.status = "saved"  # saved, saving, unsaved
+        self.init_ui()
+
+    def init_ui(self):
+        """初始化UI"""
+        self.setFixedSize(120, 28)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+            }}
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(6)
+
+        # 状态指示灯
+        self.light = QLabel()
+        self.light.setFixedSize(8, 8)
+        self.light.setStyleSheet(f"""
+            background-color: {CyberpunkTheme.FG_SUCCESS};
+            border-radius: 4px;
+        """)
+        layout.addWidget(self.light)
+
+        # 状态文字
+        self.text = QLabel("已保存")
+        self.text.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
+        self.text.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
+        layout.addWidget(self.text)
+
+    def set_saving(self):
+        """设置保存中状态"""
+        self.status = "saving"
+        self.light.setStyleSheet(f"""
+            background-color: {CyberpunkTheme.FG_WARNING};
+            border-radius: 4px;
+        """)
+        self.text.setText("保存中...")
+        self.text.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
+
+    def set_saved(self):
+        """设置已保存状态"""
+        self.status = "saved"
+        self.light.setStyleSheet(f"""
+            background-color: {CyberpunkTheme.FG_SUCCESS};
+            border-radius: 4px;
+        """)
+        self.text.setText("已保存")
+        self.text.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
+
+    def set_unsaved(self):
+        """设置未保存状态"""
+        self.status = "unsaved"
+        self.light.setStyleSheet(f"""
+            background-color: {CyberpunkTheme.FG_DANGER};
+            border-radius: 4px;
+        """)
+        self.text.setText("未保存")
+        self.text.setStyleSheet(f"color: {CyberpunkTheme.FG_DANGER};")
+
+
+# ============================================================================
+# 评估卡片组件 - 卡片式展示评估建议
+# ============================================================================
+class EvaluationCard(QFrame):
+    """评估建议卡片组件"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -779,112 +1301,81 @@ class EmotionWavePanel(QWidget):
 
     def init_ui(self):
         """初始化UI"""
+        self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setStyleSheet(f"""
-            QWidget {{
+            QFrame {{
                 background-color: {CyberpunkTheme.BG_DARK};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_MD}px;
             }}
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(5)
+        layout.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
+        layout.setSpacing(Spacing.SM)
 
-        # 标题
-        title = QLabel("📈 EMOTION WAVE")
-        title.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY};")
-        layout.addWidget(title)
+        # 标题栏
+        header = QHBoxLayout()
 
-        # 副标题
-        subtitle = QLabel("Expected vs Actual Tension")
-        subtitle.setFont(QFont("Consolas", 8))
-        subtitle.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
-        layout.addWidget(subtitle)
+        self.icon_label = QLabel("●")
+        self.icon_label.setFont(QFont(Typography.FONT_MONO, 12))
+        self.icon_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY};")
+        header.addWidget(self.icon_label)
 
-        layout.addSpacing(5)
+        self.title_label = QLabel("评估建议")
+        self.title_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
+        self.title_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
+        header.addWidget(self.title_label)
 
-        if PYQTGRAPH_AVAILABLE:
-            # 创建图表（缩小尺寸）
-            self.plot_widget = pg.PlotWidget()
-            self.plot_widget.setBackground(CyberpunkTheme.BG_MEDIUM)
-            self.plot_widget.setMinimumHeight(150)
-            self.plot_widget.setMaximumHeight(200)
+        header.addStretch()
 
-            # 配置图表
-            self.plot_widget.setLabel('bottom', 'Chapter', color='#8888aa')
-            self.plot_widget.setLabel('left', 'Tension', color='#8888aa')
-            self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        self.score_label = QLabel("")
+        self.score_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_H3, Typography.WEIGHT_BOLD))
+        header.addWidget(self.score_label)
 
-            # 预期曲线（蓝色）
-            self.expected_curve = self.plot_widget.plot(
-                [], [],
-                pen=pg.mkPen(color=CyberpunkTheme.FG_PRIMARY, width=2),
-                name='Expected'
-            )
+        layout.addLayout(header)
 
-            # 实际曲线（红色）
-            self.actual_curve = self.plot_widget.plot(
-                [], [],
-                pen=pg.mkPen(color=CyberpunkTheme.FG_DANGER, width=2),
-                name='Actual'
-            )
+        # 分隔线
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
+        line.setFixedHeight(1)
+        layout.addWidget(line)
 
-            # 图例
-            self.plot_widget.addLegend()
+        # 内容区域
+        self.content = QTextBrowser()
+        self.content.setPlaceholderText("点击「评估设置」按钮获取资深编辑的诊断建议...")
+        self.content.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY))
+        self.content.setStyleSheet(f"""
+            QTextBrowser {{
+                background-color: transparent;
+                border: none;
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+            }}
+        """)
+        self.content.setMaximumHeight(150)
+        layout.addWidget(self.content)
 
-            # 设置Y轴范围
-            self.plot_widget.setYRange(0, 120)
+    def set_evaluation(self, text: str, score: int = None):
+        """设置评估内容"""
+        self.content.setText(text)
 
-            layout.addWidget(self.plot_widget)
-        else:
-            # 备用显示
-            self.fallback_label = QLabel("pyqtgraph not available")
-            self.fallback_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
-            layout.addWidget(self.fallback_label)
+        if score is not None:
+            self.score_label.setText(f"{score}/100")
+            if score >= 80:
+                color = CyberpunkTheme.FG_SUCCESS
+            elif score >= 60:
+                color = CyberpunkTheme.FG_WARNING
+            else:
+                color = CyberpunkTheme.FG_DANGER
+            self.score_label.setStyleSheet(f"color: {color};")
+            self.icon_label.setStyleSheet(f"color: {color};")
 
-        # 统计信息（精简版）
-        stats_layout = QHBoxLayout()
-
-        self.chapter_label = QLabel("Ch: 0/0")
-        self.chapter_label.setFont(QFont("Consolas", 9))
-        self.chapter_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY};")
-        stats_layout.addWidget(self.chapter_label)
-
-        stats_layout.addStretch()
-
-        self.debt_label = QLabel("Debt: 0.0")
-        self.debt_label.setFont(QFont("Consolas", 9))
-        self.debt_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
-        stats_layout.addWidget(self.debt_label)
-
-        layout.addLayout(stats_layout)
-
-    def update_curve(self, expected: List[float], actual: List[float], chapter: int, total: int):
-        """更新曲线"""
-        if PYQTGRAPH_AVAILABLE:
-            # 更新数据
-            x = list(range(1, len(expected) + 1))
-
-            self.expected_curve.setData(x, expected)
-            self.actual_curve.setData(x, actual)
-
-            # 更新统计
-            self.chapter_label.setText(f"Ch: {chapter}/{total}")
-
-            # 计算当前债务
-            if actual:
-                current_debt = actual[-1]
-                self.debt_label.setText(f"Debt: {current_debt:.1f}")
-
-                # 根据债务值改变颜色
-                if current_debt > 70:
-                    color = CyberpunkTheme.FG_DANGER
-                elif current_debt > 40:
-                    color = CyberpunkTheme.FG_WARNING
-                else:
-                    color = CyberpunkTheme.FG_SUCCESS
-
-                self.debt_label.setStyleSheet(f"color: {color}; font-size: 9px;")
+    def clear(self):
+        """清空内容"""
+        self.content.clear()
+        self.score_label.clear()
+        self.icon_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY};")
 
 
 # ============================================================================
@@ -921,6 +1412,7 @@ class LogPanel(QWidget):
         super().__init__(parent)
         self.log_count = 0
         self.max_logs = 1000  # 最大日志条数，防止内存溢出
+        self.all_logs = []  # 存储所有日志，用于过滤
         self.init_ui()
 
     def init_ui(self):
@@ -996,11 +1488,38 @@ class LogPanel(QWidget):
         self.filter_combo.addItems(["全部", "EmotionWriter", "CreativeDirector", "EmotionTracker",
                                      "ConsistencyGuardian", "StyleAnchor", "WorldBible", "InitializerAgent"])
         self.filter_combo.setFixedWidth(140)
+        self.filter_combo.currentTextChanged.connect(self._apply_filters)
         header_layout.addWidget(self.filter_combo)
 
+        # 搜索框
+        search_label = QLabel("搜索:")
+        search_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
+        search_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
+        header_layout.addWidget(search_label)
+
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("关键词...")
+        self.search_box.setFixedWidth(120)
+        self.search_box.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+                padding: 4px 8px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_SMALL}px;
+            }}
+            QLineEdit:focus {{
+                border-color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+        """)
+        self.search_box.textChanged.connect(self._apply_filters)
+        header_layout.addWidget(self.search_box)
+
         # 清空按钮
-        clear_btn = QPushButton("🗑️ 清空")
-        clear_btn.setFixedWidth(70)
+        clear_btn = QPushButton("清空")
+        clear_btn.setFixedWidth(60)
         clear_btn.clicked.connect(self.clear)
         header_layout.addWidget(clear_btn)
 
@@ -1085,23 +1604,37 @@ class LogPanel(QWidget):
         return result
 
     def append_log(self, message: str, level: str = "info", agent: str = None):
-        """追加日志 - v2.0 增强版"""
-        # 检查筛选
-        current_filter = self.filter_combo.currentText()
-        if current_filter != "全部" and agent and agent != current_filter:
-            return
+        """追加日志 - v2.0 增强版（支持搜索过滤）"""
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
-        # 级别筛选
-        if self.level_filter != "all" and level != self.level_filter:
-            return
-
-        self.log_count += 1
+        # 存储到内部列表（用于过滤）
+        log_entry = {
+            "timestamp": timestamp,
+            "message": message,
+            "level": level,
+            "agent": agent,
+        }
+        self.all_logs.append(log_entry)
 
         # 限制日志数量
-        if self.log_count > self.max_logs:
-            self._trim_logs()
+        if len(self.all_logs) > self.max_logs:
+            self.all_logs = self.all_logs[-self.max_logs:]
 
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # 带毫秒
+        # 应用过滤并显示
+        self._apply_filters()
+
+        # 更新计数
+        self.count_label.setText(f"{len(self.all_logs)} entries")
+
+    def _apply_filters(self):
+        """应用过滤条件"""
+        # 获取过滤条件
+        current_filter = self.filter_combo.currentText()
+        search_text = self.search_box.text().lower() if hasattr(self, 'search_box') else ""
+
+        # 清空当前显示
+        self.log_text.clear()
+        self.log_count = 0
 
         # 级别颜色映射
         colors = {
@@ -1111,33 +1644,42 @@ class LogPanel(QWidget):
             "success": CyberpunkTheme.FG_SUCCESS,
             "system": CyberpunkTheme.FG_PRIMARY,
         }
-        color = colors.get(level, CyberpunkTheme.TEXT_SECONDARY)
 
-        # 图标
-        icon = self.LEVEL_ICONS.get(level, "•")
+        # 过滤并显示
+        for log in self.all_logs:
+            # Agent过滤
+            if current_filter != "全部" and log["agent"] and log["agent"] != current_filter:
+                continue
 
-        # Agent样式化
-        if agent:
-            agent_html = f'<span style="color: {CyberpunkTheme.FG_ACCENT}; font-weight: bold;">[{agent}]</span>'
-        else:
+            # 级别过滤
+            if self.level_filter != "all" and log["level"] != self.level_filter:
+                continue
+
+            # 搜索过滤
+            if search_text and search_text.lower() not in log["message"].lower():
+                continue
+
+            self.log_count += 1
+
+            # 构建HTML
+            level = log["level"]
+            icon = self.LEVEL_ICONS.get(level, "•")
+            color = colors.get(level, CyberpunkTheme.TEXT_SECONDARY)
+
             agent_html = ""
+            if log["agent"]:
+                agent_html = f'<span style="color: {CyberpunkTheme.FG_ACCENT}; font-weight: bold;">[{log["agent"]}]</span> '
 
-        # 高亮关键字
-        highlighted_message = self.highlight_keywords(message)
+            highlighted_message = self.highlight_keywords(log["message"])
 
-        # 构建HTML
-        html = f'<div style="margin: 2px 0;">'
-        html += f'<span style="color: {CyberpunkTheme.TEXT_DIM};">{icon} [{timestamp}]</span> '
-        if agent_html:
-            html += f'{agent_html} '
-        html += f'<span style="color: {color};">{highlighted_message}</span>'
-        html += '</div>'
+            html = f'<div style="margin: 2px 0;">'
+            html += f'<span style="color: {CyberpunkTheme.TEXT_DIM};">{icon} [{log["timestamp"]}]</span> '
+            if agent_html:
+                html += agent_html
+            html += f'<span style="color: {color};">{highlighted_message}</span>'
+            html += '</div>'
 
-        # 插入到文档末尾
-        self.log_text.append(html)
-
-        # 更新计数
-        self.count_label.setText(f"{self.log_count} entries")
+            self.log_text.append(html)
 
         # 自动滚动到底部
         scrollbar = self.log_text.verticalScrollBar()
@@ -1162,6 +1704,7 @@ class LogPanel(QWidget):
         """清空日志"""
         self.log_text.clear()
         self.log_count = 0
+        self.all_logs = []
         self.count_label.setText("0 entries")
 
     def export_log(self):
@@ -1394,163 +1937,226 @@ class PreProductionPanel(QWidget):
     GENRE_TYPES = list(GENRE_METRICS.keys()) + ["其他"]
 
     def init_ui(self):
-        """初始化UI"""
+        """初始化UI - v2.0 优化版"""
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: {CyberpunkTheme.BG_DARK};
             }}
             QLabel {{
                 color: {CyberpunkTheme.TEXT_PRIMARY};
-                font-family: Consolas;
+                font-family: {Typography.FONT_MONO};
+                background: transparent;
+                border: none;
             }}
             QTextEdit, QTextBrowser {{
                 background-color: {CyberpunkTheme.BG_MEDIUM};
                 color: {CyberpunkTheme.TEXT_PRIMARY};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                font-family: Consolas;
+                border-radius: {Spacing.RADIUS_MD}px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_BODY}px;
+                padding: {Spacing.XS}px;
+            }}
+            QTextEdit:focus, QTextBrowser:focus {{
+                border-color: {CyberpunkTheme.FG_PRIMARY};
             }}
             QLineEdit, QComboBox, QSpinBox {{
                 background-color: {CyberpunkTheme.BG_MEDIUM};
                 color: {CyberpunkTheme.TEXT_PRIMARY};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: 4px;
-                padding: 6px;
-                font-family: Consolas;
+                border-radius: {Spacing.RADIUS_MD}px;
+                padding: {Spacing.SM}px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_BODY}px;
+            }}
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
+                border-color: {CyberpunkTheme.FG_PRIMARY};
             }}
             QSpinBox::up-button, QSpinBox::down-button {{
                 background-color: {CyberpunkTheme.BG_LIGHT};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
                 width: 16px;
             }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+                background-color: {CyberpunkTheme.BG_HOVER};
+            }}
             QPushButton {{
                 background-color: {CyberpunkTheme.BG_LIGHT};
                 color: {CyberpunkTheme.FG_PRIMARY};
                 border: 1px solid {CyberpunkTheme.FG_PRIMARY};
-                border-radius: 4px;
-                padding: 12px 24px;
-                font-family: Consolas;
-                font-size: 12px;
+                border-radius: {Spacing.RADIUS_MD}px;
+                padding: {Spacing.SM}px {Spacing.LG}px;
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_BODY}px;
             }}
             QPushButton:hover {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
+                background-color: {CyberpunkTheme.BG_HOVER};
+                border-color: {CyberpunkTheme.FG_PRIMARY};
             }}
             QPushButton:pressed {{
                 background-color: {CyberpunkTheme.FG_PRIMARY};
                 color: {CyberpunkTheme.BG_DARK};
             }}
+            QPushButton:disabled {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_DIM};
+                border-color: {CyberpunkTheme.BORDER_COLOR};
+            }}
             QGroupBox {{
                 color: {CyberpunkTheme.TEXT_PRIMARY};
+                background-color: {CyberpunkTheme.BG_MEDIUM};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: 4px;
-                font-family: Consolas;
+                border-radius: {Spacing.RADIUS_MD}px;
+                font-family: {Typography.FONT_MONO};
                 font-weight: bold;
-                margin-top: 10px;
-                padding-top: 10px;
+                font-size: {Typography.SIZE_BODY}px;
+                margin-top: {Spacing.MD}px;
+                padding-top: {Spacing.MD}px;
+                padding: {Spacing.MD}px;
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
+                left: {Spacing.SM}px;
+                padding: 0 {Spacing.XS}px;
+                color: {CyberpunkTheme.FG_PRIMARY};
             }}
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
+        layout.setSpacing(Spacing.MD)
+
+        # ========== 标题栏 + 自动保存指示器 ==========
+        header_layout = QHBoxLayout()
 
         # 标题
-        title = QLabel("📝 前期筹备室 (Pre-Production)")
-        title.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; padding: 10px;")
-        layout.addWidget(title)
+        title = QLabel("前期筹备室 (Pre-Production)")
+        title.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_H2, Typography.WEIGHT_BOLD))
+        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY};")
+        header_layout.addWidget(title)
 
-        # ========== 项目基础信息区域（替代原来的新建档案弹窗）==========
-        info_group = QGroupBox("📁 项目基础信息")
+        header_layout.addStretch()
+
+        # 自动保存指示器
+        self.save_indicator = AutoSaveIndicator()
+        header_layout.addWidget(self.save_indicator)
+
+        layout.addLayout(header_layout)
+
+        # ========== 项目基础信息区域（可折叠）==========
+        info_group = QGroupBox("项目基础信息")
+        info_group.setCheckable(True)
+        info_group.setChecked(True)
         info_layout = QFormLayout()
-        info_layout.setSpacing(8)
+        info_layout.setSpacing(Spacing.SM)
+        info_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        info_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         # 书名
         self.title_edit = QLineEdit()
         self.title_edit.setPlaceholderText("输入小说书名...")
-        info_layout.addRow("📖 书名:", self.title_edit)
+        self.title_edit.textChanged.connect(self._on_content_changed)
+        info_layout.addRow("书名:", self.title_edit)
 
         # 题材类型
         self.genre_combo = QComboBox()
         self.genre_combo.addItems(self.GENRE_TYPES)
         self.genre_combo.currentTextChanged.connect(self.on_genre_changed)
-        info_layout.addRow("🎭 题材:", self.genre_combo)
+        info_layout.addRow("题材:", self.genre_combo)
 
         # 主角名
         self.protagonist_edit = QLineEdit()
         self.protagonist_edit.setPlaceholderText("输入主角姓名...")
-        info_layout.addRow("👤 主角:", self.protagonist_edit)
+        self.protagonist_edit.textChanged.connect(self._on_content_changed)
+        info_layout.addRow("主角:", self.protagonist_edit)
 
         # 目标章节数
         self.chapters_spin = QSpinBox()
         self.chapters_spin.setRange(1, 10000)
         self.chapters_spin.setValue(50)
         self.chapters_spin.setToolTip("建议: 第一版50-200章")
-        info_layout.addRow("📑 目标章节:", self.chapters_spin)
+        info_layout.addRow("目标章节:", self.chapters_spin)
 
         # 监控指标预览
         self.metrics_label = QLabel()
-        self.metrics_label.setFont(QFont("Consolas", 9))
+        self.metrics_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
         self.metrics_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
-        info_layout.addRow("📊 监控指标:", self.metrics_label)
+        info_layout.addRow("监控指标:", self.metrics_label)
         self.on_genre_changed("修仙")  # 默认显示修仙指标
 
         info_group.setLayout(info_layout)
         layout.addWidget(info_group)
 
-        # 大纲和人物设定区域（上下布局）
+        # ========== 三栏内容区域（可拖拽调整）==========
         content_splitter = QSplitter(Qt.Orientation.Vertical)
+        content_splitter.setHandleWidth(8)
+        content_splitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background-color: {CyberpunkTheme.BG_LIGHT};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 4px;
+            }}
+            QSplitter::handle:hover {{
+                background-color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+        """)
 
         # 大纲编辑区
-        outline_group = QGroupBox("📖 故事大纲 (outline.md)")
+        outline_group = QGroupBox("故事大纲 (outline.md)")
         outline_layout = QVBoxLayout()
+        outline_layout.setContentsMargins(4, 12, 4, 4)
         self.outline_text = QTextEdit()
         self.outline_text.setPlaceholderText("在这里编辑故事大纲...\n\n包括：\n- 故事主线\n- 情节点\n- 章节规划")
-        self.outline_text.setMinimumHeight(180)
+        self.outline_text.setMinimumHeight(150)
+        self.outline_text.textChanged.connect(self._on_content_changed)
         outline_layout.addWidget(self.outline_text)
         outline_group.setLayout(outline_layout)
         content_splitter.addWidget(outline_group)
 
         # 人物设定区
-        chars_group = QGroupBox("👤 人物设定 (characters.json)")
+        chars_group = QGroupBox("人物设定 (characters.json)")
         chars_layout = QVBoxLayout()
+        chars_layout.setContentsMargins(4, 12, 4, 4)
         self.chars_text = QTextEdit()
         self.chars_text.setPlaceholderText("在这里编辑人物设定...\n\n主角信息：\n- 姓名、年龄\n- 性格特点\n- 背景故事\n- 能力设定")
-        self.chars_text.setMinimumHeight(120)
+        self.chars_text.setMinimumHeight(100)
+        self.chars_text.textChanged.connect(self._on_content_changed)
         chars_layout.addWidget(self.chars_text)
         chars_group.setLayout(chars_layout)
         content_splitter.addWidget(chars_group)
 
-        # 资深编辑诊断区 - 增强版
-        eval_group = QGroupBox("📋 资深编辑诊断 (Senior Editor Evaluation)")
+        # 资深编辑诊断区 - 卡片式展示
+        eval_group = QGroupBox("资深编辑诊断")
         eval_layout = QVBoxLayout()
+        eval_layout.setContentsMargins(4, 12, 4, 4)
+        eval_layout.setSpacing(Spacing.SM)
 
-        self.eval_text = QTextBrowser()
-        self.eval_text.setPlaceholderText("点击「评估设置」按钮获取资深编辑的诊断建议...")
-        self.eval_text.setMinimumHeight(100)
-        eval_layout.addWidget(self.eval_text)
+        # 评估内容卡片
+        self.eval_card = EvaluationCard()
+        eval_layout.addWidget(self.eval_card)
 
         # 评估操作按钮
         eval_btn_layout = QHBoxLayout()
+        eval_btn_layout.setSpacing(Spacing.SM)
 
-        self.apply_btn = QPushButton("✅ 采纳建议并修改")
-        self.apply_btn.setFont(QFont("Consolas", 10))
+        self.apply_btn = QPushButton("采纳建议")
+        self.apply_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY))
         self.apply_btn.setEnabled(False)
+        self.apply_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_DialogApplyButton))
         self.apply_btn.clicked.connect(self.on_apply_suggestions)
         eval_btn_layout.addWidget(self.apply_btn)
 
-        self.edit_btn = QPushButton("✏️ 手动修改")
-        self.edit_btn.setFont(QFont("Consolas", 10))
+        self.edit_btn = QPushButton("手动修改")
+        self.edit_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY))
         self.edit_btn.setEnabled(False)
+        self.edit_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogContentsView))
         self.edit_btn.clicked.connect(lambda: self.focus_edit.emit("outline"))
         eval_btn_layout.addWidget(self.edit_btn)
 
-        self.re_eval_btn = QPushButton("🔄 重新评估")
-        self.re_eval_btn.setFont(QFont("Consolas", 10))
+        self.re_eval_btn = QPushButton("重新评估")
+        self.re_eval_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY))
         self.re_eval_btn.setEnabled(False)
+        self.re_eval_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_BrowserReload))
         self.re_eval_btn.clicked.connect(self.on_evaluate_settings)
         eval_btn_layout.addWidget(self.re_eval_btn)
 
@@ -1560,14 +2166,22 @@ class PreProductionPanel(QWidget):
         eval_group.setLayout(eval_layout)
         content_splitter.addWidget(eval_group)
 
+        # 设置分割比例
+        content_splitter.setSizes([300, 200, 200])
         layout.addWidget(content_splitter, stretch=1)
+
+        # 自动保存定时器
+        self.save_timer = QTimer(self)
+        self.save_timer.setSingleShot(True)
+        self.save_timer.timeout.connect(self._auto_save)
+        self.pending_save = False
 
         # 按钮区
         button_layout = QHBoxLayout()
 
         # 保存项目按钮（替代原来的弹窗确认）
-        self.save_btn = QPushButton("💾 保存项目")
-        self.save_btn.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        self.save_btn = QPushButton("保存项目")
+        self.save_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
         self.save_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {CyberpunkTheme.FG_PRIMARY};
@@ -1583,18 +2197,18 @@ class PreProductionPanel(QWidget):
 
         button_layout.addSpacing(20)
 
-        self.gen_btn = QPushButton("1️⃣ 生成设置")
-        self.gen_btn.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        self.gen_btn = QPushButton("1. 生成设置")
+        self.gen_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
         self.gen_btn.clicked.connect(self.on_generate_settings)
         button_layout.addWidget(self.gen_btn)
 
-        self.eval_btn = QPushButton("2️⃣ 评估设置")
-        self.eval_btn.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        self.eval_btn = QPushButton("2. 评估设置")
+        self.eval_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
         self.eval_btn.clicked.connect(self.on_evaluate_settings)
         button_layout.addWidget(self.eval_btn)
 
-        self.start_btn = QPushButton("3️⃣ ✅ 批准并开始写作")
-        self.start_btn.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        self.start_btn = QPushButton("3. 批准并开始写作")
+        self.start_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_BODY, Typography.WEIGHT_BOLD))
         self.start_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {CyberpunkTheme.FG_SUCCESS};
@@ -1695,6 +2309,28 @@ class PreProductionPanel(QWidget):
         self.save_to_disk()
         self.approve_and_start.emit()
 
+    def _on_content_changed(self):
+        """内容变化时触发自动保存"""
+        self.pending_save = True
+        self.save_indicator.set_unsaved()
+        # 延迟2秒后自动保存
+        self.save_timer.start(2000)
+
+    def _auto_save(self):
+        """自动保存内容"""
+        if not self.pending_save:
+            return
+
+        self.save_indicator.set_saving()
+
+        try:
+            self.save_to_disk()
+            self.pending_save = False
+            self.save_indicator.set_saved()
+        except Exception as e:
+            print(f"[WARN] 自动保存失败: {e}")
+            self.save_indicator.set_unsaved()
+
     def on_save_project(self):
         """保存项目按钮点击"""
         title = self.title_edit.text().strip()
@@ -1729,15 +2365,17 @@ class PreProductionPanel(QWidget):
     def set_generation_complete(self):
         """设置生成完成状态"""
         self.gen_btn.setEnabled(True)
-        self.gen_btn.setText("1️⃣ 生成设置")
+        self.gen_btn.setText("1. 生成设置")
 
-    def set_evaluation_result(self, result: str):
-        """显示评估结果"""
+    def set_evaluation_result(self, result: str, score: int = None):
+        """显示评估结果 - v2.0 使用卡片式展示"""
         self.current_evaluation = result
 
         self.eval_btn.setEnabled(True)
-        self.eval_btn.setText("2️⃣ 评估设置")
-        self.eval_text.setHtml(f"<pre style='color: {CyberpunkTheme.TEXT_PRIMARY};'>{result}</pre>")
+        self.eval_btn.setText("2. 评估设置")
+
+        # 使用新的评估卡片组件
+        self.eval_card.set_evaluation(result, score)
 
         # 启用操作按钮
         self.apply_btn.setEnabled(True)
@@ -1745,10 +2383,11 @@ class PreProductionPanel(QWidget):
         self.re_eval_btn.setEnabled(True)
 
     def set_error(self, message: str):
-        """显示错误"""
+        """显示错误 - v2.0"""
         self.gen_btn.setEnabled(True)
-        self.gen_btn.setText("1️⃣ 生成设置")
-        self.eval_text.setHtml(f"<span style='color: {CyberpunkTheme.FG_DANGER};'>{message}</span>")
+        self.gen_btn.setText("1. 生成设置")
+        self.eval_card.set_evaluation(f"[错误] {message}")
+        self.eval_card.icon_label.setStyleSheet(f"color: {CyberpunkTheme.FG_DANGER};")
         self.apply_btn.setEnabled(False)
         self.edit_btn.setEnabled(False)
         self.re_eval_btn.setEnabled(False)
@@ -2366,57 +3005,362 @@ class DocumentViewerDialog(QDialog):
 # 熔断状态面板
 # ============================================================================
 class CircuitBreakerPanel(QWidget):
-    """熔断状态面板"""
+    """熔断状态面板 - v2.0 增强版
+
+    特性：
+    - 红色警报脉冲动画（触发时）
+    - 回滚历史条形图
+    - 重置按钮
+    - 状态图标+颜色指示器
+    """
+
+    reset_requested = pyqtSignal()  # 重置请求信号
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.is_tripped = False
+        self.rollbacks_history = []  # 回滚历史记录
+        self.max_rollbacks = 10  # 最大显示的回滚次数
+        self.pulse_alpha = 0.0
+        self.pulse_increasing = True
+
+        # 脉冲动画定时器
+        self.pulse_timer = QTimer(self)
+        self.pulse_timer.timeout.connect(self._update_pulse)
+        self.pulse_timer.setInterval(50)  # 50ms 更新一次
+
         self.init_ui()
 
     def init_ui(self):
-        """初始化UI"""
+        """初始化UI - v2.0"""
+        self.setFixedHeight(140)
         self.setStyleSheet(f"""
             QWidget {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
+                background-color: {CyberpunkTheme.BG_MEDIUM};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: 4px;
+                border-radius: {Spacing.RADIUS_MD}px;
+            }}
+            QLabel {{
+                background: transparent;
+                border: none;
             }}
         """)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 10, 15, 10)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 10, 12, 10)
+        main_layout.setSpacing(8)
 
-        # 状态图标
-        self.status_icon = QLabel("🛡️")
-        self.status_icon.setStyleSheet("font-size: 24px;")
-        layout.addWidget(self.status_icon)
+        # === 顶部：状态指示器 ===
+        status_layout = QHBoxLayout()
+        status_layout.setSpacing(10)
+
+        # 状态指示灯（自定义绘制）
+        self.status_light = StatusLightIndicator()
+        self.status_light.setFixedSize(16, 16)
+        status_layout.addWidget(self.status_light)
 
         # 状态文字
         self.status_label = QLabel("CIRCUIT BREAKER")
-        self.status_label.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+        self.status_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_H3, Typography.WEIGHT_BOLD))
         self.status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
-        layout.addWidget(self.status_label)
+        status_layout.addWidget(self.status_label)
 
-        layout.addStretch()
+        status_layout.addStretch()
 
-        # 计数器
-        self.counter_label = QLabel("Rollbacks: 0")
-        self.counter_label.setFont(QFont("Consolas", 9))
+        # 重置按钮（默认隐藏）
+        self.reset_btn = QPushButton("重置")
+        self.reset_btn.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
+        self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reset_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+                padding: 4px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {CyberpunkTheme.FG_DANGER};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border-color: {CyberpunkTheme.FG_DANGER};
+            }}
+        """)
+        self.reset_btn.clicked.connect(self._on_reset)
+        self.reset_btn.setVisible(False)
+        status_layout.addWidget(self.reset_btn)
+
+        main_layout.addLayout(status_layout)
+
+        # === 中间：回滚历史条形图 ===
+        self.history_bars = RollbackHistoryBars()
+        self.history_bars.setFixedHeight(40)
+        main_layout.addWidget(self.history_bars)
+
+        # === 底部：统计信息 ===
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(16)
+
+        # 回滚计数
+        self.counter_label = QLabel("回滚: 0")
+        self.counter_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
         self.counter_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
-        layout.addWidget(self.counter_label)
+        stats_layout.addWidget(self.counter_label)
+
+        # 阈值显示
+        self.threshold_label = QLabel("阈值: 3/5/8")
+        self.threshold_label.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
+        self.threshold_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY};")
+        stats_layout.addWidget(self.threshold_label)
+
+        # 章节信息
+        self.chapter_info = QLabel("")
+        self.chapter_info.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_SMALL))
+        self.chapter_info.setStyleSheet(f"color: {CyberpunkTheme.TEXT_TERTIARY};")
+        self.chapter_info.setAlignment(Qt.AlignmentFlag.AlignRight)
+        stats_layout.addWidget(self.chapter_info, stretch=1)
+
+        main_layout.addLayout(stats_layout)
+
+    def _update_pulse(self):
+        """更新脉冲动画"""
+        if self.pulse_increasing:
+            self.pulse_alpha += 0.1
+            if self.pulse_alpha >= 1.0:
+                self.pulse_alpha = 1.0
+                self.pulse_increasing = False
+        else:
+            self.pulse_alpha -= 0.1
+            if self.pulse_alpha <= 0.3:
+                self.pulse_alpha = 0.3
+                self.pulse_increasing = True
+
+        # 应用脉冲效果到边框
+        alpha_hex = int(self.pulse_alpha * 255)
+        danger_color = f"rgba(255, 23, 68, {self.pulse_alpha:.1f})"
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border: 2px solid {danger_color};
+                border-radius: {Spacing.RADIUS_MD}px;
+            }}
+            QLabel {{
+                background: transparent;
+                border: none;
+            }}
+        """)
+
+    def _on_reset(self):
+        """重置按钮点击"""
+        self.reset_requested.emit()
+        self.set_normal(0)
+
+    def add_rollback(self, chapter: int):
+        """添加回滚记录"""
+        self.rollbacks_history.append({
+            "chapter": chapter,
+            "timestamp": datetime.now().strftime("%H:%M:%S")
+        })
+        if len(self.rollbacks_history) > self.max_rollbacks:
+            self.rollbacks_history.pop(0)
+        self.history_bars.update_data(self.rollbacks_history)
 
     def set_tripped(self, chapter: int, reason: str, rollbacks: int):
-        """设置熔断触发"""
-        self.status_icon.setText("⚠️")
-        self.status_label.setText(f"TRIGGERED @ CH.{chapter}")
+        """设置熔断触发状态"""
+        self.is_tripped = True
+
+        # 启动脉冲动画
+        self.pulse_timer.start()
+
+        # 更新状态灯
+        self.status_light.set_status("danger")
+
+        # 更新文字
+        self.status_label.setText("⚠ 熔断触发")
         self.status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_DANGER};")
-        self.counter_label.setText(f"Rollbacks: {rollbacks}")
+
+        # 更新计数
+        self.counter_label.setText(f"回滚: {rollbacks}")
+        self.counter_label.setStyleSheet(f"color: {CyberpunkTheme.FG_DANGER}; font-weight: bold;")
+
+        # 更新章节信息
+        self.chapter_info.setText(f"第 {chapter} 章 | {reason[:15]}...")
+
+        # 显示重置按钮
+        self.reset_btn.setVisible(True)
+
+        # 添加回滚记录
+        self.add_rollback(chapter)
 
     def set_normal(self, rollbacks: int):
         """设置正常状态"""
-        self.status_icon.setText("🛡️")
-        self.status_label.setText("CIRCUIT BREAKER")
+        self.is_tripped = False
+
+        # 停止脉冲动画
+        self.pulse_timer.stop()
+
+        # 恢复样式
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_MD}px;
+            }}
+            QLabel {{
+                background: transparent;
+                border: none;
+            }}
+        """)
+
+        # 更新状态灯
+        self.status_light.set_status("normal")
+
+        # 更新文字
+        self.status_label.setText("● 系统正常")
         self.status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
-        self.counter_label.setText(f"Rollbacks: {rollbacks}")
+
+        # 更新计数
+        self.counter_label.setText(f"回滚: {rollbacks}")
+        self.counter_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY};")
+
+        # 清空章节信息
+        self.chapter_info.setText("")
+
+        # 隐藏重置按钮
+        self.reset_btn.setVisible(False)
+
+    def set_warning(self, rollbacks: int, threshold: int):
+        """设置警告状态（接近阈值）"""
+        if self.is_tripped:
+            return  # 如果已熔断，保持熔断状态
+
+        # 更新状态灯
+        self.status_light.set_status("warning")
+
+        # 更新文字
+        self.status_label.set_text("▲ 接近阈值")
+        self.status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
+
+        # 更新计数
+        self.counter_label.set_text(f"回滚: {rollbacks}/{threshold}")
+        self.counter_label.setStyleSheet(f"color: {CyberpunkTheme.FG_WARNING};")
+
+
+class StatusLightIndicator(QWidget):
+    """状态指示灯组件"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.status = "normal"  # normal, warning, danger
+        self.pulse_opacity = 1.0
+
+        # 脉冲动画
+        self.pulse_timer = QTimer(self)
+        self.pulse_timer.timeout.connect(self._pulse)
+        self.pulse_timer.start(100)
+
+    def set_status(self, status: str):
+        """设置状态"""
+        self.status = status
+        self.update()
+
+    def _pulse(self):
+        """脉冲效果"""
+        import math
+        import time
+        self.pulse_opacity = 0.5 + 0.5 * math.sin(time.time() * 5)
+        self.update()
+
+    def paintEvent(self, event):
+        """绘制指示灯"""
+        from PyQt6.QtGui import QPainter, QBrush, QColor, QRadialGradient
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        try:
+            # 根据状态选择颜色
+            if self.status == "normal":
+                color = QColor(CyberpunkTheme.FG_SUCCESS)
+            elif self.status == "warning":
+                color = QColor(CyberpunkTheme.FG_WARNING)
+            else:  # danger
+                color = QColor(CyberpunkTheme.FG_DANGER)
+
+            # 创建径向渐变 - 使用QPointF
+            center = QtCore.QPointF(self.rect().center())
+            gradient = QRadialGradient(center, self.width() / 2)
+            gradient.setColorAt(0, color)
+            gradient.setColorAt(1, color.darker(150))
+
+            # 绘制发光效果
+            painter.setOpacity(self.pulse_opacity if self.status != "normal" else 1.0)
+
+            # 外发光圈
+            outer_color = QColor(color)
+            outer_color.setAlpha(50)
+            painter.setBrush(QBrush(outer_color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(self.rect().adjusted(-2, -2, 2, 2))
+
+            # 内部实心圆
+            painter.setBrush(QBrush(gradient))
+            painter.drawEllipse(self.rect().adjusted(2, 2, -2, -2))
+        finally:
+            painter.end()
+
+
+class RollbackHistoryBars(QWidget):
+    """回滚历史条形图"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.data = []  # 回滚历史数据
+        self.max_bars = 10
+        self.bar_spacing = 4
+
+    def update_data(self, history: List[Dict]):
+        """更新数据"""
+        self.data = history[-self.max_bars:]  # 只显示最近的数据
+        self.update()
+
+    def paintEvent(self, event):
+        """绘制条形图"""
+        from PyQt6.QtGui import QPainter, QBrush, QColor, QLinearGradient
+
+        if not self.data:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        width = self.width()
+        height = self.height()
+
+        # 计算每个条形的宽度
+        bar_width = (width - (len(self.data) - 1) * self.bar_spacing) / len(self.data)
+
+        for i, item in enumerate(self.data):
+            x = i * (bar_width + self.bar_spacing)
+
+            # 计算条形高度（根据章节号）
+            chapter = item.get("chapter", 1)
+            max_chapter = max(d.get("chapter", 1) for d in self.data) if self.data else 1
+            bar_height = int((chapter / max(max_chapter, 10)) * height * 0.8)
+            bar_height = max(bar_height, 8)  # 最小高度
+
+            y = height - bar_height
+
+            # 创建渐变
+            gradient = QLinearGradient(x, y + bar_height, x, y)
+            gradient.setColorAt(0, QColor(CyberpunkTheme.FG_DANGER))
+            gradient.setColorAt(1, QColor(CyberpunkTheme.FG_WARNING))
+
+            # 绘制条形
+            painter.fillRect(int(x), y, int(bar_width), bar_height, gradient)
+
+            # 绘制边框
+            painter.setPen(QColor(CyberpunkTheme.BORDER_COLOR))
+            painter.drawRect(int(x), y, int(bar_width), bar_height)
 
 
 # ============================================================================
@@ -2498,8 +3442,17 @@ class TopStatusBar(QWidget):
         # 弹性空间
         layout.addStretch()
 
+        # 主题选择器
+        self.theme_selector = ThemeSelector()
+        layout.addWidget(self.theme_selector)
+
+        # 分隔线
+        separator4 = QLabel("|")
+        separator4.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
+        layout.addWidget(separator4)
+
         # 右侧: 快捷按钮
-        self.settings_btn = QPushButton("⚙️ 设置")
+        self.settings_btn = QPushButton("设置")
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self.settings_btn)
 
@@ -2546,10 +3499,10 @@ class ProducerDashboard(QMainWindow):
         self.project_config = None
         self.start_chapter = 1  # 起始章节（用于续写）
 
-        # 读取项目配置
-        self.load_project_config()
-
         self.init_ui()
+
+        # 读取项目配置（在UI初始化后）
+        self.load_project_config()
 
         # 显示项目信息
         self.display_project_info()
@@ -2725,6 +3678,7 @@ class ProducerDashboard(QMainWindow):
         # 顶部状态栏
         self.top_bar = TopStatusBar()
         self.top_bar.settings_btn.clicked.connect(self.on_api_key_settings)
+        self.top_bar.theme_selector.theme_changed.connect(self.on_theme_changed)
         central_layout.addWidget(self.top_bar)
 
         # TabWidget
@@ -3010,18 +3964,43 @@ class ProducerDashboard(QMainWindow):
         dialog = SettingsDialog(self)
         dialog.exec()
 
+    def on_theme_changed(self, theme_key: str):
+        """主题切换事件"""
+        # Get new theme colors
+        theme = ThemeManager.get_theme(theme_key)
+
+        # 更新CyberpunkTheme类的颜色值
+        for color_name, color_value in theme["colors"].items():
+            if hasattr(CyberpunkTheme, color_name):
+                setattr(CyberpunkTheme, color_name, color_value)
+
+        # 重新应用样式表（触发全局刷新）
+        self.setStyleSheet("")  # 先清空
+        # 重新设置init_ui中的样式表 - 这里通过重新调用来刷新
+        # 由于样式已经应用，直接刷新当前窗口
+        self.update()
+
+        # 显示切换成功提示
+        QMessageBox.information(
+            self, "主题切换",
+            f"已切换到「{theme['name']}」主题",
+            QMessageBox.StandardButton.Ok
+        )
+
     def on_about(self):
         """关于"""
         QMessageBox.about(
             self, "关于 NovelForge",
-            "NovelForge v4.1 - AI小说生成系统\n\n"
+            "NovelForge v4.2 - AI小说生成系统\n\n"
             "基于Anthropic长运行代理最佳实践的全自动小说创作系统\n\n"
             "功能：\n"
             "• 前期筹备与评估优化\n"
             "• 生产过程可视化\n"
             "• 断点续写\n"
             "• Agent工牌翻转详情\n"
-            "• 情绪曲线监控"
+            "• 情绪曲线监控\n"
+            "• 4套主题切换\n"
+            "• 日志搜索过滤"
         )
 
     def on_start_generation(self):
@@ -3186,7 +4165,7 @@ class ProducerDashboard(QMainWindow):
         else:
             self.preproduction_panel.set_evaluation_result(result)
         self.preproduction_panel.eval_btn.setEnabled(True)
-        self.preproduction_panel.eval_btn.setText("2️⃣ 评估设置")
+        self.preproduction_panel.eval_btn.setText("2. 评估设置")
 
     def on_approve_and_start(self):
         """从前期筹备面板批准并开始写作"""
@@ -3345,7 +4324,7 @@ def run_dashboard(project_dir: str = None):
 
     app.setQuitOnLastWindowClosed(True)
 
-    print("[System] 正在点火，启动赛博编辑部中控大屏 v4.1...")
+    print("[System] 正在点火，启动赛博编辑部中控大屏 v4.2...")
 
     window = ProducerDashboard(project_dir)
     window.show()
