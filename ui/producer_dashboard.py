@@ -3257,115 +3257,90 @@ class RollbackHistoryBars(QWidget):
 # ============================================================================
 # 顶部状态栏 - 全局信息显示
 # ============================================================================
-class TopStatusBar(QWidget):
-    """顶部状态栏 - 显示系统状态、进度、当前模型等信息"""
-
+# ============================================================================
+# 顶部双行控制台 - 赛博编辑部中控 (V5.0)
+# ============================================================================
+class TopControlPanel(QFrame):
+    """顶部双行控制台：行1显示状态与项目，行2是全生命周期操作按钮"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
 
     def init_ui(self):
-        """初始化顶部状态栏"""
-        self.setFixedHeight(40)
         self.setStyleSheet(f"""
-            QWidget {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {CyberpunkTheme.BG_MEDIUM},
-                    stop:1 {CyberpunkTheme.BG_DARK});
-                border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
-            }}
-            QLabel {{
-                color: {CyberpunkTheme.TEXT_SECONDARY};
-                font-family: {Typography.FONT_MONO};
-                font-size: {Typography.SIZE_SMALL}px;
-                padding: 0 8px;
-            }}
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {CyberpunkTheme.TEXT_SECONDARY};
-                font-size: {Typography.SIZE_SMALL}px;
-                padding: 4px 12px;
-            }}
-            QPushButton:hover {{
-                color: {CyberpunkTheme.FG_PRIMARY};
-                background: {CyberpunkTheme.BG_LIGHT};
-                border-radius: {Spacing.RADIUS_SM}px;
-            }}
+            QFrame {{ background-color: {CyberpunkTheme.BG_MEDIUM}; border-bottom: 2px solid {CyberpunkTheme.BORDER_COLOR}; }}
+            QLabel {{ color: {CyberpunkTheme.TEXT_SECONDARY}; font-family: {Typography.FONT_MONO}; font-size: 13px; font-weight: bold; background: transparent; border: none; }}
+            QPushButton {{ background-color: {CyberpunkTheme.BG_LIGHT}; color: {CyberpunkTheme.TEXT_PRIMARY}; border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 4px; padding: 6px 14px; font-family: 'Microsoft YaHei', Consolas; font-weight: bold; }}
+            QPushButton:hover {{ background-color: {CyberpunkTheme.BG_HOVER}; border-color: {CyberpunkTheme.FG_PRIMARY}; color: {CyberpunkTheme.FG_PRIMARY}; }}
+            QPushButton:disabled {{ background-color: {CyberpunkTheme.BG_DEEP}; color: {CyberpunkTheme.TEXT_DIM}; border-color: {CyberpunkTheme.BG_DARK}; }}
         """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setSpacing(10)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 16, 0)
-        layout.setSpacing(16)
-
-        # 左侧: 系统状态
-        self.status_indicator = QLabel("🟢 系统正常")
+        # === 第一行：状态信息与全局设置 ===
+        row1 = QHBoxLayout()
+        self.status_indicator = QLabel("🟢 系统待命")
         self.status_indicator.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
-        layout.addWidget(self.status_indicator)
-
-        # 分隔线
-        separator1 = QLabel("|")
-        separator1.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
-        layout.addWidget(separator1)
-
-        # 当前项目
         self.project_label = QLabel("📁 项目: 未命名")
-        layout.addWidget(self.project_label)
-
-        # 分隔线
-        separator2 = QLabel("|")
-        separator2.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
-        layout.addWidget(separator2)
-
-        # 进度显示
         self.progress_label = QLabel("📊 进度: 0/0 章")
-        layout.addWidget(self.progress_label)
-
-        # 分隔线
-        separator3 = QLabel("|")
-        separator3.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
-        layout.addWidget(separator3)
-
-        # 当前模型
-        self.model_label = QLabel("⚡ 模型: 未配置")
-        layout.addWidget(self.model_label)
-
-        # 弹性空间
-        layout.addStretch()
-
-        # 主题选择器
+        self.model_label = QLabel("⚡ 模型: 自动")
+        
+        row1.addWidget(self.status_indicator)
+        row1.addWidget(self.vline())
+        row1.addWidget(self.project_label)
+        row1.addWidget(self.vline())
+        row1.addWidget(self.progress_label)
+        row1.addWidget(self.vline())
+        row1.addWidget(self.model_label)
+        row1.addStretch()
+        
         self.theme_selector = ThemeSelector()
-        layout.addWidget(self.theme_selector)
+        row1.addWidget(self.theme_selector)
+        self.settings_btn = QPushButton("⚙️ 系统设置")
+        row1.addWidget(self.settings_btn)
 
-        # 分隔线
-        separator4 = QLabel("|")
-        separator4.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
-        layout.addWidget(separator4)
+        # === 第二行：全局操作按钮（前期筹备 + 生产控制） ===
+        row2 = QHBoxLayout()
+        row2.setSpacing(8)
+        
+        # 筹备区
+        row2.addWidget(QLabel("【前期筹备】", styleSheet=f"color: {CyberpunkTheme.FG_SECONDARY};"))
+        self.btn_generate = QPushButton("1. 🎲 生成基础设定")
+        self.btn_evaluate = QPushButton("2. 🧐 资深编辑诊断")
+        self.btn_save_config = QPushButton("💾 保存右侧设定")
+        
+        row2.addWidget(self.btn_generate)
+        row2.addWidget(self.btn_evaluate)
+        row2.addWidget(self.btn_save_config)
+        
+        row2.addSpacing(20)
+        row2.addWidget(self.vline())
+        row2.addSpacing(20)
 
-        # 右侧: 快捷按钮
-        self.settings_btn = QPushButton("设置")
-        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        layout.addWidget(self.settings_btn)
+        # 生产区
+        row2.addWidget(QLabel("【生产控制】", styleSheet=f"color: {CyberpunkTheme.FG_PRIMARY};"))
+        self.btn_start = QPushButton("▶ 确认开机 (START)")
+        self.btn_start.setStyleSheet(f"background-color: {CyberpunkTheme.FG_SUCCESS}; color: #000; font-size: 14px;")
+        self.btn_pause = QPushButton("⏸ 暂停 (PAUSE)")
+        self.btn_pause.setEnabled(False)
+        self.btn_resume = QPushButton("⏩ 恢复 (RESUME)")
+        self.btn_resume.setEnabled(False)
+        self.btn_override = QPushButton("✏️ 人工接管")
+        
+        row2.addWidget(self.btn_start)
+        row2.addWidget(self.btn_pause)
+        row2.addWidget(self.btn_resume)
+        row2.addWidget(self.btn_override)
+        row2.addStretch()
 
-    def update_status(self, status: str, is_error: bool = False):
-        """更新系统状态"""
-        icon = "🔴" if is_error else "🟢"
-        color = CyberpunkTheme.FG_DANGER if is_error else CyberpunkTheme.FG_SUCCESS
-        self.status_indicator.setText(f"{icon} {status}")
-        self.status_indicator.setStyleSheet(f"color: {color};")
+        layout.addLayout(row1)
+        layout.addLayout(row2)
 
-    def update_project(self, project_name: str):
-        """更新项目名称"""
-        self.project_label.setText(f"📁 项目: {project_name}")
-
-    def update_progress(self, current: int, total: int):
-        """更新进度"""
-        self.progress_label.setText(f"📊 进度: {current}/{total} 章")
-
-    def update_model(self, model_name: str):
-        """更新当前模型"""
-        self.model_label.setText(f"⚡ 模型: {model_name}")
-
+    def vline(self):
+        l = QLabel("|")
+        l.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR}; margin: 0 8px;")
+        return l
 
 # ============================================================================
 # 主窗口 - 全面升级版
@@ -3407,9 +3382,11 @@ class ProducerDashboard(QMainWindow):
         central_layout = QVBoxLayout(central_widget)
         central_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 1. 顶部状态与控制栏 (两行控制台)
-        self.top_bar = TopStatusBar()
+       
+        # 1. 顶部两行全局控制台
+        self.top_bar = TopControlPanel()
         central_layout.addWidget(self.top_bar)
+        
         
         # === 核心 IDE 三栏布局 (Splitter) ===
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -3489,16 +3466,6 @@ class ProducerDashboard(QMainWindow):
         editor_layout = QVBoxLayout(editor_container)
         editor_layout.setContentsMargins(10, 10, 10, 0)
         
-        # 控制按钮组
-        btn_layout = QHBoxLayout()
-        self.btn_start = QPushButton("▶ 开启/恢复生成 (START)")
-        self.btn_start.setStyleSheet(f"background-color: {CyberpunkTheme.FG_SUCCESS}; color: #000; font-weight: bold;")
-        self.btn_pause = QPushButton("⏸ 紧急暂停 (PAUSE)")
-        self.btn_override = QPushButton("✏️ 人工接管 (OVERRIDE)")
-        btn_layout.addWidget(self.btn_start)
-        btn_layout.addWidget(self.btn_pause)
-        btn_layout.addWidget(self.btn_override)
-        editor_layout.addLayout(btn_layout)
         
         # 实时正文查看器 (The Typewriter)
         self.manuscript_viewer = QTextBrowser()
@@ -3533,6 +3500,7 @@ class ProducerDashboard(QMainWindow):
         self.outline_edit = QTextEdit()
         self.chars_edit = QTextEdit()
         self.rules_edit = QTextEdit()
+        self.eval_browser = QTextBrowser() # 新增：诊断报告区
         
         for widget in [self.outline_edit, self.chars_edit, self.rules_edit]:
             widget.setStyleSheet(f"background-color: {CyberpunkTheme.BG_MEDIUM}; color: {CyberpunkTheme.TEXT_PRIMARY}; font-size: 13px; font-family: Consolas;")
@@ -3540,12 +3508,10 @@ class ProducerDashboard(QMainWindow):
         self.right_tabs.addTab(self.outline_edit, "📖 剧情大纲")
         self.right_tabs.addTab(self.chars_edit, "👤 角色档案")
         self.right_tabs.addTab(self.rules_edit, "⚙️ 世界法则")
+        self.right_tabs.addTab(self.eval_browser, "🧐 诊断报告") # 挂载进去
         
         right_layout.addWidget(self.right_tabs)
         
-        btn_save_config = QPushButton("💾 实时保存设定修改")
-        btn_save_config.setStyleSheet(f"border: 1px solid {CyberpunkTheme.FG_PRIMARY}; color: {CyberpunkTheme.FG_PRIMARY};")
-        right_layout.addWidget(btn_save_config)
 
         # === 组装三栏 ===
         main_splitter.addWidget(left_panel)
@@ -3559,9 +3525,13 @@ class ProducerDashboard(QMainWindow):
         central_layout.addWidget(main_splitter)
         self.setCentralWidget(central_widget)
 
-        # 绑定按钮事件
-        self.btn_start.clicked.connect(self.do_start_generation)
-        btn_save_config.clicked.connect(self.save_right_panel_configs)
+        # 绑定顶部两行控制台的按钮事件
+        self.top_bar.btn_start.clicked.connect(self.do_start_generation)
+        self.top_bar.btn_pause.clicked.connect(self.on_pause_generation)
+        self.top_bar.btn_resume.clicked.connect(self.on_resume_generation)
+        self.top_bar.btn_save_config.clicked.connect(self.save_right_panel_configs)
+        self.top_bar.btn_generate.clicked.connect(self.trigger_generate_settings)
+        self.top_bar.btn_evaluate.clicked.connect(self.trigger_evaluate_settings)
 
     def save_right_panel_configs(self):
         """保存右侧面板配置"""
@@ -4137,6 +4107,42 @@ class ProducerDashboard(QMainWindow):
 
         if self.progress_bar.isVisible():
             self.progress_bar.setValue(current)
+    
+    def trigger_generate_settings(self):
+        """触发生成设定"""
+        self.top_bar.btn_generate.setText("生成中...")
+        self.top_bar.btn_generate.setEnabled(False)
+        self.top_bar.status_indicator.setText("🔵 Agent 生成设定中...")
+        self.right_tabs.setCurrentIndex(0) # 自动切到大纲Tab
+        
+        self.pre_worker = PreProdWorker(self.project_dir, action="generate")
+        self.pre_worker.finished_signal.connect(self.on_preprod_finished)
+        self.pre_worker.start()
+
+    def trigger_evaluate_settings(self):
+        """触发毒舌诊断"""
+        self.top_bar.btn_evaluate.setText("评估中...")
+        self.top_bar.btn_evaluate.setEnabled(False)
+        self.top_bar.status_indicator.setText("🟣 编辑审查中...")
+        self.right_tabs.setCurrentIndex(3) # 自动切到诊断报告Tab
+        
+        self.pre_worker = PreProdWorker(self.project_dir, action="evaluate")
+        self.pre_worker.finished_signal.connect(self.on_preprod_finished)
+        self.pre_worker.start()
+
+    def on_preprod_finished(self, data: dict):
+        """前期筹备完成回调"""
+        self.top_bar.btn_generate.setText("1. 🎲 生成基础设定")
+        self.top_bar.btn_generate.setEnabled(True)
+        self.top_bar.btn_evaluate.setText("2. 🧐 资深编辑诊断")
+        self.top_bar.btn_evaluate.setEnabled(True)
+        self.top_bar.status_indicator.setText("🟢 系统待命")
+        
+        if "outline" in data: self.outline_edit.setText(data["outline"])
+        if "characters" in data: self.chars_edit.setText(data["characters"])
+        if "rules" in data: self.rules_edit.setText(data["rules"])
+        if "evaluation" in data: self.eval_browser.setHtml(data["evaluation"])
+    
 
 
 # ============================================================================
