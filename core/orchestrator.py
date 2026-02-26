@@ -80,6 +80,7 @@ class Orchestrator:
         self.on_agent_status: Optional[Callable] = None
         self.on_emotion_update: Optional[Callable] = None
         self.on_log: Optional[Callable] = None
+        self.on_text_stream: Optional[Callable] = None  # 流式文本回调
 
     def set_ui_callbacks(self,
                          on_log: Optional[Callable] = None,
@@ -87,7 +88,8 @@ class Orchestrator:
                          on_emotion_update: Optional[Callable] = None,
                          on_chapter_complete: Optional[Callable] = None,
                          on_error: Optional[Callable] = None,
-                         on_suspended: Optional[Callable] = None):
+                         on_suspended: Optional[Callable] = None,
+                         on_text_stream: Optional[Callable] = None):
         """
         设置UI回调函数
 
@@ -98,6 +100,7 @@ class Orchestrator:
             on_chapter_complete: 章节完成回调 (result: dict)
             on_error: 错误回调 (error: dict)
             on_suspended: 暂停回调 (data: dict)
+            on_text_stream: 流式文本回调 (chunk: str)
         """
         self.on_log = on_log
         self.on_agent_status = on_agent_status
@@ -105,6 +108,7 @@ class Orchestrator:
         self.on_chapter_complete = on_chapter_complete
         self.on_error = on_error
         self.on_suspended = on_suspended
+        self.on_text_stream = on_text_stream
 
     def _emit_log(self, message: str, level: str = "info"):
         """发送日志回调"""
@@ -416,7 +420,7 @@ class Orchestrator:
         )
 
     def _write_chapter(self, chapter_num: int) -> Dict[str, Any]:
-        """写作单章"""
+        """写作单章 - 支持流式输出"""
         logger.info(f"Writing chapter {chapter_num}/{self.target_chapters}")
         self._emit_log(f"正在写作第{chapter_num}章...")
 
@@ -455,8 +459,44 @@ class Orchestrator:
                     except:
                         pass
 
-        # 写作
-        result = self.emotion_writer.write_chapter(context, previous_chapter)
+        # 使用流式写作
+        full_content = ""
+        result = None
+
+        try:
+            # 获取流式生成器
+            stream_gen = self.emotion_writer.write_chapter_stream(context, previous_chapter)
+
+            # 迭代流式响应
+            for chunk_text, chunk_result in stream_gen:
+                if chunk_result is not None:
+                    # 收到最终结果
+                    result = chunk_result
+                elif chunk_text:
+                    # 收到文本块
+                    full_content += chunk_text
+                    # 触发流式文本回调
+                    if self.on_text_stream:
+                        self.on_text_stream(chunk_text)
+
+            # 如果没有收到最终结果（兼容模式），构造一个
+            if result is None:
+                result = {
+                    "success": True,
+                    "chapter": chapter_num,
+                    "content": full_content,
+                    "emotion": {},
+                    "reports": []
+                }
+
+        except Exception as e:
+            logger.error(f"Streaming write failed: {e}")
+            result = {
+                "success": False,
+                "chapter": chapter_num,
+                "error": str(e),
+                "content": full_content
+            }
 
         # 更新情绪追踪状态
         self._emit_agent_status("EmotionTracker", "tracking", chapter_num)
@@ -465,13 +505,13 @@ class Orchestrator:
         self._emit_agent_status("EmotionWriter", "idle", chapter_num)
         self._emit_agent_status("WorldBible", "idle", chapter_num)
 
-        if result["success"]:
+        if result.get("success"):
             # 重置情绪追踪状态
             self._emit_agent_status("EmotionTracker", "idle", chapter_num)
             return {
                 "status": "completed",
                 "chapter": chapter_num,
-                "content": result["content"],
+                "content": result.get("content", full_content),
                 "emotion": result.get("emotion", {}),
                 "reports": []
             }
@@ -517,7 +557,7 @@ class Orchestrator:
                 })
 
     def _trigger_rewrite(self, chapter: int, feedback: str):
-        """触发重写"""
+        """触发重写 - 支持流式输出"""
         logger.info(f"Rewriting chapter {chapter}")
 
         # 更新Agent状态
@@ -532,13 +572,49 @@ class Orchestrator:
         # 添加反馈到自定义指令
         context.custom_instructions += f"\n\n【重写反馈】\n{feedback}"
 
-        # 重写
-        result = self.emotion_writer.write_chapter(context)
+        # 使用流式重写
+        full_content = ""
+        result = None
+
+        try:
+            # 获取流式生成器
+            stream_gen = self.emotion_writer.write_chapter_stream(context, "")
+
+            # 迭代流式响应
+            for chunk_text, chunk_result in stream_gen:
+                if chunk_result is not None:
+                    # 收到最终结果
+                    result = chunk_result
+                elif chunk_text:
+                    # 收到文本块
+                    full_content += chunk_text
+                    # 触发流式文本回调
+                    if self.on_text_stream:
+                        self.on_text_stream(chunk_text)
+
+            # 如果没有收到最终结果（兼容模式），构造一个
+            if result is None:
+                result = {
+                    "success": True,
+                    "chapter": chapter,
+                    "content": full_content,
+                    "emotion": {},
+                    "reports": []
+                }
+
+        except Exception as e:
+            logger.error(f"Streaming rewrite failed: {e}")
+            result = {
+                "success": False,
+                "chapter": chapter,
+                "error": str(e),
+                "content": full_content
+            }
 
         # 重置状态
         self._emit_agent_status("EmotionWriter", "idle", chapter)
 
-        if result["success"]:
+        if result.get("success"):
             # 保存为Markdown
             self._save_chapter_as_markdown(
                 chapter,

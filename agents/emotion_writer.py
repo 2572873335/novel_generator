@@ -9,7 +9,7 @@ Emotion Writer - 单次API调用场景写作
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Generator
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -173,6 +173,157 @@ class EmotionWriter:
                    f"emotion state: {emotion_result['state']}")
 
         return {
+            "success": True,
+            "chapter": chapter_num,
+            "content": chapter_content,
+            "emotion": emotion_result,
+            "events_count": len(events),
+            "word_count": len(chapter_content)
+        }
+
+    def write_chapter_stream(
+        self,
+        context: WritingContext,
+        previous_chapter: str = ""
+    ) -> Generator[tuple[str, Optional[Dict[str, Any]]], None, None]:
+        """
+        写作单章 - 流式API调用，实时生成文本
+
+        Args:
+            context: 写作上下文
+            previous_chapter: 上一章内容（用于连续性）
+
+        Yields:
+            (chunk_text, None) - 流式文本块
+            ("", final_result) - 最终结果（当 chunk_text 为空字符串时）
+        """
+        chapter_num = context.chapter_num
+        logger.info(f"Starting chapter {chapter_num} - streaming mode")
+
+        # Step 1: 组装Prompt
+        prompt = self.prompt_assembler.assemble_chapter_prompt(
+            chapter_num=chapter_num,
+            context={
+                "target_chapters": context.target_chapters,
+                "emotional_debt": context.emotional_debt,
+                "emotion_prompt": context.emotion_prompt,
+                "recent_debts": context.recent_debts,
+                "emotional_vector": context.emotional_vector,
+                "custom_instructions": context.custom_instructions,
+            }
+        )
+
+        # 添加上一章摘要（如果有）
+        if previous_chapter:
+            summary = self._extract_summary(previous_chapter)
+            prompt += f"\n\n【前情提要】\n{summary}"
+
+        # Step 2: 流式API调用
+        full_content = ""
+        try:
+            logger.debug(f"Calling LLM in stream mode for chapter {chapter_num}")
+
+            # 检查 LLM 客户端是否支持流式调用
+            has_stream_support = False
+            stream_generator = None
+
+            if hasattr(self.llm, 'generate_stream'):
+                # 使用专门的流式生成方法
+                stream_generator = self.llm.generate_stream(prompt, max_tokens=8192)
+                has_stream_support = True
+            elif hasattr(self.llm, 'generate'):
+                # 检查 generate 方法是否支持 stream 参数
+                import inspect
+                sig = inspect.signature(self.llm.generate)
+                if 'stream' in sig.parameters:
+                    stream_generator = self.llm.generate(prompt, max_tokens=8192, stream=True)
+                    has_stream_support = True
+
+            if not has_stream_support:
+                # 不支持流式，退回到普通调用并一次性yield
+                logger.warning("LLM client does not support streaming, falling back to normal mode")
+                response = self.llm.generate(prompt, max_tokens=8192)
+                if hasattr(response, 'content'):
+                    chapter_content = response.content
+                elif isinstance(response, dict):
+                    chapter_content = response.get('content', response.get('text', ''))
+                else:
+                    chapter_content = str(response)
+                full_content = chapter_content
+                yield chapter_content, None
+            else:
+                # 迭代流式响应
+                for chunk in stream_generator:
+                    # 解析 chunk 内容
+                    chunk_text = ""
+                    if isinstance(chunk, str):
+                        chunk_text = chunk
+                    elif hasattr(chunk, 'content'):
+                        chunk_text = chunk.content
+                    elif hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                        # OpenAI/DeepSeek 流式格式
+                        delta = chunk.choices[0].get('delta', {})
+                        chunk_text = delta.get('content', '')
+                    elif isinstance(chunk, dict):
+                        chunk_text = chunk.get('content', chunk.get('text', ''))
+
+                    if chunk_text:
+                        full_content += chunk_text
+                        yield chunk_text, None
+
+        except Exception as e:
+            logger.error(f"LLM stream call failed: {e}")
+            error_msg = f"\n[错误: {str(e)}]"
+            full_content += error_msg
+            yield error_msg, None
+
+            # 返回错误结果
+            yield "", {
+                "success": False,
+                "error": str(e),
+                "chapter": chapter_num,
+                "content": full_content
+            }
+            return
+
+        # Step 3: 后处理 - 清理不完整的句子
+        chapter_content = self._clean_incomplete_sentences(full_content)
+
+        # Step 4: 计算情绪值
+        emotion_result = self.emotion_tracker.track_chapter_emotion(
+            chapter_num=chapter_num,
+            text=chapter_content
+        )
+
+        # Step 5: 提取并记录关键事件
+        events = self._extract_events(chapter_content, chapter_num)
+        for event in events:
+            self.world_bible.record_event(event)
+
+        # Step 6: 保存章节
+        chapter_file = self.chapters_dir / f"chapter_{chapter_num}.json"
+        chapter_data = {
+            "chapter": chapter_num,
+            "content": chapter_content,
+            "emotion": {
+                "net_debt": emotion_result["net_debt"],
+                "payoff_density": emotion_result["payoff_density"],
+                "state": emotion_result["state"]
+            },
+            "events": [e.to_dict() for e in events],
+            "created_at": datetime.now().isoformat()
+        }
+
+        chapter_file.write_text(
+            json.dumps(chapter_data, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+        logger.info(f"Chapter {chapter_num} completed: {len(chapter_content)} chars, "
+                   f"emotion state: {emotion_result['state']}")
+
+        # 返回最终结果
+        yield "", {
             "success": True,
             "chapter": chapter_num,
             "content": chapter_content,
