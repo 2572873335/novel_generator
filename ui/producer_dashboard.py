@@ -479,6 +479,53 @@ class AgentCardBack(QWidget):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
 
+
+
+
+
+
+class MiniAgentBadge(QFrame):
+    """侧边栏迷你工牌 - 极致省流"""
+    clicked = pyqtSignal(str)
+    
+    def __init__(self, name: str, emoji: str):
+        super().__init__()
+        self.agent_name = name
+        self.setFixedHeight(40)
+        self.setStyleSheet(f"background-color: {CyberpunkTheme.BG_LIGHT}; border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 6px;")
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 10, 0)
+        
+        self.emoji_label = QLabel(emoji)
+        self.emoji_label.setFont(QFont("Segoe UI Emoji", 14))
+        layout.addWidget(self.emoji_label)
+        
+        self.name_label = QLabel(name)
+        self.name_label.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+        self.name_label.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY}; border: none; background: transparent;")
+        layout.addWidget(self.name_label)
+        
+        layout.addStretch()
+        
+        self.status_dot = QLabel("●")
+        self.status_dot.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS}; font-size: 14px; border: none; background: transparent;")
+        layout.addWidget(self.status_dot)
+        
+    def mousePressEvent(self, event):
+        self.clicked.emit(self.agent_name)
+        
+    def set_status(self, color_hex: str):
+        self.status_dot.setStyleSheet(f"color: {color_hex}; font-size: 14px; border: none; background: transparent;")
+        # 工作时给边框发光
+        if color_hex != CyberpunkTheme.FG_SUCCESS:
+            self.setStyleSheet(f"background-color: {CyberpunkTheme.BG_HOVER}; border: 1px solid {color_hex}; border-radius: 6px;")
+        else:
+            self.setStyleSheet(f"background-color: {CyberpunkTheme.BG_LIGHT}; border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 6px;")
+
+
+
 # ============================================================================
 # 极简 3D 翻转实体工牌 - 纯正血统版
 # ============================================================================
@@ -3352,269 +3399,203 @@ class ProducerDashboard(QMainWindow):
         self.display_project_info()
 
     def init_ui(self):
-        """初始化UI - v4.2 优化版"""
-        self.setWindowTitle("NovelForge v4.2 - Producer Dashboard")
-        self.setMinimumSize(Layout.WINDOW_MIN_WIDTH, Layout.WINDOW_MIN_HEIGHT)
-        self.resize(Layout.WINDOW_DEFAULT_WIDTH, Layout.WINDOW_DEFAULT_HEIGHT)
+        self.setWindowTitle("NovelForge v5.0 - AI IDE 工作台")
+        self.setMinimumSize(1600, 900)
+        self.setStyleSheet(f"QMainWindow {{ background-color: {CyberpunkTheme.BG_DEEP}; }}")
 
-        # 设置全局样式表 - v2.0
-        self.setStyleSheet(f"""
-            /* === 主窗口 === */
-            QMainWindow {{
-                background-color: {CyberpunkTheme.BG_DARK};
-            }}
-
-            /* === 按钮样式 (增强交互) === */
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {CyberpunkTheme.BG_LIGHT},
-                    stop:1 {CyberpunkTheme.BG_MEDIUM});
-                color: {CyberpunkTheme.FG_PRIMARY};
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: {Spacing.RADIUS_MD}px;
-                padding: {Spacing.PADDING_BUTTON};
-                font-family: {Typography.FONT_MONO};
-                font-size: {Typography.SIZE_BODY}px;
-                font-weight: {Typography.WEIGHT_MEDIUM};
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {CyberpunkTheme.BG_HOVER},
-                    stop:1 {CyberpunkTheme.BG_LIGHT});
-                border-color: {CyberpunkTheme.FG_PRIMARY};
-            }}
-            QPushButton:pressed {{
-                background: {CyberpunkTheme.FG_PRIMARY};
-                color: {CyberpunkTheme.BG_DARK};
-            }}
-            QPushButton:disabled {{
-                background: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_DIM};
-                border-color: {CyberpunkTheme.BORDER_COLOR};
-            }}
-
-            /* === Tab 样式 (优化选中状态) === */
-            QTabWidget::pane {{
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                background: {CyberpunkTheme.BG_DARK};
-                border-radius: {Spacing.RADIUS_MD}px;
-            }}
-            QTabBar::tab {{
-                background: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_SECONDARY};
-                padding: 10px 20px;
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-bottom: none;
-                border-radius: {Spacing.RADIUS_MD}px {Spacing.RADIUS_MD}px 0 0;
-                font-family: {Typography.FONT_BODY};
-                font-size: {Typography.SIZE_BODY}px;
-            }}
-            QTabBar::tab:hover {{
-                background: {CyberpunkTheme.BG_LIGHT};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-            }}
-            QTabBar::tab:selected {{
-                background: {CyberpunkTheme.BG_LIGHT};
-                color: {CyberpunkTheme.FG_PRIMARY};
-                border-top: 2px solid {CyberpunkTheme.FG_PRIMARY};
-            }}
-
-            /* === 菜单栏 === */
-            QMenuBar {{
-                background: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
-            }}
-            QMenuBar::item {{
-                padding: 8px 16px;
-            }}
-            QMenuBar::item:selected {{
-                background: {CyberpunkTheme.BG_LIGHT};
-                color: {CyberpunkTheme.FG_PRIMARY};
-            }}
-            QMenu {{
-                background: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                padding: 4px;
-            }}
-            QMenu::item {{
-                padding: 6px 20px;
-                border-radius: {Spacing.RADIUS_SM}px;
-            }}
-            QMenu::item:selected {{
-                background: {CyberpunkTheme.BG_LIGHT};
-                color: {CyberpunkTheme.FG_PRIMARY};
-            }}
-
-            /* === 输入框 === */
-            QLineEdit, QTextEdit, QComboBox, QSpinBox {{
-                background: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: {Spacing.RADIUS_MD}px;
-                padding: {Spacing.PADDING_INPUT};
-                font-family: {Typography.FONT_MONO};
-                font-size: {Typography.SIZE_BODY}px;
-            }}
-            QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus {{
-                border-color: {CyberpunkTheme.FG_PRIMARY};
-            }}
-
-            /* === 分组框 === */
-            QGroupBox {{
-                background: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: {Spacing.RADIUS_LG}px;
-                margin-top: 12px;
-                padding-top: 12px;
-                font-weight: {Typography.WEIGHT_BOLD};
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 8px;
-                color: {CyberpunkTheme.FG_PRIMARY};
-            }}
-
-            /* === 标签 === */
-            QLabel {{
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                font-family: {Typography.FONT_BODY};
-            }}
-
-            /* === 状态栏 === */
-            QStatusBar {{
-                background: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_SECONDARY};
-                border-top: 1px solid {CyberpunkTheme.BORDER_COLOR};
-            }}
-            QStatusBar::item {{
-                border: none;
-            }}
-
-            /* === 滚动条 === */
-            QScrollBar:vertical {{
-                background: {CyberpunkTheme.BG_DARK};
-                width: 12px;
-                border-radius: 6px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {CyberpunkTheme.BORDER_COLOR};
-                border-radius: 6px;
-                min-height: 30px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background: {CyberpunkTheme.FG_PRIMARY};
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0px;
-            }}
-        """)
-
-        # 创建中心容器 (包含顶部状态栏和 TabWidget)
         central_widget = QWidget()
         central_layout = QVBoxLayout(central_widget)
         central_layout.setContentsMargins(0, 0, 0, 0)
-        central_layout.setSpacing(0)
-
-        # 顶部状态栏
+        
+        # 1. 顶部状态与控制栏 (两行控制台)
         self.top_bar = TopStatusBar()
-        self.top_bar.settings_btn.clicked.connect(self.on_api_key_settings)
-        self.top_bar.theme_selector.theme_changed.connect(self.on_theme_changed)
         central_layout.addWidget(self.top_bar)
+        
+        # === 核心 IDE 三栏布局 (Splitter) ===
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter.setStyleSheet(f"QSplitter::handle {{ background-color: {CyberpunkTheme.BORDER_COLOR}; width: 2px; }}")
 
-        # TabWidget
-        self.tabs = QTabWidget()
-        central_layout.addWidget(self.tabs, stretch=1)
+        # ==========================================
+        # 左侧：微缩工牌 + 情绪图 + 大工牌展示区
+        # ==========================================
+        left_panel = QSplitter(Qt.Orientation.Vertical)
+        left_panel.setMinimumWidth(300)
+        left_panel.setMaximumWidth(400)
+        
+        # 左上：情绪波浪图 (紧凑版)
+        self.emotion_panel = EmotionWavePanel()
+        left_panel.addWidget(self.emotion_panel)
+        
+        # 左中：迷你工牌列表
+        mini_badge_container = QWidget()
+        mini_layout = QVBoxLayout(mini_badge_container)
+        mini_layout.setContentsMargins(5, 5, 5, 5)
+        mini_layout.addWidget(QLabel("👥 AGENT CLUSTER", styleSheet=f"color: {CyberpunkTheme.FG_PRIMARY}; font-weight: bold; font-family: Consolas;"))
+        
+        self.mini_badges = {}
+        self.large_badges = {}
+        AVATAR_DIR = str(Path(__file__).resolve().parent.parent / "avatars")
+        
+        # 定义核心Agent
+        agent_defs = [
+            ("InitializerAgent", "建组设定", "🏗️", "avatar_08.png"),
+            ("PromptAssembler", "指令聚合", "🎛️", "pixel_avatar_01.png"),
+            ("ElasticArchitect", "迷雾开图", "🗺️", "pixel_avatar_02.png"),
+            ("EmotionWriter", "场景生成", "✍️", "pixel_avatar_03.png"),
+            ("PayoffAuditor", "情绪核算", "🧮", "pixel_avatar_04.png"),
+            ("ConsistencyGuardian", "一致性守护", "🛡️", "pixel_avatar_05.png"),
+            ("CreativeDirector", "仲裁回滚", "👑", "pixel_avatar_07.png"),
+            ("StyleAnchor", "特征对齐", "🎨", "pixel_avatar_08.png")
+        ]
+        
+        mini_scroll = QScrollArea()
+        mini_scroll.setWidgetResizable(True)
+        mini_scroll.setStyleSheet("border: none; background: transparent;")
+        mini_scroll_widget = QWidget()
+        mini_scroll_layout = QVBoxLayout(mini_scroll_widget)
+        
+        for name, role, emoji, avatar in agent_defs:
+            # 迷你工牌
+            mini_badge = MiniAgentBadge(name, emoji)
+            mini_badge.clicked.connect(self.switch_large_badge)
+            self.mini_badges[name] = mini_badge
+            mini_scroll_layout.addWidget(mini_badge)
+            
+            # 隐藏的大工牌 (真正的 MinimalistBadge)
+            large_badge = MinimalistBadge(name, role, f"Core Logic for {name}", f"{AVATAR_DIR}/{avatar}", emoji)
+            large_badge.hide()
+            self.large_badges[name] = large_badge
+            
+        mini_scroll_layout.addStretch()
+        mini_scroll.setWidget(mini_scroll_widget)
+        mini_layout.addWidget(mini_scroll)
+        left_panel.addWidget(mini_badge_container)
+        
+        # 左下：选中的大工牌展示区 (高地)
+        self.large_badge_area = QWidget()
+        self.large_badge_layout = QVBoxLayout(self.large_badge_area)
+        self.large_badge_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.large_badge_layout.addWidget(QLabel("Click a mini badge to inspect", styleSheet=f"color: {CyberpunkTheme.TEXT_DIM};"))
+        left_panel.addWidget(self.large_badge_area)
+        
+        # ==========================================
+        # 中间：沉浸式创作区 (正文流式输出 + 日志)
+        # ==========================================
+        center_panel = QSplitter(Qt.Orientation.Vertical)
+        center_panel.setMinimumWidth(600)
+        
+        # 中上：控制台与打字机视图
+        editor_container = QWidget()
+        editor_layout = QVBoxLayout(editor_container)
+        editor_layout.setContentsMargins(10, 10, 10, 0)
+        
+        # 控制按钮组
+        btn_layout = QHBoxLayout()
+        self.btn_start = QPushButton("▶ 开启/恢复生成 (START)")
+        self.btn_start.setStyleSheet(f"background-color: {CyberpunkTheme.FG_SUCCESS}; color: #000; font-weight: bold;")
+        self.btn_pause = QPushButton("⏸ 紧急暂停 (PAUSE)")
+        self.btn_override = QPushButton("✏️ 人工接管 (OVERRIDE)")
+        btn_layout.addWidget(self.btn_start)
+        btn_layout.addWidget(self.btn_pause)
+        btn_layout.addWidget(self.btn_override)
+        editor_layout.addLayout(btn_layout)
+        
+        # 实时正文查看器 (The Typewriter)
+        self.manuscript_viewer = QTextBrowser()
+        self.manuscript_viewer.setStyleSheet(f"""
+            background-color: #1e1e1e; color: #d4d4d4; 
+            font-family: 'Microsoft YaHei', Consolas; font-size: 15px; 
+            line-height: 1.8; padding: 20px; border-radius: 8px; border: 1px solid #333;
+        """)
+        self.manuscript_viewer.setPlaceholderText(">> AI 实时生成正文将在这里显示，如打字机般倾泻而出...")
+        editor_layout.addWidget(self.manuscript_viewer)
+        center_panel.addWidget(editor_container)
+        
+        # 中下：日志与仲裁
+        self.log_panel = LogPanel()
+        center_panel.addWidget(self.log_panel)
+        
+        # 设置中间上下比例 (正文占 70%，日志占 30%)
+        center_panel.setStretchFactor(0, 7)
+        center_panel.setStretchFactor(1, 3)
 
+        # ==========================================
+        # 右侧：常驻设定参考区 (Outline/Chars/Rules)
+        # ==========================================
+        right_panel = QWidget()
+        right_panel.setMinimumWidth(350)
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(5, 5, 10, 5)
+        
+        self.right_tabs = QTabWidget()
+        self.right_tabs.setStyleSheet(f"QTabBar::tab {{ background: {CyberpunkTheme.BG_DARK}; color: white; padding: 8px 12px; }}")
+        
+        self.outline_edit = QTextEdit()
+        self.chars_edit = QTextEdit()
+        self.rules_edit = QTextEdit()
+        
+        for widget in [self.outline_edit, self.chars_edit, self.rules_edit]:
+            widget.setStyleSheet(f"background-color: {CyberpunkTheme.BG_MEDIUM}; color: {CyberpunkTheme.TEXT_PRIMARY}; font-size: 13px; font-family: Consolas;")
+            
+        self.right_tabs.addTab(self.outline_edit, "📖 剧情大纲")
+        self.right_tabs.addTab(self.chars_edit, "👤 角色档案")
+        self.right_tabs.addTab(self.rules_edit, "⚙️ 世界法则")
+        
+        right_layout.addWidget(self.right_tabs)
+        
+        btn_save_config = QPushButton("💾 实时保存设定修改")
+        btn_save_config.setStyleSheet(f"border: 1px solid {CyberpunkTheme.FG_PRIMARY}; color: {CyberpunkTheme.FG_PRIMARY};")
+        right_layout.addWidget(btn_save_config)
+
+        # === 组装三栏 ===
+        main_splitter.addWidget(left_panel)
+        main_splitter.addWidget(center_panel)
+        main_splitter.addWidget(right_panel)
+        
+        main_splitter.setStretchFactor(0, 2)
+        main_splitter.setStretchFactor(1, 6)
+        main_splitter.setStretchFactor(2, 2)
+        
+        central_layout.addWidget(main_splitter)
         self.setCentralWidget(central_widget)
 
-        # Tab 1: 前期筹备
-        self.preproduction_panel = PreProductionPanel(self.project_dir)
-        self.preproduction_panel.generate_settings.connect(self.on_generate_settings)
-        self.preproduction_panel.evaluate_settings.connect(self.on_evaluate_settings)
-        self.preproduction_panel.approve_and_start.connect(self.on_approve_and_start)
-        self.tabs.addTab(self.preproduction_panel, "📝 前期筹备 (Pre-Production)")
+        # 绑定按钮事件
+        self.btn_start.clicked.connect(self.do_start_generation)
+        btn_save_config.clicked.connect(self.save_right_panel_configs)
 
-        # Tab 2: 生产监控 (重新设计的三栏布局 - 日志|Agent|可视化)
-        production_widget = QWidget()
-        production_layout = QHBoxLayout(production_widget)
-        production_layout.setContentsMargins(5, 5, 5, 5)
-        production_layout.setSpacing(5)
+    def switch_large_badge(self, agent_name: str):
+        """点击迷你工牌，在左下方召唤对应的 3D 翻转大卡片"""
+        # 清除布局中旧的卡片
+        for i in reversed(range(self.large_badge_layout.count())): 
+            widget = self.large_badge_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+                
+        # 添加新的卡片
+        if agent_name in self.large_badges:
+            card = self.large_badges[agent_name]
+            card.show()
+            self.large_badge_layout.addWidget(card)
 
-        # === 左侧：日志面板 (原来在中间，现在移到左侧) ===
-        self.log_panel = LogPanel()
+    def on_text_stream(self, text_chunk: str):
+        """接收打字机文本流，追加到中间正文区"""
+        # 移动光标到末尾并插入文本
+        cursor = self.manuscript_viewer.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(text_chunk)
+        self.manuscript_viewer.setTextCursor(cursor)
+        self.manuscript_viewer.ensureCursorVisible()
 
-        # === 中间：Agent面板 (原来在左侧，现在移到中间并加宽) ===
-        center_container = QWidget()
-        center_layout = QVBoxLayout(center_container)
-        center_layout.setContentsMargins(5, 5, 5, 5)
-        center_layout.setSpacing(5)
-
-        # Agent矩阵
-        self.agent_panel = AgentMatrixPanel()
-        self.agent_panel.agent_clicked.connect(self.on_agent_clicked)
-        center_layout.addWidget(self.agent_panel, stretch=2)
-
-        # Agent详细信息面板
-        self.detail_panel = AgentDetailPanel()
-        self.detail_panel.set_agents(self.agent_panel.agent_cards)
-        center_layout.addWidget(self.detail_panel, stretch=1)
-
-        # 控制按钮
-        self.setup_control_buttons(center_layout)
-
-        # === 右侧：情绪曲线 + 熔断状态 ===
-        right_container = QWidget()
-        right_layout = QVBoxLayout(right_container)
-        right_layout.setContentsMargins(5, 5, 5, 5)
-        right_layout.setSpacing(5)
-
-        # 熔断状态栏
-        self.circuit_breaker = CircuitBreakerPanel()
-        right_layout.addWidget(self.circuit_breaker)
-
-        # 情绪波浪图（缩小版）
-        self.emotion_panel = EmotionWavePanel()
-        right_layout.addWidget(self.emotion_panel, stretch=1)
-
-        # 使用splitter分割
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.log_panel)
-        splitter.addWidget(center_container)
-        splitter.addWidget(right_container)
-
-        # 新比例：左侧日志 30% : 中间Agent 45% : 右侧可视化 25%
-        splitter.setStretchFactor(0, 30)
-        splitter.setStretchFactor(1, 45)
-        splitter.setStretchFactor(2, 25)
-
-        # 设置最小宽度
-        self.log_panel.setMinimumWidth(Layout.PANEL_LEFT_MIN)
-        self.log_panel.setMaximumWidth(Layout.PANEL_LEFT_MAX)
-        center_container.setMinimumWidth(Layout.PANEL_CENTER_MIN)
-        right_container.setMinimumWidth(Layout.PANEL_RIGHT_MIN)
-        right_container.setMaximumWidth(Layout.PANEL_RIGHT_MAX)
-
-        production_layout.addWidget(splitter)
-
-        self.tabs.addTab(production_widget, "🎬 生产监控 (Production Dashboard)")
-
-        # 设置菜单栏（在log_panel创建后）
-        self.setup_menu()
-
-        # 状态栏
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready - Click 'Start Generation' to begin")
-
-        # 进度条
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMaximumWidth(200)
-        self.progress_bar.setVisible(False)
-        self.status_bar.addPermanentWidget(self.progress_bar)
+    def update_agent_status(self, name: str, status: str, task: str = ""):
+        """同步更新大卡片和迷你卡片的状态灯"""
+        # 获取颜色
+        colors = {"idle": CyberpunkTheme.FG_SUCCESS, "thinking": CyberpunkTheme.FG_INFO, "writing": CyberpunkTheme.FG_PRIMARY, "auditing": CyberpunkTheme.FG_ACCENT, "conflict": CyberpunkTheme.FG_DANGER}
+        color_hex = colors.get(status.lower(), CyberpunkTheme.FG_SUCCESS)
+        
+        if name in self.large_badges:
+            self.large_badges[name].set_status(status, task)
+        if name in self.mini_badges:
+            self.mini_badges[name].set_status(color_hex)
 
     def setup_menu(self):
         """设置菜单栏"""
@@ -4037,16 +4018,12 @@ class ProducerDashboard(QMainWindow):
         self.status_bar.showMessage("Generating...")
 
     def connect_worker(self, worker):
-        """连接工作线程"""
         self.worker = worker
-
         worker.log_signal.connect(self.on_log)
-        worker.agent_status_signal.connect(self.on_agent_status)
+        worker.agent_status_signal.connect(lambda d: self.update_agent_status(d["name"], d["status"], d.get("task", "")))
         worker.emotion_curve_signal.connect(self.on_emotion_curve)
-        worker.circuit_breaker_signal.connect(self.on_circuit_breaker)
-        worker.chapter_complete_signal.connect(self.on_chapter_complete)
-        worker.error_signal.connect(self.on_error)
-        worker.progress_signal.connect(self.on_progress)
+        # 🔥 绑定流式输出信号
+        worker.text_stream_signal.connect(self.on_text_stream)
 
     def on_log(self, message: str, agent: str = None):
         """日志信号处理"""
