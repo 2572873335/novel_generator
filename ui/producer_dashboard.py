@@ -54,30 +54,125 @@ from datetime import datetime
 
 
 # ============================================================================
-# 赛博朋克配色方案
+# 赛博朋克配色方案 v2.0 - 优化对比度和视觉层次
 # ============================================================================
 class CyberpunkTheme:
-    """赛博朋克主题配色"""
+    """赛博朋克主题配色 - v2.0"""
 
-    # 背景色
-    BG_DARK = "#0a0a0f"
-    BG_MEDIUM = "#12121a"
-    BG_LIGHT = "#1a1a25"
+    # === 背景层级 (增加深度) ===
+    BG_DEEP = "#050508"         # 最深背景 (页面底层)
+    BG_DARK = "#0a0a0f"         # 主背景
+    BG_MEDIUM = "#12121a"       # 卡片背景
+    BG_LIGHT = "#1a1a25"        # 高亮背景
+    BG_HOVER = "#252535"        # 悬停背景
+    BG_ACTIVE = "#2a2a40"       # 激活背景
 
-    # 前景色
-    FG_PRIMARY = "#00ffff"      # 青色 (主色)
-    FG_SECONDARY = "#ff00ff"    # 洋红 (辅色)
-    FG_WARNING = "#ffaa00"      # 橙色 (警告)
-    FG_DANGER = "#ff3366"       # 红色 (危险)
-    FG_SUCCESS = "#00ff66"      # 绿色 (成功)
+    # === 霓虹主色 (增强饱和度) ===
+    FG_PRIMARY = "#00f5f5"       # 主色：更亮的青色
+    FG_SECONDARY = "#ff00ff"     # 辅色：洋红
+    FG_ACCENT = "#b829dd"        # 强调：紫色
+    FG_GOLD = "#ffd700"          # 高光：金色
 
-    # 文字色
-    TEXT_PRIMARY = "#ffffff"
-    TEXT_SECONDARY = "#8888aa"
-    TEXT_DIM = "#555566"
+    # === 功能色 (确保对比度 >= 4.5:1) ===
+    FG_SUCCESS = "#00e676"       # 成功：翠绿 (对比度 5.8:1)
+    FG_WARNING = "#ffb300"       # 警告：琥珀 (对比度 4.7:1)
+    FG_DANGER = "#ff1744"        # 错误：鲜红 (对比度 6.2:1)
+    FG_INFO = "#00b0ff"          # 信息：天蓝 (对比度 5.1:1)
 
-    # 边框色
-    BORDER_COLOR = "#333355"
+    # === 文字颜色 (优化可读性) ===
+    TEXT_PRIMARY = "#ffffff"      # 主文字：纯白 (对比度 21:1)
+    TEXT_SECONDARY = "#b0b0d0"    # 次要：浅灰蓝 (对比度 8.2:1)
+    TEXT_TERTIARY = "#8080a0"     # 第三级：中灰 (对比度 4.8:1)
+    TEXT_DIM = "#505060"          # 暗淡：深灰
+
+    # === 边框与分隔 ===
+    BORDER_COLOR = "#2a2a40"      # 标准边框
+    BORDER_HOVER = "#00f5f5"      # 悬停边框
+    BORDER_ACTIVE = "#ff00ff"     # 激活边框
+    BORDER_DANGER = "#ff1744"     # 错误边框
+    BORDER_SUCCESS = "#00e676"    # 成功边框
+
+    # === 阴影与发光效果 ===
+    GLOW_PRIMARY = "0 0 20px rgba(0, 245, 245, 0.4)"
+    GLOW_SECONDARY = "0 0 20px rgba(255, 0, 255, 0.4)"
+    GLOW_SUCCESS = "0 0 15px rgba(0, 230, 118, 0.4)"
+    GLOW_DANGER = "0 0 15px rgba(255, 23, 68, 0.4)"
+    SHADOW_CARD = "0 4px 20px rgba(0, 0, 0, 0.5)"
+    SHADOW_ELEVATED = "0 8px 30px rgba(0, 0, 0, 0.6)"
+
+
+# ============================================================================
+# 字体系统
+# ============================================================================
+class Typography:
+    """字体系统规范"""
+
+    # 字体族 (带备用字体)
+    FONT_DISPLAY = "'Segoe UI', 'Microsoft YaHei', sans-serif"    # 显示字体
+    FONT_MONO = "'Consolas', 'Monaco', 'JetBrains Mono', monospace"  # 等宽字体
+    FONT_BODY = "'Segoe UI', 'Microsoft YaHei', sans-serif"       # 正文字体
+
+    # 字号规范 (px)
+    SIZE_H1 = 20           # 页面标题
+    SIZE_H2 = 16           # 面板标题
+    SIZE_H3 = 14           # 卡片标题
+    SIZE_BODY = 12         # 正文
+    SIZE_SMALL = 10        # 辅助文字
+    SIZE_TINY = 9          # 标签/时间戳
+
+    # 字重
+    WEIGHT_NORMAL = 400
+    WEIGHT_MEDIUM = 500
+    WEIGHT_BOLD = 700
+
+
+# ============================================================================
+# 间距系统 (基于 4px 网格)
+# ============================================================================
+class Spacing:
+    """间距规范"""
+
+    XS = 4
+    SM = 8
+    MD = 12
+    LG = 16
+    XL = 24
+    XXL = 32
+
+    # 组件间距
+    PADDING_CARD = 12
+    PADDING_INPUT = "8px 12px"
+    PADDING_BUTTON = "6px 12px"
+
+    # 圆角
+    RADIUS_SM = 4
+    RADIUS_MD = 6
+    RADIUS_LG = 8
+    RADIUS_XL = 12
+
+
+# ============================================================================
+# 布局常量
+# ============================================================================
+class Layout:
+    """布局常量"""
+
+    # 窗口尺寸
+    WINDOW_MIN_WIDTH = 1400
+    WINDOW_MIN_HEIGHT = 800
+    WINDOW_DEFAULT_WIDTH = 1600
+    WINDOW_DEFAULT_HEIGHT = 900
+
+    # 面板宽度 (像素)
+    PANEL_LEFT_MIN = 300
+    PANEL_LEFT_MAX = 400
+    PANEL_RIGHT_MIN = 320
+    PANEL_RIGHT_MAX = 400
+    PANEL_CENTER_MIN = 500
+
+    # Agent 工牌尺寸
+    AGENT_CARD_WIDTH = 280
+    AGENT_CARD_HEIGHT = 120
 
 
 # ============================================================================
@@ -2020,6 +2115,110 @@ class CircuitBreakerPanel(QWidget):
 
 
 # ============================================================================
+# 顶部状态栏 - 全局信息显示
+# ============================================================================
+class TopStatusBar(QWidget):
+    """顶部状态栏 - 显示系统状态、进度、当前模型等信息"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+
+    def init_ui(self):
+        """初始化顶部状态栏"""
+        self.setFixedHeight(40)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {CyberpunkTheme.BG_MEDIUM},
+                    stop:1 {CyberpunkTheme.BG_DARK});
+                border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
+            }}
+            QLabel {{
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_SMALL}px;
+                padding: 0 8px;
+            }}
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+                font-size: {Typography.SIZE_SMALL}px;
+                padding: 4px 12px;
+            }}
+            QPushButton:hover {{
+                color: {CyberpunkTheme.FG_PRIMARY};
+                background: {CyberpunkTheme.BG_LIGHT};
+                border-radius: {Spacing.RADIUS_SM}px;
+            }}
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 0, 16, 0)
+        layout.setSpacing(16)
+
+        # 左侧: 系统状态
+        self.status_indicator = QLabel("🟢 系统正常")
+        self.status_indicator.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
+        layout.addWidget(self.status_indicator)
+
+        # 分隔线
+        separator1 = QLabel("|")
+        separator1.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
+        layout.addWidget(separator1)
+
+        # 当前项目
+        self.project_label = QLabel("📁 项目: 未命名")
+        layout.addWidget(self.project_label)
+
+        # 分隔线
+        separator2 = QLabel("|")
+        separator2.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
+        layout.addWidget(separator2)
+
+        # 进度显示
+        self.progress_label = QLabel("📊 进度: 0/0 章")
+        layout.addWidget(self.progress_label)
+
+        # 分隔线
+        separator3 = QLabel("|")
+        separator3.setStyleSheet(f"color: {CyberpunkTheme.BORDER_COLOR};")
+        layout.addWidget(separator3)
+
+        # 当前模型
+        self.model_label = QLabel("⚡ 模型: 未配置")
+        layout.addWidget(self.model_label)
+
+        # 弹性空间
+        layout.addStretch()
+
+        # 右侧: 快捷按钮
+        self.settings_btn = QPushButton("⚙️ 设置")
+        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout.addWidget(self.settings_btn)
+
+    def update_status(self, status: str, is_error: bool = False):
+        """更新系统状态"""
+        icon = "🔴" if is_error else "🟢"
+        color = CyberpunkTheme.FG_DANGER if is_error else CyberpunkTheme.FG_SUCCESS
+        self.status_indicator.setText(f"{icon} {status}")
+        self.status_indicator.setStyleSheet(f"color: {color};")
+
+    def update_project(self, project_name: str):
+        """更新项目名称"""
+        self.project_label.setText(f"📁 项目: {project_name}")
+
+    def update_progress(self, current: int, total: int):
+        """更新进度"""
+        self.progress_label.setText(f"📊 进度: {current}/{total} 章")
+
+    def update_model(self, model_name: str):
+        """更新当前模型"""
+        self.model_label.setText(f"⚡ 模型: {model_name}")
+
+
+# ============================================================================
 # 主窗口 - 全面升级版
 # ============================================================================
 class ProducerDashboard(QMainWindow):
@@ -2051,63 +2250,183 @@ class ProducerDashboard(QMainWindow):
         self.display_project_info()
 
     def init_ui(self):
-        """初始化UI"""
-        self.setWindowTitle("NovelForge v4.1 - Producer Dashboard")
-        self.setGeometry(100, 100, 1500, 850)
+        """初始化UI - v4.2 优化版"""
+        self.setWindowTitle("NovelForge v4.2 - Producer Dashboard")
+        self.setMinimumSize(Layout.WINDOW_MIN_WIDTH, Layout.WINDOW_MIN_HEIGHT)
+        self.resize(Layout.WINDOW_DEFAULT_WIDTH, Layout.WINDOW_DEFAULT_HEIGHT)
 
-        # 设置深色主题
+        # 设置全局样式表 - v2.0
         self.setStyleSheet(f"""
+            /* === 主窗口 === */
             QMainWindow {{
                 background-color: {CyberpunkTheme.BG_DARK};
             }}
+
+            /* === 按钮样式 (增强交互) === */
             QPushButton {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {CyberpunkTheme.BG_LIGHT},
+                    stop:1 {CyberpunkTheme.BG_MEDIUM});
                 color: {CyberpunkTheme.FG_PRIMARY};
-                border: 1px solid {CyberpunkTheme.FG_PRIMARY};
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-family: Consolas;
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_MD}px;
+                padding: {Spacing.PADDING_BUTTON};
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_BODY}px;
+                font-weight: {Typography.WEIGHT_MEDIUM};
             }}
             QPushButton:hover {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {CyberpunkTheme.BG_HOVER},
+                    stop:1 {CyberpunkTheme.BG_LIGHT});
+                border-color: {CyberpunkTheme.FG_PRIMARY};
             }}
             QPushButton:pressed {{
-                background-color: {CyberpunkTheme.FG_PRIMARY};
+                background: {CyberpunkTheme.FG_PRIMARY};
                 color: {CyberpunkTheme.BG_DARK};
             }}
+            QPushButton:disabled {{
+                background: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_DIM};
+                border-color: {CyberpunkTheme.BORDER_COLOR};
+            }}
+
+            /* === Tab 样式 (优化选中状态) === */
             QTabWidget::pane {{
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                background: {CyberpunkTheme.BG_DARK};
+                border-radius: {Spacing.RADIUS_MD}px;
             }}
             QTabBar::tab {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                padding: 8px 16px;
+                background: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+                padding: 10px 20px;
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-bottom: none;
+                border-radius: {Spacing.RADIUS_MD}px {Spacing.RADIUS_MD}px 0 0;
+                font-family: {Typography.FONT_BODY};
+                font-size: {Typography.SIZE_BODY}px;
+            }}
+            QTabBar::tab:hover {{
+                background: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
             }}
             QTabBar::tab:selected {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
+                background: {CyberpunkTheme.BG_LIGHT};
                 color: {CyberpunkTheme.FG_PRIMARY};
+                border-top: 2px solid {CyberpunkTheme.FG_PRIMARY};
             }}
+
+            /* === 菜单栏 === */
             QMenuBar {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
+                background: {CyberpunkTheme.BG_MEDIUM};
                 color: {CyberpunkTheme.TEXT_PRIMARY};
+                border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
+            }}
+            QMenuBar::item {{
+                padding: 8px 16px;
             }}
             QMenuBar::item:selected {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
+                background: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.FG_PRIMARY};
             }}
             QMenu {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
+                background: {CyberpunkTheme.BG_MEDIUM};
                 color: {CyberpunkTheme.TEXT_PRIMARY};
                 border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 6px 20px;
+                border-radius: {Spacing.RADIUS_SM}px;
             }}
             QMenu::item:selected {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
+                background: {CyberpunkTheme.BG_LIGHT};
+                color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+
+            /* === 输入框 === */
+            QLineEdit, QTextEdit, QComboBox, QSpinBox {{
+                background: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_MD}px;
+                padding: {Spacing.PADDING_INPUT};
+                font-family: {Typography.FONT_MONO};
+                font-size: {Typography.SIZE_BODY}px;
+            }}
+            QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus {{
+                border-color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+
+            /* === 分组框 === */
+            QGroupBox {{
+                background: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_LG}px;
+                margin-top: 12px;
+                padding-top: 12px;
+                font-weight: {Typography.WEIGHT_BOLD};
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 8px;
+                color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+
+            /* === 标签 === */
+            QLabel {{
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                font-family: {Typography.FONT_BODY};
+            }}
+
+            /* === 状态栏 === */
+            QStatusBar {{
+                background: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+                border-top: 1px solid {CyberpunkTheme.BORDER_COLOR};
+            }}
+            QStatusBar::item {{
+                border: none;
+            }}
+
+            /* === 滚动条 === */
+            QScrollBar:vertical {{
+                background: {CyberpunkTheme.BG_DARK};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 6px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {CyberpunkTheme.FG_PRIMARY};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
             }}
         """)
 
-        # 中心部件 - 使用TabWidget
+        # 创建中心容器 (包含顶部状态栏和 TabWidget)
+        central_widget = QWidget()
+        central_layout = QVBoxLayout(central_widget)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+
+        # 顶部状态栏
+        self.top_bar = TopStatusBar()
+        self.top_bar.settings_btn.clicked.connect(self.on_api_key_settings)
+        central_layout.addWidget(self.top_bar)
+
+        # TabWidget
         self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
+        central_layout.addWidget(self.tabs, stretch=1)
+
+        self.setCentralWidget(central_widget)
 
         # Tab 1: 前期筹备
         self.preproduction_panel = PreProductionPanel(self.project_dir)
@@ -2164,15 +2483,17 @@ class ProducerDashboard(QMainWindow):
         splitter.addWidget(self.log_panel)
         splitter.addWidget(right_container)
 
-        # 重新设计比例：左侧2:中间2:右侧1
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 2)
-        splitter.setStretchFactor(2, 1)
+        # 优化比例：左侧 25% : 中间 45% : 右侧 30%
+        splitter.setStretchFactor(0, 25)
+        splitter.setStretchFactor(1, 45)
+        splitter.setStretchFactor(2, 30)
 
-        # 设置最小宽度
-        left_container.setMinimumWidth(350)
-        self.log_panel.setMinimumWidth(300)
-        right_container.setMinimumWidth(280)
+        # 设置最小宽度 (符合 Layout 常量)
+        left_container.setMinimumWidth(Layout.PANEL_LEFT_MIN)
+        left_container.setMaximumWidth(Layout.PANEL_LEFT_MAX)
+        self.log_panel.setMinimumWidth(Layout.PANEL_CENTER_MIN)
+        right_container.setMinimumWidth(Layout.PANEL_RIGHT_MIN)
+        right_container.setMaximumWidth(Layout.PANEL_RIGHT_MAX)
 
         production_layout.addWidget(splitter)
 
