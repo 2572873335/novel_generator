@@ -2528,12 +2528,12 @@ class TopStatusBar(QWidget):
 # ============================================================================
 class ProducerDashboard(QMainWindow):
     """
-    制片人仪表板主窗口 - v4.1 全面升级
+    制片人仪表板主窗口 - v4.2 UI优化版
 
-    三栏布局（重新设计）:
-    - 左侧：Agent工牌矩阵（可翻转）+ Agent详细信息面板
-    - 中间：生产控制 + 实时日志
-    - 右侧：情绪波浪图（缩小版）
+    三栏布局（v4.2 优化）:
+    - 左侧：实时日志面板（带筛选和语法高亮）
+    - 中间：Agent工牌矩阵（可翻转）+ Agent详细信息面板 + 生产控制
+    - 右侧：情绪波浪图 + 熔断状态面板
     """
 
     start_generation = pyqtSignal(dict)
@@ -2740,33 +2740,33 @@ class ProducerDashboard(QMainWindow):
         self.preproduction_panel.approve_and_start.connect(self.on_approve_and_start)
         self.tabs.addTab(self.preproduction_panel, "📝 前期筹备 (Pre-Production)")
 
-        # Tab 2: 生产监控 (重新设计的三栏布局)
+        # Tab 2: 生产监控 (重新设计的三栏布局 - 日志|Agent|可视化)
         production_widget = QWidget()
         production_layout = QHBoxLayout(production_widget)
         production_layout.setContentsMargins(5, 5, 5, 5)
         production_layout.setSpacing(5)
 
-        # === 左侧：Agent面板 ===
-        left_container = QWidget()
-        left_layout = QVBoxLayout(left_container)
-        left_layout.setContentsMargins(5, 5, 5, 5)
-        left_layout.setSpacing(5)
+        # === 左侧：日志面板 (原来在中间，现在移到左侧) ===
+        self.log_panel = LogPanel()
+
+        # === 中间：Agent面板 (原来在左侧，现在移到中间并加宽) ===
+        center_container = QWidget()
+        center_layout = QVBoxLayout(center_container)
+        center_layout.setContentsMargins(5, 5, 5, 5)
+        center_layout.setSpacing(5)
 
         # Agent矩阵
         self.agent_panel = AgentMatrixPanel()
         self.agent_panel.agent_clicked.connect(self.on_agent_clicked)
-        left_layout.addWidget(self.agent_panel, stretch=2)
+        center_layout.addWidget(self.agent_panel, stretch=2)
 
         # Agent详细信息面板
         self.detail_panel = AgentDetailPanel()
         self.detail_panel.set_agents(self.agent_panel.agent_cards)
-        left_layout.addWidget(self.detail_panel, stretch=1)
+        center_layout.addWidget(self.detail_panel, stretch=1)
 
         # 控制按钮
-        self.setup_control_buttons(left_layout)
-
-        # === 中间：日志面板 ===
-        self.log_panel = LogPanel()
+        self.setup_control_buttons(center_layout)
 
         # === 右侧：情绪曲线 + 熔断状态 ===
         right_container = QWidget()
@@ -2784,19 +2784,19 @@ class ProducerDashboard(QMainWindow):
 
         # 使用splitter分割
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(left_container)
         splitter.addWidget(self.log_panel)
+        splitter.addWidget(center_container)
         splitter.addWidget(right_container)
 
-        # 优化比例：左侧 25% : 中间 45% : 右侧 30%
-        splitter.setStretchFactor(0, 25)
+        # 新比例：左侧日志 30% : 中间Agent 45% : 右侧可视化 25%
+        splitter.setStretchFactor(0, 30)
         splitter.setStretchFactor(1, 45)
-        splitter.setStretchFactor(2, 30)
+        splitter.setStretchFactor(2, 25)
 
-        # 设置最小宽度 (符合 Layout 常量)
-        left_container.setMinimumWidth(Layout.PANEL_LEFT_MIN)
-        left_container.setMaximumWidth(Layout.PANEL_LEFT_MAX)
-        self.log_panel.setMinimumWidth(Layout.PANEL_CENTER_MIN)
+        # 设置最小宽度
+        self.log_panel.setMinimumWidth(Layout.PANEL_LEFT_MIN)
+        self.log_panel.setMaximumWidth(Layout.PANEL_LEFT_MAX)
+        center_container.setMinimumWidth(Layout.PANEL_CENTER_MIN)
         right_container.setMinimumWidth(Layout.PANEL_RIGHT_MIN)
         right_container.setMaximumWidth(Layout.PANEL_RIGHT_MAX)
 
