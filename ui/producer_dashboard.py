@@ -3676,18 +3676,13 @@ class ProducerDashboard(QMainWindow):
                 with open(config_path, "r", encoding="utf-8") as f:
                     self.project_config = json.load(f)
 
-                # 加载配置到前期筹备面板的表单
+                # 加载配置到右侧面板
                 config = self.project_config
                 if config:
-                    self.preproduction_panel.title_edit.setText(config.get("title", ""))
-                    self.preproduction_panel.protagonist_edit.setText(config.get("protagonist", ""))
-                    self.preproduction_panel.chapters_spin.setValue(config.get("target_chapters", 50))
-
-                    # 设置题材
-                    genre = config.get("genre", "修仙")
-                    index = self.preproduction_panel.genre_combo.findText(genre)
-                    if index >= 0:
-                        self.preproduction_panel.genre_combo.setCurrentIndex(index)
+                    # 设置大纲、角色、规则编辑区
+                    self.outline_edit.setPlainText(config.get("outline", ""))
+                    self.chars_edit.setPlainText(config.get("characters", ""))
+                    self.rules_edit.setPlainText(config.get("rules", config.get("settings", "")))
 
             except Exception as e:
                 print(f"Warning: Failed to load project config: {e}")
