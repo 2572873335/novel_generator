@@ -3563,6 +3563,29 @@ class ProducerDashboard(QMainWindow):
         self.btn_start.clicked.connect(self.do_start_generation)
         btn_save_config.clicked.connect(self.save_right_panel_configs)
 
+    def save_right_panel_configs(self):
+        """保存右侧面板配置"""
+        try:
+            outline = self.outline_edit.toPlainText()
+            chars = self.chars_edit.toPlainText()
+            rules = self.rules_edit.toPlainText()
+
+            # 保存到项目目录
+            if self.project_dir:
+                project_path = Path(self.project_dir)
+                project_path.mkdir(parents=True, exist_ok=True)
+
+                if outline:
+                    (project_path / "outline_edit.md").write_text(outline, encoding="utf-8")
+                if chars:
+                    (project_path / "characters_edit.md").write_text(chars, encoding="utf-8")
+                if rules:
+                    (project_path / "rules_edit.md").write_text(rules, encoding="utf-8")
+
+                self.log_panel.append_log("设定修改已保存", "success")
+        except Exception as e:
+            self.log_panel.append_log(f"保存失败: {e}", "error")
+
     def switch_large_badge(self, agent_name: str):
         """点击迷你工牌，在左下方召唤对应的 3D 翻转大卡片"""
         # 清除布局中旧的卡片
