@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.1.0] - 2026-02-28
+
+### Added
+- **Modern SaaS Dark Theme (Slate Dark)**
+  - 全面改造 `CyberpunkTheme` 配色：从纯黑霓虹改为专业 Slate Dark 色系
+  - 背景色：`#0F172A` / `#1E293B` / `#334155`
+  - 主色调：Sky Blue `#38BDF8`，功能色 Emerald/Amber/Rose/Violet
+  - 新增 `Typography.FONT_PRIMARY` 用于卡片标题
+
+- **创作工具箱 (Creation Toolbox)**
+  - PreProductionView 新增第三入口「创作工具箱」
+  - 6 个创意工具卡片：脑洞生成器、书名生成器、金手指生成器、世界观生成器、反派生成器、核心冲突提炼
+  - `ToolGeneratorDialog` 对话框：输入关键词 → LLM 生成 → 复制/追加到大纲
+  - `ToolWorker` 后台线程调用 LLM API
+
+- **工作流集市 (Skill Market)**
+  - 新增第四导航页 `SkillMarketView`
+  - 内置技能（`.opencode/skills/`）只读查看 + 克隆
+  - 自定义技能（`user_data/custom_skills/`）创建/编辑/删除
+  - `SkillEditorDialog` 技能编辑器
+
+- **Agentic AI 对话 (AgenticChatWorker)**
+  - PreProductionView AI 对话引导页
+  - `AgenticChatWorker` 多轮对话线程，支持 JSON 指令解析
+  - `UIDriver` (ui_controller.py) 执行 AI 返回的 UI 控制指令
+
+### Changed
+- 选择页从 QPushButton 改为现代 QFrame 卡片（图标+标题+描述）
+- 工具箱卡片左对齐，使用 `FONT_PRIMARY` 替代 Consolas
+- 技能卡片按钮缩小为轻量 ghost button 风格
+- ThemeManager cyberpunk 条目同步更新为 Slate Dark 配色
+
+### Fixed
+- Anthropic Messages API system role 错误：新增 `_split_system_messages()` 过滤器
+- AgenticChatWorker 不再将 system prompt 混入 messages 数组
+- `_handle_tool_apply` 使用 QTextCursor 追加文本，避免 setText 重置滚动条
+
+---
+
+## [5.0.0] - 2026-02-28
+
+### Added
+- **DDD领域驱动设计重构**
+  - 新增 `core/project_context.py` - `NovelProject` 领域模型类
+  - 封装所有文件系统操作：配置、大纲、人物、章节、进度、情绪账本、世界圣经
+  - 实现依赖倒置，UI不再直接依赖 `Path` 操作
+
+- **统一入口点 (main.py argparse重构)**
+  - 使用 argparse 子命令统一管理 GUI 和 CLI 模式
+  - `python main.py gui` - 启动 PyQt6 Studio
+  - `python main.py cli` - 运行无头生成模式
+  - `python main.py init` - 初始化新项目
+
+- **Facade模式 (core/__init__.py)**
+  - 创建 `core/__init__.py` 导出所有主要组件
+  - 支持 `from core import NovelProject`
+  - 为未来物理文件重组做准备
+
+### Changed
+- **UI模块化更新**
+  - `ui/views.py`:
+    - `PreProductionView.reload_data()` 使用 `NovelProject`
+    - `PreProductionView.save_project()` 使用 `NovelProject`
+    - `ProjectVaultView.reload_data()` 使用 `NovelProject`
+  - `ui/worker_thread.py`:
+    - `_initialize_orchestrator()` 使用 `NovelProject` 加载配置
+    - `_emit_emotion_curve()` 使用 `NovelProject` 加载情绪账本
+
+### Fixed
+- 修复 `NovelProject.list_chapters()` 方法中的语法错误
+
+---
+
 ## [4.2.1] - 2026-02-26
 
 ### Added

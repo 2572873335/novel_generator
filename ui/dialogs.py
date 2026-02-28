@@ -13,10 +13,11 @@ try:
         QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
         QFrame, QDialog, QFormLayout, QTextEdit, QLineEdit,
         QComboBox, QSpinBox, QProgressBar, QGroupBox, QTextBrowser,
-        QListWidget, QListWidgetItem, QMessageBox, QFileDialog
+        QListWidget, QListWidgetItem, QMessageBox, QFileDialog, QInputDialog
     )
     from PyQt6.QtCore import Qt, pyqtSignal, QTimer
     from PyQt6.QtGui import QFont
+    from PyQt6.QtWidgets import QApplication
     PYQT_AVAILABLE = True
 except ImportError:
     PYQT_AVAILABLE = False
@@ -1271,3 +1272,199 @@ class DocumentViewerDialog(QDialog):
             except:
                 # 尝试其他方式
                 os.startfile(str(self.current_file))
+
+
+class ToolGeneratorDialog(QDialog):
+    """创作工具箱 - 单工具生成对话框"""
+    applied_signal = pyqtSignal(str, str)  # tool_name, result_text
+
+    def __init__(self, tool_name: str, parent=None):
+        super().__init__(parent)
+        self.tool_name = tool_name
+        self.worker = None
+        self._init_ui()
+
+    def _init_ui(self):
+        self.setWindowTitle(f"🧰 {self.tool_name}")
+        self.setMinimumSize(600, 500)
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {CyberpunkTheme.BG_DARK}; }}
+            QLabel {{ color: {CyberpunkTheme.TEXT_PRIMARY}; font-family: Consolas; font-weight: bold; }}
+            QTextEdit, QTextBrowser {{ background-color: {CyberpunkTheme.BG_MEDIUM}; color: {CyberpunkTheme.TEXT_PRIMARY}; border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 6px; padding: 10px; font-family: 'Microsoft YaHei', Consolas; font-size: 14px; }}
+            QTextEdit:focus {{ border-color: {CyberpunkTheme.FG_PRIMARY}; }}
+            QPushButton {{ background-color: {CyberpunkTheme.BG_LIGHT}; color: {CyberpunkTheme.FG_PRIMARY}; border: 1px solid {CyberpunkTheme.FG_PRIMARY}; border-radius: 6px; padding: 10px; font-family: Consolas; font-weight: bold; }}
+            QPushButton:hover {{ background-color: {CyberpunkTheme.FG_PRIMARY}; color: #000; }}
+        """)
+
+        layout = QVBoxLayout(self)
+
+        layout.addWidget(QLabel("🔑 输入灵感关键词 (如：赛博朋克, 修仙, 诡异):"))
+        self.input_edit = QTextEdit()
+        self.input_edit.setMaximumHeight(80)
+        self.input_edit.setPlaceholderText("在此输入你的零碎想法...")
+        layout.addWidget(self.input_edit)
+
+        self.btn_generate = QPushButton("✨ 开始生成 (Generate)")
+        self.btn_generate.clicked.connect(self._on_generate)
+        layout.addWidget(self.btn_generate)
+
+        layout.addWidget(QLabel("📝 生成结果:"))
+        self.result_browser = QTextBrowser()
+        layout.addWidget(self.result_browser)
+
+        btn_layout = QHBoxLayout()
+        self.btn_copy = QPushButton("📋 复制结果")
+        self.btn_copy.clicked.connect(self._on_copy)
+        btn_layout.addWidget(self.btn_copy)
+
+        self.btn_append = QPushButton("📥 追加到大纲 (Append to Outline)")
+        self.btn_append.setStyleSheet(f"background-color: {CyberpunkTheme.FG_SUCCESS}; color: #000; border-color: {CyberpunkTheme.FG_SUCCESS};")
+        self.btn_append.clicked.connect(self._on_append)
+        btn_layout.addWidget(self.btn_append)
+
+        layout.addLayout(btn_layout)
+
+    def _on_generate(self):
+        keywords = self.input_edit.toPlainText().strip()
+        if not keywords:
+            return
+        self.btn_generate.setEnabled(False)
+        self.btn_generate.setText("🧠 思考中...")
+        self.result_browser.setHtml(f"<span style='color:{CyberpunkTheme.FG_INFO};'>正在连接灵感网络...</span>")
+
+        from ui.worker_thread import ToolWorker
+        self.worker = ToolWorker(self.tool_name, keywords)
+        self.worker.result_signal.connect(self._on_result)
+        self.worker.error_signal.connect(self._on_error)
+        self.worker.start()
+
+    def _on_result(self, text: str):
+        self.result_browser.setMarkdown(text)
+        self.btn_generate.setEnabled(True)
+        self.btn_generate.setText("✨ 重新生成 (Regenerate)")
+
+    def _on_error(self, err: str):
+        self.result_browser.setHtml(f"<span style='color:{CyberpunkTheme.FG_DANGER};'>{err}</span>")
+        self.btn_generate.setEnabled(True)
+        self.btn_generate.setText("✨ 开始生成 (Generate)")
+
+    def _on_copy(self):
+        QApplication.clipboard().setText(self.result_browser.toPlainText())
+        self.btn_copy.setText("✅ 已复制!")
+        QTimer.singleShot(2000, lambda: self.btn_copy.setText("📋 复制结果"))
+
+    def _on_append(self):
+        self.applied_signal.emit(self.tool_name, self.result_browser.toPlainText())
+        self.accept()
+
+
+class SkillEditorDialog(QDialog):
+    """技能编辑器 - 内置只读/克隆，自定义可编辑/删除"""
+    skill_changed = pyqtSignal()  # 通知外部刷新列表
+
+    def __init__(self, skill_name: str, skill_path: str, is_custom: bool = False, parent=None):
+        super().__init__(parent)
+        self.skill_name = skill_name
+        self.skill_path = Path(skill_path)
+        self.is_custom = is_custom
+        self._init_ui()
+        self._load_content()
+
+    def _init_ui(self):
+        self.setWindowTitle(f"{'⚙️ 编辑' if self.is_custom else '👁️ 查看'} {self.skill_name}")
+        self.setMinimumSize(700, 550)
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {CyberpunkTheme.BG_DARK}; }}
+            QLabel {{ color: {CyberpunkTheme.TEXT_PRIMARY}; font-family: Consolas; }}
+            QTextEdit {{ background-color: {CyberpunkTheme.BG_MEDIUM}; color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 6px; padding: 10px;
+                font-family: Consolas; font-size: 13px; }}
+            QPushButton {{ background-color: {CyberpunkTheme.BG_LIGHT}; color: {CyberpunkTheme.FG_PRIMARY};
+                border: 1px solid {CyberpunkTheme.FG_PRIMARY}; border-radius: 6px; padding: 8px 16px;
+                font-family: Consolas; font-weight: bold; }}
+            QPushButton:hover {{ background-color: {CyberpunkTheme.FG_PRIMARY}; color: #000; }}
+        """)
+
+        layout = QVBoxLayout(self)
+
+        # 标题
+        mode = "🟢 自定义技能 (可编辑)" if self.is_custom else "🔒 内置技能 (只读)"
+        lbl = QLabel(f"{mode}  —  {self.skill_name}")
+        lbl.setStyleSheet(f"font-weight: bold; font-size: 14px;")
+        layout.addWidget(lbl)
+
+        # 编辑器
+        self.editor = QTextEdit()
+        self.editor.setReadOnly(not self.is_custom)
+        layout.addWidget(self.editor)
+
+        # 按钮栏
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        if self.is_custom:
+            btn_del = QPushButton("🗑️ 删除 (Delete)")
+            btn_del.setStyleSheet(f"background-color: {CyberpunkTheme.FG_DANGER}; color: #fff; border-color: {CyberpunkTheme.FG_DANGER};")
+            btn_del.clicked.connect(self._on_delete)
+            btn_row.addWidget(btn_del)
+
+            btn_cancel = QPushButton("取消")
+            btn_cancel.clicked.connect(self.reject)
+            btn_row.addWidget(btn_cancel)
+
+            btn_save = QPushButton("💾 保存修改 (Save)")
+            btn_save.setStyleSheet(f"background-color: {CyberpunkTheme.FG_SUCCESS}; color: #000; border-color: {CyberpunkTheme.FG_SUCCESS};")
+            btn_save.clicked.connect(self._on_save)
+            btn_row.addWidget(btn_save)
+        else:
+            btn_cancel = QPushButton("取消")
+            btn_cancel.clicked.connect(self.reject)
+            btn_row.addWidget(btn_cancel)
+
+            btn_clone = QPushButton("📋 克隆为自定义 (Clone)")
+            btn_clone.setStyleSheet(f"background-color: {CyberpunkTheme.FG_GOLD}; color: #000; border-color: {CyberpunkTheme.FG_GOLD};")
+            btn_clone.clicked.connect(self._on_clone)
+            btn_row.addWidget(btn_clone)
+
+        layout.addLayout(btn_row)
+
+    def _load_content(self):
+        """加载技能文件内容"""
+        # 尝试多种常见文件名
+        for fname in ("SKILL.md", "prompt.yaml", "prompt.md", "README.md"):
+            f = self.skill_path / fname
+            if f.exists():
+                self.editor.setPlainText(f.read_text(encoding="utf-8"))
+                self._content_file = f
+                return
+        # 如果没有找到，列出目录内容
+        files = [p.name for p in self.skill_path.iterdir()] if self.skill_path.exists() else []
+        self.editor.setPlainText(f"# 未找到标准技能文件\n# 目录内容: {files}")
+        self._content_file = self.skill_path / "prompt.yaml"
+
+    def _on_clone(self):
+        name, ok = QInputDialog.getText(self, "克隆技能", "请输入自定义技能名称:")
+        if not ok or not name.strip():
+            return
+        safe = name.strip().replace(" ", "-").lower()
+        dest = Path("user_data/custom_skills") / safe
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "prompt.yaml").write_text(self.editor.toPlainText(), encoding="utf-8")
+        self.skill_changed.emit()
+        QMessageBox.information(self, "克隆成功", f"已克隆到 user_data/custom_skills/{safe}/")
+        self.accept()
+
+    def _on_save(self):
+        self._content_file.parent.mkdir(parents=True, exist_ok=True)
+        self._content_file.write_text(self.editor.toPlainText(), encoding="utf-8")
+        self.skill_changed.emit()
+        self.accept()
+
+    def _on_delete(self):
+        ret = QMessageBox.question(self, "确认删除", f"确定要删除自定义技能 [{self.skill_name}] 吗？")
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        import shutil
+        shutil.rmtree(self.skill_path, ignore_errors=True)
+        self.skill_changed.emit()
+        self.accept()

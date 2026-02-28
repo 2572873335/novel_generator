@@ -17,48 +17,48 @@ except ImportError:
 # 赛博朋克配色方案 v2.0 - 优化对比度和视觉层次
 # ============================================================================
 class CyberpunkTheme:
-    """赛博朋克主题配色 - v2.0"""
+    """Modern Professional SaaS Dark Theme - Slate Dark"""
 
-    # === 背景层级 (增加深度) ===
-    BG_DEEP = "#050508"         # 最深背景 (页面底层)
-    BG_DARK = "#0a0a0f"         # 主背景
-    BG_MEDIUM = "#12121a"       # 卡片背景
-    BG_LIGHT = "#1a1a25"        # 高亮背景
-    BG_HOVER = "#252535"        # 悬停背景
-    BG_ACTIVE = "#2a2a40"       # 激活背景
+    # === 背景层级 (Slate Dark) ===
+    BG_DEEP = "#0B1120"         # 最深背景 (页面底层)
+    BG_DARK = "#0F172A"         # 主背景 (Deep Slate)
+    BG_MEDIUM = "#1E293B"       # 卡片背景 (Lighter Slate)
+    BG_LIGHT = "#334155"        # 高亮背景 (Hover/Active)
+    BG_HOVER = "#233145"        # 悬停背景
+    BG_ACTIVE = "#3B4D66"       # 激活背景
 
-    # === 霓虹主色 (增强饱和度) ===
-    FG_PRIMARY = "#00f5f5"       # 主色：更亮的青色
-    FG_SECONDARY = "#ff00ff"     # 辅色：洋红
-    FG_ACCENT = "#b829dd"        # 强调：紫色
-    FG_GOLD = "#ffd700"          # 高光：金色
+    # === 主色调 ===
+    FG_PRIMARY = "#38BDF8"       # 主色：Sky Blue
+    FG_SECONDARY = "#818CF8"     # 辅色：Indigo
+    FG_ACCENT = "#C084FC"        # 强调：Purple
+    FG_GOLD = "#FBBF24"          # 高光：Amber
 
-    # === 功能色 (确保对比度 >= 4.5:1) ===
-    FG_SUCCESS = "#00e676"       # 成功：翠绿 (对比度 5.8:1)
-    FG_WARNING = "#ffb300"       # 警告：琥珀 (对比度 4.7:1)
-    FG_DANGER = "#ff1744"        # 错误：鲜红 (对比度 6.2:1)
-    FG_INFO = "#00b0ff"          # 信息：天蓝 (对比度 5.1:1)
+    # === 功能色 ===
+    FG_SUCCESS = "#10B981"       # 成功：Emerald
+    FG_WARNING = "#F59E0B"       # 警告：Amber
+    FG_DANGER = "#EF4444"        # 错误：Rose Red
+    FG_INFO = "#8B5CF6"          # 信息：Violet
 
-    # === 文字颜色 (优化可读性) ===
-    TEXT_PRIMARY = "#ffffff"      # 主文字：纯白 (对比度 21:1)
-    TEXT_SECONDARY = "#b0b0d0"    # 次要：浅灰蓝 (对比度 8.2:1)
-    TEXT_TERTIARY = "#8080a0"     # 第三级：中灰 (对比度 4.8:1)
-    TEXT_DIM = "#505060"          # 暗淡：深灰
+    # === 文字颜色 ===
+    TEXT_PRIMARY = "#F8FAFC"      # 主文字：Crisp White
+    TEXT_SECONDARY = "#94A3B8"    # 次要：Muted Gray
+    TEXT_TERTIARY = "#64748B"     # 第三级：Slate Gray
+    TEXT_DIM = "#475569"          # 暗淡：Dark Slate
 
     # === 边框与分隔 ===
-    BORDER_COLOR = "#2a2a40"      # 标准边框
-    BORDER_HOVER = "#00f5f5"      # 悬停边框
-    BORDER_ACTIVE = "#ff00ff"     # 激活边框
-    BORDER_DANGER = "#ff1744"     # 错误边框
-    BORDER_SUCCESS = "#00e676"     # 成功边框
+    BORDER_COLOR = "#334155"      # 标准边框
+    BORDER_HOVER = "#38BDF8"      # 悬停边框
+    BORDER_ACTIVE = "#818CF8"     # 激活边框
+    BORDER_DANGER = "#EF4444"     # 错误边框
+    BORDER_SUCCESS = "#10B981"    # 成功边框
 
-    # === 阴影与发光效果 ===
-    GLOW_PRIMARY = "0 0 20px rgba(0, 245, 245, 0.4)"
-    GLOW_SECONDARY = "0 0 20px rgba(255, 0, 255, 0.4)"
-    GLOW_SUCCESS = "0 0 15px rgba(0, 230, 118, 0.4)"
-    GLOW_DANGER = "0 0 15px rgba(255, 23, 68, 0.4)"
-    SHADOW_CARD = "0 4px 20px rgba(0, 0, 0, 0.5)"
-    SHADOW_ELEVATED = "0 8px 30px rgba(0, 0, 0, 0.6)"
+    # === 阴影 ===
+    GLOW_PRIMARY = "0 0 12px rgba(56, 189, 248, 0.25)"
+    GLOW_SECONDARY = "0 0 12px rgba(129, 140, 248, 0.25)"
+    GLOW_SUCCESS = "0 0 10px rgba(16, 185, 129, 0.25)"
+    GLOW_DANGER = "0 0 10px rgba(239, 68, 68, 0.25)"
+    SHADOW_CARD = "0 4px 16px rgba(0, 0, 0, 0.3)"
+    SHADOW_ELEVATED = "0 8px 24px rgba(0, 0, 0, 0.4)"
 
 
 # ============================================================================
@@ -68,6 +68,7 @@ class Typography:
     """字体系统规范"""
 
     # 字体族 (带备用字体)
+    FONT_PRIMARY = "'Segoe UI', 'Microsoft YaHei', sans-serif"    # 主字体
     FONT_DISPLAY = "'Segoe UI', 'Microsoft YaHei', sans-serif"    # 显示字体
     FONT_MONO = "'Consolas', 'Monaco', 'JetBrains Mono', monospace"  # 等宽字体
     FONT_BODY = "'Segoe UI', 'Microsoft YaHei', sans-serif"       # 正文字体
@@ -144,25 +145,25 @@ class ThemeManager:
     # 主题定义
     THEMES = {
         "cyberpunk": {
-            "name": "赛博朋克",
+            "name": "Slate Dark",
             "colors": {
-                "BG_DEEP": "#050508",
-                "BG_DARK": "#0a0a0f",
-                "BG_MEDIUM": "#12121a",
-                "BG_LIGHT": "#1a1a25",
-                "BG_HOVER": "#252535",
-                "FG_PRIMARY": "#00f5f5",
-                "FG_SECONDARY": "#ff00ff",
-                "FG_ACCENT": "#b829dd",
-                "FG_GOLD": "#ffd700",
-                "FG_SUCCESS": "#00e676",
-                "FG_WARNING": "#ffb300",
-                "FG_DANGER": "#ff1744",
-                "FG_INFO": "#00b0ff",
-                "TEXT_PRIMARY": "#ffffff",
-                "TEXT_SECONDARY": "#b0b0d0",
-                "TEXT_TERTIARY": "#8080a0",
-                "BORDER_COLOR": "#2a2a40",
+                "BG_DEEP": "#0B1120",
+                "BG_DARK": "#0F172A",
+                "BG_MEDIUM": "#1E293B",
+                "BG_LIGHT": "#334155",
+                "BG_HOVER": "#233145",
+                "FG_PRIMARY": "#38BDF8",
+                "FG_SECONDARY": "#818CF8",
+                "FG_ACCENT": "#C084FC",
+                "FG_GOLD": "#FBBF24",
+                "FG_SUCCESS": "#10B981",
+                "FG_WARNING": "#F59E0B",
+                "FG_DANGER": "#EF4444",
+                "FG_INFO": "#8B5CF6",
+                "TEXT_PRIMARY": "#F8FAFC",
+                "TEXT_SECONDARY": "#94A3B8",
+                "TEXT_TERTIARY": "#64748B",
+                "BORDER_COLOR": "#334155",
             }
         },
         "neon_blue": {

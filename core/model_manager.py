@@ -8,10 +8,26 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
+import httpx
+
 try:
     from config_manager import get_api_key
 except ImportError:
     from .config_manager import get_api_key
+
+
+def _build_http_client(headers: Optional[Dict[str, str]] = None) -> httpx.Client:
+    """
+    创建 httpx.Client，兼容 httpx 0.28+ (proxy) 和旧版 (proxies)。
+    当系统设置了 HTTP_PROXY / HTTPS_PROXY 时自动使用代理。
+    """
+    proxy_url = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or os.environ.get("ALL_PROXY")
+    kwargs: Dict[str, Any] = {}
+    if headers:
+        kwargs["headers"] = headers
+    if proxy_url:
+        kwargs["proxy"] = proxy_url
+    return httpx.Client(**kwargs)
 
 
 class ModelProvider(Enum):
@@ -40,6 +56,19 @@ class ModelConfig:
     description: str = ""
     # Anthropic 兼容服务专用
     auth_token_env: Optional[str] = None  # 用于 MiniMax 等需要不同认证头的情况
+
+
+def _split_system_messages(
+    messages: List[Dict[str, str]],
+    system_prompt: Optional[str] = None,
+) -> tuple:
+    """从 messages 中提取 role=system 条目，合并到 system_prompt，返回 (clean_messages, merged_system)。
+    Anthropic Messages API 禁止 messages 数组中出现 role=system。"""
+    clean = [m for m in messages if m.get("role") != "system"]
+    parts = [system_prompt] if system_prompt else []
+    parts.extend(m["content"] for m in messages if m.get("role") == "system")
+    merged = "\n\n".join(parts) if parts else ""
+    return clean, merged
 
 
 class ModelManager:
@@ -196,15 +225,18 @@ class ModelManager:
     }
 
     def __init__(
-        self, model_id: str = "claude-3-5-sonnet", custom_config: Optional[Dict] = None
+        self, model_id: str = None, custom_config: Optional[Dict] = None
     ):
         """
         初始化模型管理器
 
         Args:
-            model_id: 预定义模型ID、模型名称 或 "custom"
+            model_id: 预定义模型ID、模型名称 或 "custom"。
+                      为 None 时自动读取 DEFAULT_MODEL_ID 环境变量。
             custom_config: 自定义模型配置（当 model_id="custom" 时使用）
         """
+        if model_id is None:
+            model_id = os.environ.get("DEFAULT_MODEL_ID", "claude-3-5-sonnet")
         self.model_id = model_id
 
         if model_id == "custom" and custom_config:
@@ -355,19 +387,24 @@ class ModelManager:
         try:
             import anthropic
 
-            client = anthropic.Anthropic(api_key=self.get_api_key())
+            client = anthropic.Anthropic(
+                api_key=self.get_api_key(),
+                http_client=_build_http_client(),
+            )
 
             if messages:
                 api_messages = messages
             else:
                 api_messages = [{"role": "user", "content": prompt}]
 
+            api_messages, merged_system = _split_system_messages(api_messages, system_prompt)
+
             with client.messages.stream(
                 model=self.config.name,
                 max_tokens=self.config.max_tokens,
                 temperature=temperature,
                 messages=api_messages,
-                system=system_prompt if system_prompt else "",
+                system=merged_system,
             ) as stream:
                 for text in stream.text_stream:
                     yield text
@@ -388,7 +425,11 @@ class ModelManager:
         try:
             from openai import OpenAI
 
-            client = OpenAI(api_key=self.get_api_key(), base_url=self.config.base_url)
+            client = OpenAI(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+                http_client=_build_http_client(),
+            )
 
             api_messages = []
             if system_prompt:
@@ -463,14 +504,19 @@ class ModelManager:
         try:
             import anthropic
 
-            client = anthropic.Anthropic(api_key=self.get_api_key())
+            client = anthropic.Anthropic(
+                api_key=self.get_api_key(),
+                http_client=_build_http_client(),
+            )
+
+            clean_msgs, merged_system = _split_system_messages(messages, system_prompt)
 
             response = client.messages.create(
                 model=self.config.name,
                 max_tokens=self.config.max_tokens,
                 temperature=temperature,
-                messages=messages,
-                system=system_prompt if system_prompt else "",
+                messages=clean_msgs,
+                system=merged_system,
             )
 
             return response.content[0].text
@@ -490,7 +536,11 @@ class ModelManager:
         try:
             from openai import OpenAI
 
-            client = OpenAI(api_key=self.get_api_key(), base_url=self.config.base_url)
+            client = OpenAI(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+                http_client=_build_http_client(),
+            )
 
             api_messages = []
             if system_prompt:
@@ -517,7 +567,10 @@ class ModelManager:
         try:
             import anthropic
 
-            client = anthropic.Anthropic(api_key=self.get_api_key())
+            client = anthropic.Anthropic(
+                api_key=self.get_api_key(),
+                http_client=_build_http_client(),
+            )
 
             messages = [{"role": "user", "content": prompt}]
 
@@ -542,7 +595,10 @@ class ModelManager:
         try:
             from openai import OpenAI
 
-            client = OpenAI(api_key=self.get_api_key())
+            client = OpenAI(
+                api_key=self.get_api_key(),
+                http_client=_build_http_client(),
+            )
 
             messages = []
             if system_prompt:
@@ -569,7 +625,11 @@ class ModelManager:
         try:
             from openai import OpenAI
 
-            client = OpenAI(api_key=self.get_api_key(), base_url=self.config.base_url)
+            client = OpenAI(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+                http_client=_build_http_client(),
+            )
 
             messages = []
             if system_prompt:
@@ -596,7 +656,11 @@ class ModelManager:
         try:
             from openai import OpenAI
 
-            client = OpenAI(api_key=self.get_api_key(), base_url=self.config.base_url)
+            client = OpenAI(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+                http_client=_build_http_client(),
+            )
 
             messages = []
             if system_prompt:
@@ -623,7 +687,11 @@ class ModelManager:
         try:
             from openai import OpenAI
 
-            client = OpenAI(api_key=self.get_api_key(), base_url=self.config.base_url)
+            client = OpenAI(
+                api_key=self.get_api_key(),
+                base_url=self.config.base_url,
+                http_client=_build_http_client(),
+            )
 
             messages = []
             if system_prompt:
@@ -649,26 +717,32 @@ class ModelManager:
         """调用 Anthropic 兼容 API (MiniMax, Kimi for Coding 等)"""
         try:
             import anthropic
-            import httpx
 
             api_key = self.get_api_key()
             if not api_key:
                 return f"[错误] {self.config.api_key_env} 未设置"
 
-            # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
+            http_client = _build_http_client()
+
+            # auth_token_env 表示该服务使用 Bearer 认证（MiniMax、Kimi等）
+            # 必须临时移除空的 ANTHROPIC_API_KEY，否则 SDK 会将空字符串视为
+            # "已设置 api_key"，抢占 auth_token 的认证路径导致验证失败
             if self.config.auth_token_env:
-                http_client = httpx.Client(
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
-                client = anthropic.Anthropic(
-                    api_key=api_key,
-                    base_url=self.config.base_url,
-                    http_client=http_client
-                )
+                saved_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+                try:
+                    client = anthropic.Anthropic(
+                        auth_token=api_key,
+                        base_url=self.config.base_url,
+                        http_client=http_client,
+                    )
+                finally:
+                    if saved_key is not None:
+                        os.environ["ANTHROPIC_API_KEY"] = saved_key
             else:
                 client = anthropic.Anthropic(
                     api_key=api_key,
                     base_url=self.config.base_url,
+                    http_client=http_client,
                 )
 
             messages = [{"role": "user", "content": prompt}]
@@ -712,27 +786,30 @@ class ModelManager:
         """流式调用 Anthropic 兼容 API"""
         try:
             import anthropic
-            import httpx
 
             api_key = self.get_api_key()
             if not api_key:
                 yield f"[错误] {self.config.api_key_env} 未设置"
                 return
 
-            # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
+            http_client = _build_http_client()
+
             if self.config.auth_token_env:
-                http_client = httpx.Client(
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
-                client = anthropic.Anthropic(
-                    api_key=api_key,
-                    base_url=self.config.base_url,
-                    http_client=http_client
-                )
+                saved_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+                try:
+                    client = anthropic.Anthropic(
+                        auth_token=api_key,
+                        base_url=self.config.base_url,
+                        http_client=http_client,
+                    )
+                finally:
+                    if saved_key is not None:
+                        os.environ["ANTHROPIC_API_KEY"] = saved_key
             else:
                 client = anthropic.Anthropic(
                     api_key=api_key,
                     base_url=self.config.base_url,
+                    http_client=http_client,
                 )
 
             if messages:
@@ -740,15 +817,47 @@ class ModelManager:
             else:
                 api_messages = [{"role": "user", "content": prompt}]
 
-            with client.messages.stream(
-                model=self.config.name,
-                max_tokens=self.config.max_tokens,
-                temperature=temperature,
-                messages=api_messages,
-                system=system_prompt if system_prompt else "",
-            ) as stream:
-                for text in stream.text_stream:
-                    yield text
+            api_messages, merged_system = _split_system_messages(api_messages, system_prompt)
+
+            try:
+                with client.messages.stream(
+                    model=self.config.name,
+                    max_tokens=self.config.max_tokens,
+                    temperature=temperature,
+                    messages=api_messages,
+                    system=merged_system,
+                ) as stream:
+                    for text in stream.text_stream:
+                        yield text
+            except AttributeError as ae:
+                # 处理 MiniMax 等服务的特殊错误
+                if "'dict' object has no attribute 'model_dump'" in str(ae):
+                    # 降级到非流式调用
+                    response = client.messages.create(
+                        model=self.config.name,
+                        max_tokens=self.config.max_tokens,
+                        temperature=temperature,
+                        messages=api_messages,
+                        system=merged_system,
+                    )
+                    # 处理响应
+                    if response is None:
+                        yield f"[错误] {self.config.display_name} 返回None响应"
+                        return
+                    if not hasattr(response, 'content') or response.content is None:
+                        yield f"[错误] {self.config.display_name} 响应缺少content"
+                        return
+
+                    for block in response.content:
+                        if hasattr(block, 'text') and block.text is not None:
+                            yield block.text
+                        elif hasattr(block, 'type') and block.type == 'text' and hasattr(block, 'text'):
+                            yield block.text
+                    return
+                else:
+                    # 其他 AttributeError，重新抛出
+                    raise ae
+
         except ImportError:
             yield "[错误] 请安装 anthropic 包: pip install anthropic"
         except Exception as e:
@@ -764,34 +873,39 @@ class ModelManager:
         """多轮对话 - Anthropic 兼容 API"""
         try:
             import anthropic
-            import httpx
 
             api_key = self.get_api_key()
             if not api_key:
                 return f"[错误] {self.config.api_key_env} 未设置"
 
-            # 对于使用 ANTROPIC_AUTH_TOKEN 的服务，使用 Authorization: Bearer header
+            http_client = _build_http_client()
+
             if self.config.auth_token_env:
-                http_client = httpx.Client(
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
-                client = anthropic.Anthropic(
-                    api_key=api_key,
-                    base_url=self.config.base_url,
-                    http_client=http_client
-                )
+                saved_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+                try:
+                    client = anthropic.Anthropic(
+                        auth_token=api_key,
+                        base_url=self.config.base_url,
+                        http_client=http_client,
+                    )
+                finally:
+                    if saved_key is not None:
+                        os.environ["ANTHROPIC_API_KEY"] = saved_key
             else:
                 client = anthropic.Anthropic(
                     api_key=api_key,
                     base_url=self.config.base_url,
+                    http_client=http_client,
                 )
+
+            clean_msgs, merged_system = _split_system_messages(messages, system_prompt)
 
             response = client.messages.create(
                 model=self.config.name,
                 max_tokens=self.config.max_tokens,
                 temperature=temperature,
-                messages=messages,
-                system=system_prompt if system_prompt else "",
+                messages=clean_msgs,
+                system=merged_system,
             )
 
             # 处理响应 - 遍历所有content block，找到type='text'的
@@ -800,11 +914,9 @@ class ModelManager:
             if not hasattr(response, 'content') or response.content is None:
                 return f"[错误] {self.config.display_name} 响应缺少content"
 
-            # 遍历所有content block，找到text不为None的
             for block in response.content:
                 if hasattr(block, 'text') and block.text is not None:
                     return block.text
-                # 处理MiniMax的特殊格式
                 if hasattr(block, 'type') and block.type == 'text' and hasattr(block, 'text'):
                     return block.text
 
@@ -817,7 +929,7 @@ class ModelManager:
 
 # 便捷的工厂函数
 def create_model_manager(
-    model_id: str = "claude-3-5-sonnet", custom_config: Optional[Dict] = None
+    model_id: str = None, custom_config: Optional[Dict] = None
 ) -> ModelManager:
-    """创建模型管理器实例"""
+    """创建模型管理器实例（model_id 为 None 时自动读取 DEFAULT_MODEL_ID 环境变量）"""
     return ModelManager(model_id, custom_config)

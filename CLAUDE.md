@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AI Novel Generator - A fully automated AI novel generation system based on Anthropic's long-running agent architecture. Supports multiple AI providers (Anthropic Claude, OpenAI, Moonshot, DeepSeek).
 
-**Latest: NovelForge v4.2** - Production-ready with circuit breaker mechanism, emotion tracking, single-API-call architecture, and enhanced PyQt6 UI.
+**Latest: NovelForge v5.1** - Production-ready with circuit breaker mechanism, emotion tracking, single-API-call architecture, Modern SaaS Dark UI (Slate Dark theme), Creation Toolbox, Skill Market, and Agentic AI Chat.
 
 ## Commands
 
@@ -127,11 +127,13 @@ novel_generator/
 │
 ├── ui/                        # [NEW v5.0] UI components (modularized)
 │   ├── __init__.py            # Package exports
-│   ├── themes.py              # Theme system (CyberpunkTheme, Typography, etc.)
-│   ├── views.py               # View components (GlobalStatusBar, PreProductionView, etc.)
+│   ├── themes.py              # Theme system (Slate Dark theme, Typography, etc.)
+│   ├── views.py               # View components (GlobalStatusBar, PreProductionView, SkillMarketView, etc.)
 │   ├── components.py           # UI components (Agent cards, EmotionWavePanel, LogPanel)
-│   ├── dialogs.py             # Dialogs (Settings, Progress, Feedback)
+│   ├── dialogs.py             # Dialogs (Settings, Progress, Feedback, ToolGenerator, SkillEditor)
 │   ├── main_window.py         # Main window (ProducerDashboard)
+│   ├── worker_thread.py       # Worker threads (Generation, AgenticChat, Tool)
+│   ├── ui_controller.py       # UIDriver - AI command execution
 │   ├── producer_dashboard.py  # Legacy import (backward compatible)
 │   └── avatars/                # Agent avatars
 │
@@ -199,11 +201,13 @@ novel_generator/
 
 | Module | File | Description |
 |--------|------|-------------|
-| **Themes** | `themes.py` | CyberpunkTheme, Typography, Spacing, Layout, ThemeManager, ThemeSelector |
-| **Views** | `views.py` | GlobalStatusBar, MainNavigationBar, PreProductionView, ProjectVaultView |
+| **Themes** | `themes.py` | CyberpunkTheme (Slate Dark), Typography, Spacing, Layout, ThemeManager, ThemeSelector |
+| **Views** | `views.py` | GlobalStatusBar, MainNavigationBar, PreProductionView, ProductionView, ProjectVaultView, SkillMarketView |
 | **Components** | `components.py` | FlipCard, MiniAgentBadge, MinimalistBadge, EmotionWavePanel, LogPanel, CircuitBreakerPanel, TopControlPanel |
-| **Dialogs** | `dialogs.py` | ProgressResumeDialog, PreProductionPanel, ChapterFeedbackDialog, SettingsDialog, DocumentViewerDialog |
+| **Dialogs** | `dialogs.py` | ProgressResumeDialog, PreProductionPanel, ChapterFeedbackDialog, SettingsDialog, DocumentViewerDialog, ToolGeneratorDialog, SkillEditorDialog |
 | **MainWindow** | `main_window.py` | ProducerDashboard - Main window orchestration |
+| **Workers** | `worker_thread.py` | GenerationWorker, AgenticChatWorker, ToolWorker, PreProdWorker |
+| **Controller** | `ui_controller.py` | UIDriver - AI-driven UI command execution |
 | **Package** | `__init__.py` | Unified exports for all UI classes |
 
 **Import Examples:**

@@ -1,254 +1,180 @@
 #!/usr/bin/env python3
 """
-全自动AI小说生成系统 - 主入口
+NovelForge v5.0 - 统一入口点
+=============================
+使用 argparse 子命令统一管理 GUI 和 CLI 模式
 
 使用方法:
-    python main.py --config config.json
-    python main.py --title "我的小说" --genre "科幻" --chapters 10
-    python main.py --interactive
+    python main.py gui                          # 启动 GUI（使用默认项目）
+    python main.py gui -p novels/my_project    # 启动 GUI（指定项目）
+    python main.py cli -p novels/my_project -c 100  # CLI 模式生成
 """
 
 import argparse
-import json
-import os
 import sys
+import os
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.novel_generator import create_novel, NovelGenerator
+
+def run_gui(project_dir: str):
+    """启动 PyQt6 GUI"""
+    from pathlib import Path
+    from ui.main_window import run_dashboard
+
+    # 确保项目目录存在
+    Path(project_dir).mkdir(parents=True, exist_ok=True)
+
+    print(f"[GUI] 启动 NovelForge Studio，项目目录: {project_dir}")
+    run_dashboard(project_dir)
 
 
-def load_config(config_file: str) -> dict:
-    """从JSON文件加载配置"""
-    with open(config_file, 'r', encoding='utf-8') as f:
-        return json.load(f)
+def run_cli(project_dir: str, chapters: int, batch_size: int = 20):
+    """运行无头 CLI 生成模式"""
+    from core.novel_generator import create_novel
 
+    # 加载项目配置
+    from core.project_context import NovelProject
 
-def interactive_mode():
-    """交互式模式"""
-    print("\n" + "="*60)
-    print("[BOOK] 全自动AI小说生成系统 - 交互模式")
-    print("="*60 + "\n")
-    
-    # 收集用户输入
-    title = input("请输入小说标题: ").strip()
-    if not title:
-        title = "未命名小说"
-    
-    print("\n请选择小说类型:")
-    genres = ['科幻', '奇幻', '悬疑', '言情', '历史', '武侠', '现代', '其他']
-    for i, genre in enumerate(genres, 1):
-        print(f"  {i}. {genre}")
-    
-    genre_choice = input("\n请输入编号 (默认1): ").strip()
-    try:
-        genre = genres[int(genre_choice) - 1] if genre_choice else '科幻'
-    except:
-        genre = '科幻'
-    
-    chapters_input = input("\n请输入目标章节数 (默认10): ").strip()
-    try:
-        chapters = int(chapters_input) if chapters_input else 10
-    except:
-        chapters = 10
-    
-    words_input = input("\n请输入每章字数 (默认3000): ").strip()
-    try:
-        words = int(words_input) if words_input else 3000
-    except:
-        words = 3000
-    
-    description = input("\n请输入故事简介 (可选): ").strip()
-    
-    # 构建配置
-    config = {
-        'title': title,
-        'genre': genre,
-        'target_chapters': chapters,
-        'words_per_chapter': words,
-        'description': description
-    }
-    
-    print("\n" + "="*60)
-    print("配置确认:")
-    print(f"  标题: {title}")
-    print(f"  类型: {genre}")
-    print(f"  章节: {chapters}")
-    print(f"  每章字数: {words}")
-    print("="*60)
-    
-    confirm = input("\n确认开始生成? (y/n): ").strip().lower()
-    if confirm != 'y':
-        print("已取消")
+    project = NovelProject(project_dir)
+    config = project.load_config()
+
+    if not config:
+        print(f"[ERROR] 项目目录不存在或无配置文件: {project_dir}")
+        print("[提示] 请先使用 GUI 创建项目，或使用 --init 初始化")
         return
-    
-    # 开始生成
-    print("\n")
+
+    # 更新配置
+    config['project_dir'] = project_dir
+    config['target_chapters'] = chapters
+    config['batch_size'] = batch_size
+
+    print(f"[CLI] 开始生成，目标: {chapters} 章")
+    print(f"[CLI] 项目: {config.get('title', '未命名')}")
+
     result = create_novel(config)
-    
+
     if result['success']:
-        print(f"\n[OK] 小说生成成功！")
+        print(f"\n[OK] 生成完成！")
         print(f"项目位置: {result['project_dir']}")
     else:
         print(f"\n[FAIL] 生成失败")
 
 
+def init_project(project_dir: str, title: str, genre: str, chapters: int):
+    """初始化新项目"""
+    from core.project_context import NovelProject
+
+    project = NovelProject(project_dir)
+
+    config = {
+        "title": title,
+        "genre": genre,
+        "target_chapters": chapters,
+        "words_per_chapter": 3000,
+        "description": ""
+    }
+
+    project.save_config(config)
+
+    # 创建空的大纲和人物文件
+    project.save_outline("# 故事大纲\n\n请在此输入大纲内容...")
+    project.save_characters('{\n  "characters": []\n}')
+
+    print(f"[OK] 项目已创建: {project_dir}")
+    print(f"  标题: {title}")
+    print(f"  类型: {genre}")
+    print(f"  章节: {chapters}")
+
+
 def main():
-    """主函数"""
+    """主入口函数"""
     parser = argparse.ArgumentParser(
-        description='全自动AI小说生成系统',
+        description='NovelForge v5.0 - AI 小说生成系统',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 交互式模式
-  python main.py --interactive
+  # GUI 模式
+  python main.py gui
+  python main.py gui -p novels/my_project
 
-  # 使用配置文件
-  python main.py --config novel_config.json
+  # CLI 模式
+  python main.py cli -p novels/my_project -c 100
+  python main.py cli -p novels/my_project -c 50 --batch-size 10
 
-  # 命令行参数
-  python main.py --title "我的科幻小说" --genre "科幻" --chapters 10
-
-  # 断点续传（继续之前项目）
-  python main.py --project novels/my_novel
-
-  # 批次续传（指定本批次写多少章）
-  python main.py --project novels/my_novel --batch-size 10
+  # 初始化新项目
+  python main.py init -t "我的小说" -g 科幻 -n 50
         """
     )
 
-    parser.add_argument('--config', '-c', type=str,
-                       help='配置文件路径 (JSON格式)')
-    parser.add_argument('--title', '-t', type=str,
-                       help='小说标题')
-    parser.add_argument('--genre', '-g', type=str, default='general',
-                       help='小说类型 (默认: general)')
-    parser.add_argument('--chapters', '-n', type=int, default=10,
-                       help='目标章节数 (默认: 10)')
-    parser.add_argument('--words', '-w', type=int, default=3000,
-                       help='每章字数 (默认: 3000)')
-    parser.add_argument('--description', '-d', type=str,
-                       help='故事简介')
-    parser.add_argument('--interactive', '-i', action='store_true',
-                       help='交互式模式')
-    parser.add_argument('--progress', '-p', type=str,
-                       help='查看指定项目的进度')
-    parser.add_argument('--project', type=str,
-                       help='项目目录，用于断点续传')
-    parser.add_argument('--batch-size', '-b', type=int, default=20,
-                       help='每批次写作章节数 (默认: 20，用于断点续传)')
+    # 子命令解析器
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # ===== GUI 子命令 =====
+    gui_parser = subparsers.add_parser("gui", help="启动 PyQt6 Studio")
+    gui_parser.add_argument(
+        "--project", "-p",
+        default="novels/default",
+        help="项目目录路径 (默认: novels/default)"
+    )
+
+    # ===== CLI 子命令 =====
+    cli_parser = subparsers.add_parser("cli", help="运行无头生成模式")
+    cli_parser.add_argument(
+        "--project", "-p",
+        required=True,
+        help="项目目录路径"
+    )
+    cli_parser.add_argument(
+        "--chapters", "-c",
+        type=int,
+        default=10,
+        help="目标章节数 (默认: 10)"
+    )
+    cli_parser.add_argument(
+        "--batch-size", "-b",
+        type=int,
+        default=20,
+        help="每批次写作章节数 (默认: 20)"
+    )
+
+    # ===== Init 子命令 =====
+    init_parser = subparsers.add_parser("init", help="初始化新项目")
+    init_parser.add_argument(
+        "--project", "-p",
+        default="novels/default",
+        help="项目目录路径"
+    )
+    init_parser.add_argument(
+        "--title", "-t",
+        required=True,
+        help="小说标题"
+    )
+    init_parser.add_argument(
+        "--genre", "-g",
+        default="general",
+        help="小说类型 (默认: general)"
+    )
+    init_parser.add_argument(
+        "--chapters", "-n",
+        type=int,
+        default=50,
+        help="目标章节数 (默认: 50)"
+    )
 
     args = parser.parse_args()
 
-    # 断点续传模式
-    if args.project:
-        if not os.path.exists(args.project):
-            print(f"[FAIL] 项目目录不存在: {args.project}")
-            return
+    # 分发到对应处理函数
+    if args.command == "gui":
+        run_gui(args.project)
 
-        # 检查是否有挂起状态
-        suspended_file = os.path.join(args.project, ".suspended.json")
-        if os.path.exists(suspended_file):
-            with open(suspended_file, "r", encoding="utf-8") as f:
-                suspended = json.load(f)
-            print(f"\n[恢复] 检测到挂起状态:")
-            print(f"  暂停章节: 第{suspended.get('chapter', '?')}章")
-            print(f"  原因: {suspended.get('message', '未知')}")
-            print(f"  时间: {suspended.get('timestamp', '未知')}")
-            print()
+    elif args.command == "cli":
+        run_cli(args.project, args.chapters, args.batch_size)
 
-        # 加载现有配置
-        config_file = os.path.join(args.project, "project-config.json")
-        if os.path.exists(config_file):
-            with open(config_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        else:
-            # 尝试从novel-progress.txt加载
-            progress_file = os.path.join(args.project, "novel-progress.txt")
-            if os.path.exists(progress_file):
-                with open(progress_file, "r", encoding="utf-8") as f:
-                    progress_data = json.load(f)
-                    config = {
-                        'title': progress_data.get('title', '未命名'),
-                        'genre': progress_data.get('genre', '通用'),
-                        'target_chapters': progress_data.get('total_chapters', 10),
-                        'project_dir': args.project,
-                        'batch_size': args.batch_size
-                    }
-            else:
-                print("[FAIL] 无法加载项目配置")
-                return
-
-        # 更新批次大小
-        config['batch_size'] = args.batch_size
-        config['project_dir'] = args.project
-
-        print(f"\n[续传] 继续项目: {config.get('title', '未命名')}")
-        print(f"[批次] 本次写作: {args.batch_size}章")
-
-        result = create_novel(config)
-
-        if result['success']:
-            print(f"\n[OK] 批次完成！")
-            print(f"项目位置: {result['project_dir']}")
-        else:
-            print(f"\n[FAIL] 续传失败")
-        return
-
-    # 查看进度模式
-    if args.progress:
-        from core.progress_manager import ProgressManager
-
-        pm = ProgressManager(args.progress)
-        progress = pm.load_progress()
-
-        if progress:
-            print(pm.generate_progress_report())
-        else:
-            print(f"[FAIL] 未找到项目: {args.progress}")
-        return
-    
-    # 交互式模式
-    if args.interactive:
-        interactive_mode()
-        return
-    
-    # 配置文件模式
-    if args.config:
-        if not os.path.exists(args.config):
-            print(f"[FAIL] 配置文件不存在: {args.config}")
-            return
-        
-        config = load_config(args.config)
-        result = create_novel(config)
-        
-        if result['success']:
-            print(f"\n[OK] 小说生成成功！")
-            print(f"项目位置: {result['project_dir']}")
-        return
-    
-    # 命令行参数模式
-    if args.title:
-        config = {
-            'title': args.title,
-            'genre': args.genre,
-            'target_chapters': args.chapters,
-            'words_per_chapter': args.words,
-            'description': args.description or ''
-        }
-        
-        result = create_novel(config)
-        
-        if result['success']:
-            print(f"\n[OK] 小说生成成功！")
-            print(f"项目位置: {result['project_dir']}")
-        return
-    
-    # 没有参数，显示帮助
-    parser.print_help()
-    print("\n提示: 使用 --interactive 进入交互式模式")
+    elif args.command == "init":
+        init_project(args.project, args.title, args.genre, args.chapters)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

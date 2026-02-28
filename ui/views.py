@@ -14,7 +14,7 @@ try:
         QFrame, QStackedWidget, QGroupBox, QFormLayout, QTextEdit,
         QLineEdit, QComboBox, QSpinBox, QTextBrowser, QListWidget,
         QListWidgetItem, QScrollArea, QSplitter, QTabWidget, QTextBrowser,
-        QApplication
+        QApplication, QGridLayout, QMessageBox
     )
     from PyQt6.QtCore import Qt, pyqtSignal, QTimer
     from PyQt6.QtGui import QFont, QCursor, QTextCursor
@@ -28,6 +28,13 @@ except ImportError:
 try:
     from ui.themes import CyberpunkTheme, Typography, Spacing
 except ImportError:
+    from themes import CyberpunkTheme, Typography, Spacing
+
+# 导入领域模型
+try:
+    from core.project_context import NovelProject
+except ImportError:
+    from core.project_context import NovelProject
     from themes import CyberpunkTheme, Typography, Spacing
 
 
@@ -148,6 +155,11 @@ class MainNavigationBar(QFrame):
         self.btn_vault.setFixedWidth(200)
         layout.addWidget(self.btn_vault)
 
+        # 工作流集市按钮
+        self.btn_market = QPushButton("🧩 工作流集市")
+        self.btn_market.setFixedWidth(200)
+        layout.addWidget(self.btn_market)
+
 
 # ============================================================================
 # 前期筹备视图 (PreProductionView) - 包含操作按钮和信号
@@ -160,6 +172,7 @@ class PreProductionView(QWidget):
     request_evaluate = pyqtSignal()     # 请求评估
     request_start = pyqtSignal()         # 请求开始写作
     status_changed = pyqtSignal(str)      # 状态变更信号
+    request_ai_chat = pyqtSignal(str)    # AI对话请求（传递用户输入文本）
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -173,56 +186,27 @@ class PreProductionView(QWidget):
 
     def reload_data(self):
         """重新加载项目数据"""
+        project = NovelProject(self.project_dir)
+
         # 加载大纲
-        outline_file = Path(self.project_dir) / "outline.md"
-        if outline_file.exists():
-            try:
-                self.edit_outline.setText(outline_file.read_text(encoding="utf-8"))
-            except:
-                pass
+        outline = project.load_outline()
+        if outline:
+            self.edit_outline.setText(outline)
 
         # 加载人物设定
-        chars_file = Path(self.project_dir) / "characters.json"
-        if chars_file.exists():
-            try:
-                self.edit_chars.setText(chars_file.read_text(encoding="utf-8"))
-            except:
-                pass
+        characters = project.load_characters()
+        if characters:
+            self.edit_chars.setText(characters)
 
         # 加载项目配置
-        config_file = Path(self.project_dir) / "project_config.json"
-        if config_file.exists():
-            try:
-                config = json.loads(config_file.read_text(encoding="utf-8"))
-                self.edit_title.setText(config.get("title", ""))
-                self.edit_protagonist.setText(config.get("protagonist", ""))
-                idx = self.edit_genre.findText(config.get("genre", ""))
-                if idx >= 0:
-                    self.edit_genre.setCurrentIndex(idx)
-                self.edit_chapters.setValue(config.get("target_chapters", 50))
-            except:
-                pass
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        # 内部堆叠窗口
-        self.stack = QStackedWidget()
-        layout.addWidget(self.stack)
-
-        # ===== Page 0: 选择页 =====
-        self.page_selection = self._create_selection_page()
-        self.stack.addWidget(self.page_selection)
-
-        # ===== Page 1: 手动填表页 =====
-        self.page_manual = self._create_manual_page()
-        self.stack.addWidget(self.page_manual)
-
-        # ===== Page 2: AI对话引导页 =====
-        self.page_ai_chat = self._create_ai_chat_page()
-        self.stack.addWidget(self.page_ai_chat)
+        config = project.load_config()
+        if config:
+            self.edit_title.setText(config.get("title", ""))
+            self.edit_protagonist.setText(config.get("protagonist", ""))
+            idx = self.edit_genre.findText(config.get("genre", ""))
+            if idx >= 0:
+                self.edit_genre.setCurrentIndex(idx)
+            self.edit_chapters.setValue(config.get("target_chapters", 50))
 
     def get_project_config(self) -> dict:
         """获取项目配置"""
@@ -240,21 +224,12 @@ class PreProductionView(QWidget):
         config = self.get_project_config()
         safe_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in config["title"])
         project_dir = f"novels/{safe_name}"
-        project_path = Path(project_dir)
-        project_path.mkdir(parents=True, exist_ok=True)
 
-        # 保存配置
-        config_path = project_path / "project_config.json"
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-
-        # 保存大纲
-        outline_file = project_path / "outline.md"
-        outline_file.write_text(config["outline"], encoding="utf-8")
-
-        # 保存人物
-        chars_file = project_path / "characters.json"
-        chars_file.write_text(config["characters"], encoding="utf-8")
+        # 使用 NovelProject 保存
+        project = NovelProject(project_dir)
+        project.save_config(config)
+        project.save_outline(config["outline"])
+        project.save_characters(config["characters"])
 
         self.project_dir = project_dir
         return project_dir
@@ -280,54 +255,72 @@ class PreProductionView(QWidget):
         self.page_ai_chat = self._create_ai_chat_page()
         self.stack.addWidget(self.page_ai_chat)
 
+        # ===== Page 3: 创作工具箱 =====
+        self.page_toolbox = self._create_toolbox_page()
+        self.stack.addWidget(self.page_toolbox)
+
     def _create_selection_page(self):
-        """创建选择页 - 左右两个巨大按钮"""
+        """创建选择页 - 现代SaaS风格卡片"""
         page = QWidget()
-        layout = QHBoxLayout(page)
-        layout.setContentsMargins(100, 50, 100, 50)
-        layout.setSpacing(50)
+        layout = QVBoxLayout(page)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # 左侧：已有设定按钮
-        btn_manual = QPushButton("📝\n\n已有设定\n\n(Manual Settings)")
-        btn_manual.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                border: 3px solid {CyberpunkTheme.FG_PRIMARY};
-                border-radius: 20px;
-                padding: 40px;
-                font-family: Consolas;
-                font-size: 20px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
-                border-color: {CyberpunkTheme.FG_GOLD};
-            }}
-        """)
-        btn_manual.clicked.connect(lambda: self.stack.setCurrentIndex(1))
-        layout.addWidget(btn_manual)
+        title = QLabel("选择创作模式")
+        title.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_H1, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY}; margin-bottom: 30px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
 
-        # 右侧：AI对话引导按钮
-        btn_ai = QPushButton("🤖\n\n对话生成\n\n(AI Guided)")
-        btn_ai.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
-                color: {CyberpunkTheme.TEXT_PRIMARY};
-                border: 3px solid {CyberpunkTheme.FG_SECONDARY};
-                border-radius: 20px;
-                padding: 40px;
-                font-family: Consolas;
-                font-size: 20px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
-                border-color: {CyberpunkTheme.FG_GOLD};
-            }}
-        """)
-        btn_ai.clicked.connect(lambda: self.stack.setCurrentIndex(2))
-        layout.addWidget(btn_ai)
+        card_layout = QHBoxLayout()
+        card_layout.setSpacing(30)
+        card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        def create_entry_card(icon_str, title_str, desc_str, target_idx):
+            card = QFrame()
+            card.setFixedSize(320, 220)
+            card.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            card.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {CyberpunkTheme.BG_MEDIUM};
+                    border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                    border-radius: 12px;
+                }}
+                QFrame:hover {{
+                    border: 1px solid {CyberpunkTheme.FG_PRIMARY};
+                    background-color: {CyberpunkTheme.BG_HOVER};
+                }}
+            """)
+            card.mousePressEvent = lambda e: self.stack.setCurrentIndex(target_idx)
+
+            v = QVBoxLayout(card)
+            v.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            v.setContentsMargins(20, 20, 20, 20)
+
+            icon = QLabel(icon_str)
+            icon.setStyleSheet("font-size: 48px; background: transparent; border: none;")
+            icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            v.addWidget(icon)
+
+            lbl_t = QLabel(title_str)
+            lbl_t.setFont(QFont(Typography.FONT_PRIMARY, 16, QFont.Weight.Bold))
+            lbl_t.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY}; background: transparent; border: none; margin-top: 10px;")
+            lbl_t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            v.addWidget(lbl_t)
+
+            lbl_d = QLabel(desc_str)
+            lbl_d.setFont(QFont(Typography.FONT_PRIMARY, 11))
+            lbl_d.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY}; background: transparent; border: none; margin-top: 5px;")
+            lbl_d.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl_d.setWordWrap(True)
+            v.addWidget(lbl_d)
+
+            return card
+
+        card_layout.addWidget(create_entry_card("📝", "手动设定 (Manual)", "传统模式。手动填写书名、大纲与人物设定，精准控制故事走向。", 1))
+        card_layout.addWidget(create_entry_card("🤖", "对话生成 (AI Guided)", "向导模式。与资深AI责编对话，通过灵感碰撞自动补全庞大的世界观。", 2))
+        card_layout.addWidget(create_entry_card("🧰", "创作工具箱 (Toolbox)", "碎片化创作。单独生成脑洞、书名、金手指或核心反派等设定片段。", 3))
+
+        layout.addLayout(card_layout)
 
         return page
 
@@ -546,61 +539,252 @@ class PreProductionView(QWidget):
 
         return page
 
+    def _create_toolbox_page(self):
+        """创建创作工具箱页"""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # 返回按钮
+        btn_back = QPushButton("← 返回")
+        btn_back.setFixedWidth(100)
+        btn_back.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        layout.addWidget(btn_back, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # 标题
+        title = QLabel("🧰 创作工具箱")
+        title.setStyleSheet(f"color: {CyberpunkTheme.FG_GOLD}; font-size: 22px; font-weight: bold; font-family: Consolas;")
+        layout.addWidget(title)
+
+        # 滚动区域 + 网格
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background: transparent;")
+        grid_widget = QWidget()
+        grid = QGridLayout(grid_widget)
+        grid.setSpacing(20)
+        grid.setContentsMargins(10, 10, 10, 10)
+
+        tools = [
+            ("💡", "脑洞生成器", "Brainstorm"),
+            ("📖", "书名生成器", "Title Generator"),
+            ("👆", "金手指生成器", "Cheat Code/Power"),
+            ("🌍", "世界观生成器", "Worldview"),
+            ("👤", "反派生成器", "Villain Creator"),
+            ("⚔️", "核心冲突提炼", "Conflict Extractor"),
+        ]
+
+        for i, (emoji, name_cn, name_en) in enumerate(tools):
+            card = self._make_tool_card(emoji, name_cn, name_en)
+            grid.addWidget(card, i // 3, i % 3)
+
+        scroll.setWidget(grid_widget)
+        layout.addWidget(scroll)
+        return page
+
+    def _make_tool_card(self, emoji: str, name_cn: str, name_en: str) -> QFrame:
+        """创建单个工具卡片 - Modern SaaS style"""
+        card = QFrame()
+        card.setFixedSize(280, 150)
+        card.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 10px;
+            }}
+            QFrame:hover {{
+                background-color: {CyberpunkTheme.BG_HOVER};
+                border-color: {CyberpunkTheme.FG_PRIMARY};
+            }}
+        """)
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(18, 16, 18, 14)
+        cl.setSpacing(6)
+
+        lbl_emoji = QLabel(emoji)
+        lbl_emoji.setStyleSheet("font-size: 32px; background: transparent; border: none;")
+        cl.addWidget(lbl_emoji)
+
+        lbl_name = QLabel(name_cn)
+        lbl_name.setFont(QFont(Typography.FONT_PRIMARY, 14, QFont.Weight.Bold))
+        lbl_name.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY}; background: transparent; border: none;")
+        cl.addWidget(lbl_name)
+
+        lbl_en = QLabel(name_en)
+        lbl_en.setFont(QFont(Typography.FONT_PRIMARY, 10))
+        lbl_en.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY}; background: transparent; border: none;")
+        cl.addWidget(lbl_en)
+
+        cl.addStretch()
+        card.mousePressEvent = lambda e, n=name_cn: self._open_tool_dialog(n)
+        return card
+
+    def _open_tool_dialog(self, tool_name: str):
+        """打开创作工具对话框"""
+        from ui.dialogs import ToolGeneratorDialog
+        dialog = ToolGeneratorDialog(tool_name, self)
+        dialog.applied_signal.connect(self._handle_tool_apply)
+        dialog.exec()
+
+    def _handle_tool_apply(self, tool_name: str, result_text: str):
+        """将工具生成结果追加到大纲"""
+        self.stack.setCurrentIndex(1)
+        cursor = self.edit_outline.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(f"\n\n### 【{tool_name}】生成内容\n{result_text}\n")
+        self.edit_outline.setTextCursor(cursor)
+        self.edit_outline.ensureCursorVisible()
+        self.status_changed.emit(f"已将 {tool_name} 结果追加到大纲")
+
     def _on_diagnose(self):
         """执行资深编辑诊断"""
         title = self.edit_title.text()
         outline = self.edit_outline.toPlainText()
+        genre = self.edit_genre.currentText()
+        protagonist = self.edit_protagonist.text()
+        characters = self.edit_chars.toPlainText()
 
         if not title or not outline:
             self.diagnose_result.setHtml("<span style='color: #ff1744;'>⚠️ 请先填写标题和大纲！</span>")
             return
 
-        # 模拟诊断结果
-        result = f"""
-        <h3 style='color: #00e676;'>✅ 诊断完成</h3>
-        <p><b>标题:</b> {title}</p>
-        <p><b>题材契合度:</b> <span style='color: #00e676;'>85%</span></p>
-        <p><b>开篇吸引力:</b> <span style='color: #ffb300;'>中等</span> - 建议前三章加入更强的冲突</p>
-        <p><b>节奏评估:</b> 整体节奏把控良好，但中期可能存在"升级倦怠期"</p>
-        <p><b>商业化潜力:</b> <span style='color: #00e676;'>A级</span> - 题材热门，人设讨喜</p>
-        <hr>
-        <p><b>📝 修改建议:</b></p>
-        <ul>
-            <li>主角金手指建议在前500字内出现</li>
-            <li>反派塑造需要加强动机合理性</li>
-            <li>世界观设定建议在第一章通过"事件"自然带出，而非旁白</li>
-        </ul>
-        """
-        self.diagnose_result.setHtml(result)
+        # 显示诊断中状态
+        self.diagnose_result.setHtml("<span style='color: #00e676;'>🤔 资深编辑诊断中，请稍候...</span>")
+        self.status_changed.emit("诊断中...")
+
+        # 构建诊断提示词
+        diagnose_prompt = f"""你是一位拥有8年网文编辑经验的起点金牌编辑。请对以下小说设定进行专业诊断评估：
+
+## 基本信息
+- 标题: {title}
+- 题材: {genre}
+- 主角: {protagonist or "未设定"}
+
+## 故事大纲
+{outline}
+
+## 人物设定
+{characters or "未设定"}
+
+请从以下6个维度进行评估并给出分数(0-100)和修改建议：
+
+1. **开篇吸引力**: 前三章是否能抓住读者？金手指是否够早出现？
+2. **题材契合度**: 设定与{genre}题材的契合程度
+3. **人设讨喜度**: 主角人设是否讨喜？是否有记忆点？
+4. **升级体系**: 力量体系/剧情升级设计是否合理有盼头？
+5. **商业化潜力**: 是否有热门元素？爽点密度如何？
+6. **节奏把控**: 整体节奏设计是否合理？是否有注水风险？
+
+请以JSON格式返回诊断结果：
+{{
+    "开篇吸引力": {{"分数": XX, "评价": "..."}},
+    "题材契合度": {{"分数": XX, "评价": "..."}},
+    "人设讨喜度": {{"分数": XX, "评价": "..."}},
+    "升级体系": {{"分数": XX, "评价": "..."}},
+    "商业化潜力": {{"分数": XX, "评价": "..."}},
+    "节奏把控": {{"分数": XX, "评价": "..."}},
+    "综合评级": "S/A/B/C/D",
+    "修改建议": ["建议1", "建议2", "建议3"]
+}}"""
+
+        # 调用 LLM 进行诊断
+        try:
+            from core.model_manager import ModelManager
+
+            # 使用默认模型
+            mm = ModelManager()
+
+            # 调用 API
+            result = mm.generate(
+                prompt=diagnose_prompt,
+                temperature=0.7,
+                system_prompt="你是一位资深网文编辑，擅长评估和指导网文创作。请用专业但易懂的语言给出诊断结果。"
+            )
+
+            # 解析结果
+            if result.startswith("[错误]"):
+                # API 调用失败，显示友好错误
+                self.diagnose_result.setHtml(f"""
+                <h3 style='color: #ff1744;'>⚠️ 诊断服务暂不可用</h3>
+                <p>{result}</p>
+                <p style='color: #888;'>请检查 API Key 配置后重试</p>
+                """)
+                return
+
+            # 尝试解析 JSON
+            try:
+                import re
+                json_match = re.search(r'\{[\s\S]*\}', result)
+                if json_match:
+                    import json
+                    diagnosis = json.loads(json_match.group())
+
+                    # 构建 HTML 报告
+                    def get_color(score):
+                        if score >= 80: return "#00e676"
+                        if score >= 60: return "#ffb300"
+                        return "#ff1744"
+
+                    html = f"""
+                    <h3 style='color: #00e676;'>✅ 诊断完成 - {diagnosis.get('综合评级', 'B')}</h3>
+                    <p><b>标题:</b> {title}</p>
+                    <p><b>题材:</b> {genre}</p>
+                    <hr>
+                    """
+
+                    for dim, data in [
+                        ("开篇吸引力", diagnosis.get("开篇吸引力", {})),
+                        ("题材契合度", diagnosis.get("题材契合度", {})),
+                        ("人设讨喜度", diagnosis.get("人设讨喜度", {})),
+                        ("升级体系", diagnosis.get("升级体系", {})),
+                        ("商业化潜力", diagnosis.get("商业化潜力", {})),
+                        ("节奏把控", diagnosis.get("节奏把控", {}))
+                    ]:
+                        score = data.get("分数", 0)
+                        eval_text = data.get("评价", "")
+                        color = get_color(score)
+                        html += f'<p><b>{dim}:</b> <span style="color: {color}; font-weight: bold;">{score}分</span> - {eval_text}</p>'
+
+                    suggestions = diagnosis.get("修改建议", [])
+                    if suggestions:
+                        html += '<hr><p><b>📝 修改建议:</b></p><ul>'
+                        for s in suggestions:
+                            html += f'<li>{s}</li>'
+                        html += '</ul>'
+
+                    self.diagnose_result.setHtml(html)
+                else:
+                    # 无法解析 JSON，直接显示原始结果
+                    self.diagnose_result.setPlainText(result)
+            except json.JSONDecodeError:
+                # JSON 解析失败，显示原始结果
+                self.diagnose_result.setPlainText(result)
+
+        except Exception as e:
+            self.diagnose_result.setHtml(f"""
+            <h3 style='color: #ff1744;'>⚠️ 诊断失败</h3>
+            <p>{str(e)}</p>
+            """)
+        finally:
+            self.status_changed.emit("系统待命")
 
     def _on_chat_send(self):
-        """发送聊天消息"""
+        """发送聊天消息 - 通过信号委托给主窗口处理"""
         text = self.chat_input.text().strip()
         if not text:
             return
-
-        # 添加用户消息
-        user_html = f"""
-        <div style='color: #ffffff; margin: 10px 0; text-align: right;'>
-            <b>👤 作者:</b> {text}
-        </div>
-        """
+        user_html = f"<div style='color: #ffffff; margin: 10px 0; text-align: right;'><b>👤 作者:</b> {text}</div>"
         self.chat_history.append(user_html)
         self.chat_input.clear()
 
-        # 模拟AI回复
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(500, lambda: self._add_ai_response(text))
+        # 发射信号，由主窗口启动 AgenticChatWorker
+        self.request_ai_chat.emit(text)
 
-    def _add_ai_response(self, user_text):
-        """添加AI回复"""
-        response = """
-        <div style='color: #00f5f5; margin: 10px 0;'>
-            <b>🤖 AI 责编:</b> 了解了！这个设定很有趣。<br><br>
-            接下来我想了解：<b>你的主角叫什么名字？他/她最渴望得到/改变的是什么？</b><br>
-            （这是构建人物弧光的核心）
-        </div>
-        """
+    def append_ai_reply(self, html_text: str):
+        """接收 AI 回复并追加到聊天历史"""
+        response = f"<div style='color: #00f5f5; margin: 10px 0;'><b>🤖 AI 责编:</b> {html_text}</div>"
         self.chat_history.append(response)
 
 
@@ -628,21 +812,17 @@ class ProductionView(QWidget):
 
     def reload_data(self):
         """重新加载项目数据"""
+        project = NovelProject(self.project_dir)
+
         # 加载大纲
-        outline_file = Path(self.project_dir) / "outline.md"
-        if outline_file.exists():
-            try:
-                self.outline_edit.setPlainText(outline_file.read_text(encoding="utf-8"))
-            except:
-                pass
+        outline = project.load_outline()
+        if outline:
+            self.outline_edit.setPlainText(outline)
 
         # 加载人物
-        chars_file = Path(self.project_dir) / "characters.json"
-        if chars_file.exists():
-            try:
-                self.chars_edit.setPlainText(chars_file.read_text(encoding="utf-8"))
-            except:
-                pass
+        characters = project.load_characters()
+        if characters:
+            self.chars_edit.setPlainText(characters)
 
     def init_ui(self):
         """初始化UI"""
@@ -1086,3 +1266,160 @@ class ProjectVaultView(QWidget):
                     pass
 
             self.read_tab.setPlainText(full_text if full_text else "暂无内容")
+
+
+# ============================================================================
+# 工作流集市视图 (SkillMarketView)
+# ============================================================================
+class SkillMarketView(QWidget):
+    """工作流/技能集市视图 - 内置(只读) + 自定义(可编辑)"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        header = QLabel("🧩 提示词与工作流集市 (Skill Market)")
+        header.setFont(QFont(Typography.FONT_MONO, Typography.SIZE_H1, QFont.Weight.Bold))
+        header.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; margin: 20px 0;")
+        layout.addWidget(header)
+
+        # 新建自定义工作流按钮
+        btn_create = QPushButton("➕ 新建自定义工作流 (Create Custom Skill)")
+        btn_create.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.BG_MEDIUM}; color: {CyberpunkTheme.FG_GOLD};
+                border: 2px dashed {CyberpunkTheme.FG_GOLD}; border-radius: 8px;
+                padding: 12px; font-family: Consolas; font-size: 14px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {CyberpunkTheme.BG_HOVER}; }}
+        """)
+        btn_create.clicked.connect(self._on_create_custom)
+        layout.addWidget(btn_create)
+
+        # 滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        self._container = QWidget()
+        self._grid = QGridLayout(self._container)
+        self._grid.setSpacing(20)
+        self._load_all_skills()
+        scroll.setWidget(self._container)
+        layout.addWidget(scroll)
+
+    def _load_all_skills(self):
+        """加载内置 + 自定义技能"""
+        # 清空网格
+        while self._grid.count():
+            w = self._grid.takeAt(0).widget()
+            if w:
+                w.deleteLater()
+
+        row, col = 0, 0
+
+        # --- 内置技能 ---
+        builtin_dir = Path(".opencode/skills")
+        if builtin_dir.exists():
+            lbl = QLabel("🔒 内置系统技能 (Built-in)")
+            lbl.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY}; font-weight: bold; font-size: 13px; font-family: Consolas;")
+            self._grid.addWidget(lbl, row, 0, 1, 3)
+            row += 1
+            for sp in sorted(builtin_dir.iterdir()):
+                if sp.is_dir():
+                    self._grid.addWidget(self._create_skill_card(sp.name, str(sp), False), row, col)
+                    col += 1
+                    if col >= 3:
+                        col = 0
+                        row += 1
+            if col != 0:
+                col = 0
+                row += 1
+
+        # --- 自定义技能 ---
+        custom_dir = Path("user_data/custom_skills")
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        lbl2 = QLabel("🟢 我的自定义技能 (Custom)")
+        lbl2.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS}; font-weight: bold; font-size: 13px; font-family: Consolas;")
+        self._grid.addWidget(lbl2, row, 0, 1, 3)
+        row += 1
+        has_custom = False
+        for sp in sorted(custom_dir.iterdir()):
+            if sp.is_dir():
+                has_custom = True
+                self._grid.addWidget(self._create_skill_card(sp.name, str(sp), True), row, col)
+                col += 1
+                if col >= 3:
+                    col = 0
+                    row += 1
+        if not has_custom:
+            hint = QLabel("暂无自定义技能，点击上方按钮创建")
+            hint.setStyleSheet(f"color: {CyberpunkTheme.TEXT_DIM}; font-style: italic;")
+            self._grid.addWidget(hint, row, 0, 1, 3)
+
+    def _create_skill_card(self, skill_name: str, skill_path: str, is_custom: bool) -> QFrame:
+        card = QFrame()
+        card.setFixedSize(350, 140)
+        card.setStyleSheet(f"""
+            QFrame {{ background-color: {CyberpunkTheme.BG_MEDIUM}; border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 10px; }}
+            QFrame:hover {{ border-color: {CyberpunkTheme.FG_PRIMARY}; background-color: {CyberpunkTheme.BG_HOVER}; }}
+        """)
+        lo = QVBoxLayout(card)
+        lo.setContentsMargins(16, 14, 16, 12)
+        lo.setSpacing(6)
+
+        title_row = QHBoxLayout()
+        icon = QLabel("🟢" if is_custom else "📜")
+        icon.setStyleSheet("font-size: 20px; background: transparent; border: none;")
+        title = QLabel(skill_name.replace("-", " ").title())
+        title.setFont(QFont(Typography.FONT_PRIMARY, 13, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {CyberpunkTheme.TEXT_PRIMARY}; background: transparent; border: none;")
+        title_row.addWidget(icon)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        lo.addLayout(title_row)
+
+        tag = "Custom" if is_custom else "Built-in"
+        desc = QLabel(f"{tag} · {skill_name}")
+        desc.setFont(QFont(Typography.FONT_PRIMARY, 10))
+        desc.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY}; background: transparent; border: none;")
+        desc.setWordWrap(True)
+        lo.addWidget(desc)
+        lo.addStretch()
+
+        bot = QHBoxLayout()
+        bot.addStretch()
+        btn_text = "编辑" if is_custom else "查看"
+        btn = QPushButton(btn_text)
+        btn.setFixedHeight(28)
+        btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {CyberpunkTheme.FG_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR}; border-radius: 4px; padding: 2px 14px; font-size: 11px; }}
+            QPushButton:hover {{ border-color: {CyberpunkTheme.FG_PRIMARY}; background-color: {CyberpunkTheme.BG_LIGHT}; }}
+        """)
+        btn.clicked.connect(lambda _, n=skill_name, p=skill_path, c=is_custom: self._open_skill_editor(n, p, c))
+        bot.addWidget(btn)
+        lo.addLayout(bot)
+        return card
+
+    def _open_skill_editor(self, name: str, path: str, is_custom: bool):
+        from ui.dialogs import SkillEditorDialog
+        dlg = SkillEditorDialog(name, path, is_custom, self)
+        dlg.skill_changed.connect(self._load_all_skills)
+        dlg.exec()
+
+    def _on_create_custom(self):
+        from PyQt6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "新建自定义工作流", "请输入技能名称:")
+        if not ok or not name.strip():
+            return
+        safe = name.strip().replace(" ", "-").lower()
+        dest = Path("user_data/custom_skills") / safe
+        dest.mkdir(parents=True, exist_ok=True)
+        prompt_file = dest / "prompt.yaml"
+        if not prompt_file.exists():
+            prompt_file.write_text(f"# {name}\n# 在此编写你的自定义提示词/工作流规则\n", encoding="utf-8")
+        self._open_skill_editor(safe, str(dest), True)

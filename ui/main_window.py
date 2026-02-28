@@ -6,6 +6,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
+from ui.ui_controller import UIDriver
 
 # PyQt6 导入
 try:
@@ -27,9 +28,10 @@ except ImportError:
 
 # 导入工作线程
 try:
-    from ui.worker_thread import GenerationWorker
+    from ui.worker_thread import GenerationWorker, AgenticChatWorker
 except ImportError:
     GenerationWorker = None
+    AgenticChatWorker = None
 
 # 导入主题系统
 try:
@@ -41,12 +43,12 @@ except ImportError:
 try:
     from ui.views import (
         GlobalStatusBar, MainNavigationBar, PreProductionView,
-        ProductionView, ProjectVaultView
+        ProductionView, ProjectVaultView, SkillMarketView
     )
 except ImportError:
     from views import (
         GlobalStatusBar, MainNavigationBar, PreProductionView,
-        ProductionView, ProjectVaultView
+        ProductionView, ProjectVaultView, SkillMarketView
     )
 
 # 导入对话框
@@ -96,8 +98,12 @@ class ProducerDashboard(QMainWindow):
         self.worker = None
         self.project_config = None
         self.start_chapter = 1
+        self.chat_history = []  # AI 对话历史（多轮记忆）
 
         self.init_ui()
+
+        # UIDriver - AI 控制 UI 的桥梁
+        self.ui_driver = UIDriver(self)
 
         # 读取项目配置
         self.load_project_config()
@@ -141,6 +147,10 @@ class ProducerDashboard(QMainWindow):
         self.view_vault = ProjectVaultView(self.project_dir)
         self.main_stack.addWidget(self.view_vault)
 
+        # === Page D: 工作流集市 ===
+        self.view_market = SkillMarketView()
+        self.main_stack.addWidget(self.view_market)
+
         main_layout.addWidget(self.main_stack)
         self.setCentralWidget(central_widget)
 
@@ -151,6 +161,7 @@ class ProducerDashboard(QMainWindow):
         self.nav_bar.btn_preprod.clicked.connect(lambda: self.main_stack.setCurrentIndex(0))
         self.nav_bar.btn_prod.clicked.connect(lambda: self.main_stack.setCurrentIndex(1))
         self.nav_bar.btn_vault.clicked.connect(lambda: self.main_stack.setCurrentIndex(2))
+        self.nav_bar.btn_market.clicked.connect(lambda: self.main_stack.setCurrentIndex(3))
 
         # ====== 6. 连接视图信号 ======
         self._connect_view_signals()
@@ -166,6 +177,7 @@ class ProducerDashboard(QMainWindow):
         self.view_preprod.request_evaluate.connect(self._on_request_evaluate)
         self.view_preprod.request_start.connect(self._on_request_start)
         self.view_preprod.status_changed.connect(self._on_status_changed)
+        self.view_preprod.request_ai_chat.connect(self._handle_ai_chat)
 
         # === ProductionView 信号 ===
         self.view_prod.request_start.connect(self._on_prod_request_start)
@@ -206,10 +218,44 @@ class ProducerDashboard(QMainWindow):
     def _on_request_start(self):
         """处理开始写作请求"""
         self.global_status_bar.update_status("准备开始...", "info")
-        # 切换到生产视图
+
+        # 1. 先保存前期筹备的数据
+        project_dir = self.view_preprod.save_project()
+        if project_dir:
+            self.project_dir = project_dir
+
+        # 2. 更新生产视图的项目目录（确保加载最新数据）
+        self.view_prod.set_project_dir(self.project_dir)
+
+        # 3. 切换到生产视图
         self.main_stack.setCurrentIndex(1)
-        # 触发生产视图的开始
+
+        # 4. 触发生产视图重新加载数据（确保大纲、人物等最新）
+        self.view_prod.reload_data()
+
+        # 5. 触发生产视图的开始
         self.view_prod.btn_start.click()
+
+    # === AI 对话处理 ===
+    def _handle_ai_chat(self, user_text: str):
+        """启动 AgenticChatWorker 处理用户的 AI 对话"""
+        if AgenticChatWorker is None:
+            self.view_preprod.append_ai_reply(
+                "<span style='color:red;'>AgenticChatWorker 不可用</span>"
+            )
+            return
+        self.chat_worker = AgenticChatWorker(user_text, self.chat_history)
+        self.chat_worker.chat_reply_signal.connect(self._on_chat_reply)
+        self.chat_worker.ui_command_signal.connect(self.ui_driver.execute_commands)
+        self.chat_worker.start()
+
+    def _on_chat_reply(self, reply_text: str):
+        """收到 AI 回复后，更新聊天界面和历史记录"""
+        self.view_preprod.append_ai_reply(reply_text)
+        # 追溯保存用户输入到历史
+        user_text = self.chat_worker.user_text
+        self.chat_history.append({"role": "user", "content": user_text})
+        self.chat_history.append({"role": "assistant", "content": reply_text})
 
     # === ProductionView 信号处理 ===
     def _on_prod_request_start(self):
