@@ -393,6 +393,44 @@ python main.py --config config.json
 python -m ui.producer_dashboard novels/my_project
 ```
 
+### UI Remote Control (CLI)
+
+NovelForge v5.1 supports remote UI control via TCP socket (port 9999):
+
+```bash
+# Switch views
+python tools/ui_cli.py switch_view preprod      # Pre-production view
+python tools/ui_cli.py switch_view production   # Production view
+python tools/ui_cli.py switch_view vault        # Project vault view
+python tools/ui_cli.py switch_view market       # Skill market view
+
+# Fill text (dynamic reflection - any UI element variable name)
+python tools/ui_cli.py fill_text edit_title "My Novel Title"
+python tools/ui_cli.py fill_text edit_genre "Sci-Fi"
+python tools/ui_cli.py fill_text edit_outline "Story outline..."
+python tools/ui_cli.py fill_text edit_skill_name "my-skill"
+python tools/ui_cli.py fill_text edit_skill_content "Skill description..."
+
+# Click buttons (dynamic reflection - any button variable name)
+python tools/ui_cli.py click_button btn_start          # Start writing
+python tools/ui_cli.py click_button btn_pause           # Pause generation
+python tools/ui_cli.py click_button btn_resume         # Resume generation
+python tools/ui_cli.py click_button btn_golden_check   # Golden three chapters evaluation
+python tools/ui_cli.py click_button btn_create_skill   # Create skill in market
+
+# Show notification
+python tools/ui_cli.py notify "Hello from CLI"
+```
+
+**Skill Market Automation Example:**
+```bash
+# Create a new skill via CLI
+python tools/ui_cli.py switch_view market
+python tools/ui_cli.py fill_text edit_skill_name "my-custom-skill"
+python tools/ui_cli.py fill_text edit_skill_content "# My Skill\n\nCustom workflow..."
+python tools/ui_cli.py click_button btn_create_skill
+```
+
 ## Development Guide
 
 ### Using NovelForge v4.0

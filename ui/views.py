@@ -1505,11 +1505,12 @@ class SkillMarketView(QWidget):
         content = self.edit_skill_content.toPlainText().strip()
 
         if not name:
-            QMessageBox.warning(self, "错误", "请输入技能名称！")
+            # 使用状态栏消息替代弹窗，避免无头环境阻塞
+            self._show_status_message("请输入技能名称！", is_error=True)
             return
 
         if not content:
-            content = f"# {name}\n\n在 此编写你的自定义提示词/工作流规则"
+            content = f"# {name}\n\n在此编写你的自定义提示词/工作流规则"
 
         # 保存技能
         safe = name.replace(" ", "-").lower()
@@ -1527,7 +1528,22 @@ class SkillMarketView(QWidget):
         # 刷新列表
         self._load_all_skills()
 
-        QMessageBox.information(self, "成功", f"技能 [{name}] 已创建！")
+        # 使用状态栏消息替代弹窗
+        self._show_status_message(f"✅ 技能 [{name}] 已创建！")
+
+    def _show_status_message(self, message: str, is_error: bool = False):
+        """显示状态栏消息（CLI友好）"""
+        # 尝试通过dashboard的状态栏显示
+        try:
+            if hasattr(self, 'window') and hasattr(self.window(), 'global_status_bar'):
+                self.window().global_status_bar.update_status(message)
+                return
+        except RuntimeError:
+            pass
+
+        # 如果无法访问状态栏，使用print输出（CLI模式）
+        prefix = "❌" if is_error else "✅"
+        print(f"{prefix} {message}")
 
     def _load_all_skills(self):
         """加载内置 + 自定义技能"""

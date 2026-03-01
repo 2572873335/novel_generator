@@ -81,6 +81,13 @@ class UIDriver(QObject):
                     logger.error(f"fill_text: Element '{target}' not found")
                     continue
 
+                # 如果目标在 market 视图，先切换到 market 视图
+                if hasattr(self.dashboard.view_market, target):
+                    current_index = self.dashboard.main_stack.currentIndex()
+                    if current_index != 3:  # market 视图索引为 3
+                        self.dashboard.main_stack.setCurrentIndex(3)
+                        logger.info(f"fill_text: switched to market view for '{target}'")
+
                 # 切换到手动编辑页（如果目标在手动页）
                 if hasattr(self.dashboard.view_preprod, 'stack'):
                     # 检查元素是否属于 preprod 视图
@@ -114,6 +121,15 @@ class UIDriver(QObject):
 
                 if element is None:
                     logger.error(f"click_button: Element '{target}' not found")
+                    continue
+
+                # 特殊处理 btn_create_skill：直接调用方法，避免 QTimer 延迟问题
+                if target == "btn_create_skill":
+                    # 查找 SkillMarketView 并直接调用创建方法
+                    market_view = self.dashboard.view_market
+                    if hasattr(market_view, '_on_create_skill_from_input'):
+                        logger.info(f"click_button: calling _on_create_skill_from_input")
+                        market_view._on_create_skill_from_input()
                     continue
 
                 if hasattr(element, "click"):

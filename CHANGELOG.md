@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.1.2] - 2026-03-02
+
+### Added
+- **技能集市 CLI 控制**
+  - `SkillMarketView` 新增 `edit_skill_name`、`edit_skill_content`、`btn_create_skill` 三个 UI 元素
+  - `ui_controller.py`: `fill_text` 自动切换到 market 视图
+  - `btn_create_skill` 使用直接方法调用，避免 QTimer 延迟问题
+  - 使用状态栏消息替代 QMessageBox，避免无头环境下阻塞
+  - 支持通过 CLI 创建自定义技能：`switch_view market` → `fill_text` → `click_button btn_create_skill`
+
+- **动态 UI 反射机制**
+  - `ui_controller.py`: `_find_ui_element()` 动态搜索所有视图，查找具有给定变量名的 UI 元素
+  - `tools/ui_cli.py`: 移除 choices 限制，支持任意变量名
+  - 支持对任意 UI 元素进行 `fill_text` 和 `click_button` 操作
+
+### Fixed
+- **技能创建失败**
+  - 问题：QMessageBox 在无图形界面环境下阻塞，导致技能创建失败
+  - 解决：替换为状态栏消息 `_show_status_message()`
+
+- **fill_text 视图切换**
+  - 问题：操作 market 视图元素时未切换视图，导致元素未找到
+  - 解决：在 `fill_text` 中检测目标视图并自动切换
+
+---
+
 ## [5.1.1] - 2026-03-01
 
 ### Added
