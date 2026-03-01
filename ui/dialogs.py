@@ -1481,16 +1481,19 @@ class GoldenReportDialog(QDialog):
     def init_ui(self):
         self.setWindowTitle("🏆 黄金三章评估报告")
         self.setMinimumSize(600, 700)
+
+        # FIXED: Using correct CyberpunkTheme variables
         self.setStyleSheet(f"""
             QDialog {{
-                background-color: {CyberpunkTheme.BG_DEEP};
+                background-color: {CyberpunkTheme.BG_DARK};
             }}
             QTextBrowser {{
-                background-color: {CyberpunkTheme.BG_CARD};
-                border: 1px solid {CyberpunkTheme.BORDER};
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
                 border-radius: 8px;
-                padding: 10px;
+                padding: 15px;
                 color: #e2e8f0;
+                font-size: 14px;
             }}
             QPushButton {{
                 background-color: {CyberpunkTheme.FG_PRIMARY};
@@ -1519,16 +1522,7 @@ class GoldenReportDialog(QDialog):
         # 报告内容
         self.report_browser = QTextBrowser()
         self.report_browser.setHtml(self.report_html)
-        self.report_browser.setStyleSheet("""
-            QTextBrowser {
-                background-color: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 15px;
-                color: #e2e8f0;
-                font-size: 14px;
-            }
-        """)
+        # Note: Removed inline stylesheet for QTextBrowser as it's handled globally above
         layout.addWidget(self.report_browser)
 
         # 关闭按钮
