@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.1.1] - 2026-03-01
 
+### Added
+- **SkillLoader 动态加载外部技能**
+  - `PromptAssembler` 新增 `load_skill_prompt()` 方法，从 `.opencode/skills/` 和 `user_data/custom_skills/` 动态加载技能 Prompt
+  - `load_active_skills()` 方法从项目配置读取启用的技能列表
+  - 默认启用 4 个技能：`chapter-architect`, `rhythm-designer`, `scene-writer`, `web-novel-methodology`
+  - 技能内容在 `assemble_emotion_writer_prompt()` 中注入到最终 Prompt
+  - 支持在 `project_config.json` 中配置 `enabled_skills` 列表自定义启用技能
+
 ### Fixed
 - **流式输出 `.value` 崩溃**
   - `core/emotion_tracker.py`: `_load_ledger` 从 JSON 反序列化时将 `state` 字符串还原为 `EmotionalState` 枚举

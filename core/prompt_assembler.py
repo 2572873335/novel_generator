@@ -46,6 +46,107 @@ class PromptAssembler:
         self.chapter_outline_file = self.project_dir / "chapters" / "chapter_outlines.json"
         self.style_file = self.project_dir / "style_signature.json"
 
+        # 技能目录
+        self.skills_dir = Path(".opencode/skills")
+        self.custom_skills_dir = Path("user_data/custom_skills")
+
+    def load_skill_prompt(self, skill_name: str) -> str:
+        """
+        加载指定技能的Prompt内容
+
+        搜索顺序：
+        1. user_data/custom_skills/{skill_name}/SKILL.md (自定义技能优先)
+        2. .opencode/skills/{skill_name}/SKILL.md (内置技能)
+
+        Args:
+            skill_name: 技能名称
+
+        Returns:
+            技能Prompt内容，如果不存在则返回空字符串
+        """
+        # 优先从自定义技能目录加载
+        custom_path = self.custom_skills_dir / skill_name / "SKILL.md"
+        if custom_path.exists():
+            content = custom_path.read_text(encoding="utf-8")
+            # 跳过 front matter
+            return self._strip_front_matter(content)
+
+        # 从内置技能目录加载
+        builtin_path = self.skills_dir / skill_name / "SKILL.md"
+        if builtin_path.exists():
+            content = builtin_path.read_text(encoding="utf-8")
+            return self._strip_front_matter(content)
+
+        return ""
+
+    def _strip_front_matter(self, content: str) -> str:
+        """移除 Markdown 的 front matter (YAML 头部)"""
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                return parts[2].strip()
+        return content.strip()
+
+    def load_active_skills(self) -> Dict[str, str]:
+        """
+        加载项目启用的技能
+
+        从项目配置中读取启用的技能列表，然后加载对应的Prompt
+
+        Returns:
+            技能名称 -> Prompt内容 的字典
+        """
+        skills = {}
+
+        # 默认启用的技能（如果项目没有配置）
+        default_skills = [
+            "chapter-architect",      # 章纲架构
+            "rhythm-designer",        # 节奏设计
+            "scene-writer",           # 场景写作
+            "web-novel-methodology",  # 网文方法论
+        ]
+
+        # 尝试从项目配置读取
+        config_file = self.project_dir / "project_config.json"
+        enabled_skills = default_skills
+
+        if config_file.exists():
+            try:
+                config = json.loads(config_file.read_text(encoding="utf-8"))
+                enabled_skills = config.get("enabled_skills", default_skills)
+            except Exception as e:
+                logger.warning(f"Failed to load project config for skills: {e}")
+
+        # 加载每个技能
+        for skill_name in enabled_skills:
+            prompt = self.load_skill_prompt(skill_name)
+            if prompt:
+                skills[skill_name] = prompt
+                logger.debug(f"Loaded skill: {skill_name}")
+
+        return skills
+
+    def get_skill_prompt_section(self, skills: Dict[str, str]) -> str:
+        """
+        将技能Prompt格式化为章节Prompt的一部分
+
+        Args:
+            skills: 技能名称 -> Prompt内容 的字典
+
+        Returns:
+            格式化的技能Prompt段落
+        """
+        if not skills:
+            return ""
+
+        sections = ["【技能指导】"]
+        for name, content in skills.items():
+            # 取内容的前500字符作为关键指导（避免过长）
+            key_content = content[:500] if len(content) > 500 else content
+            sections.append(f"\n## {name}\n{key_content}")
+
+        return "\n".join(sections)
+
     def _load_outline(self) -> str:
         """加载主线大纲"""
         if self.outline_file.exists():
@@ -261,6 +362,16 @@ class PromptAssembler:
         # 5. 自定义指令
         if custom_instructions:
             components.append(PromptComponent("custom", 5, custom_instructions))
+
+        # 5.5. 技能Prompt (从 .opencode/skills/ 加载)
+        try:
+            active_skills = self.load_active_skills()
+            if active_skills:
+                skill_section = self.get_skill_prompt_section(active_skills)
+                components.append(PromptComponent("skills", 5, skill_section))
+                logger.info(f"Loaded {len(active_skills)} skills for chapter {chapter_num}")
+        except Exception as e:
+            logger.warning(f"Failed to load skills: {e}")
 
         # 6. 防截断规则（最高优先级）
         anti_truncation_rule = """<rule>你必须完整地结束本章，严禁在句子中间或对话中间截断！如果接近字数上限，请立刻收尾并输出完整的句号。最后一段必须逻辑完整。绝对禁止输出被切断的句子！</rule>"""
