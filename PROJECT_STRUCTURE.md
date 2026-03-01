@@ -123,7 +123,8 @@ novel_generator/
 ├── tools/                      # 工具脚本
 │   ├── search_tool.py          # 搜索工具
 │   ├── diagnose.py            # 诊断工具
-│   └── ppt_generator.py        # PPT 生成
+│   ├── ppt_generator.py        # PPT 生成
+│   └── ui_cli.py              # UI 远程控制 CLI (TCP 9999)
 │
 ├── .env                        # 环境变量配置
 ├── .env.example               # 环境变量示例

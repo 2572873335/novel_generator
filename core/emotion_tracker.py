@@ -111,7 +111,9 @@ class EmotionalDebtLedger:
                 self.net_debt = data.get("net_debt", 0.0)
                 self.decay_rate = data.get("decay_rate", 0.3)
                 self.records = [
-                    EmotionalDebtRecord(**r) for r in data.get("records", [])
+                    EmotionalDebtRecord(
+                        **{**r, "state": EmotionalState(r["state"]) if isinstance(r.get("state"), str) else r.get("state", EmotionalState.NEUTRAL)}
+                    ) for r in data.get("records", [])
                 ]
                 logger.info(f"Loaded emotion ledger: debt={self.net_debt}")
             except Exception as e:
@@ -131,7 +133,7 @@ class EmotionalDebtLedger:
                     "accumulated_payoff": r.accumulated_payoff,
                     "net_debt": r.net_debt,
                     "payoff_density": r.payoff_density,
-                    "state": r.state.value
+                    "state": r.state.value if isinstance(r.state, EmotionalState) else str(r.state)
                 }
                 for r in self.records
             ],
@@ -199,7 +201,7 @@ class EmotionalDebtLedger:
         self._save_ledger()
 
         logger.info(f"Chapter {chapter_num}: payoff={payoff_value:.1f}, pressure={pressure_value:.1f}, "
-                   f"net_debt={self.net_debt:.1f}, state={state.value}")
+                   f"net_debt={self.net_debt:.1f}, state={state.value if isinstance(state, EmotionalState) else state}")
 
         return record
 
@@ -322,7 +324,7 @@ class EmotionTracker:
             "chapter": chapter_num,
             "net_debt": record.net_debt,
             "payoff_density": record.payoff_density,
-            "state": record.state.value,
+            "state": record.state.value if isinstance(record.state, EmotionalState) else str(record.state),
             "prompt_instruction": self.ledger.to_prompt_text(),
             "recent_trend": self.ledger.get_recent_debt_trend(5),
             "requires_payoff": record.net_debt > 50

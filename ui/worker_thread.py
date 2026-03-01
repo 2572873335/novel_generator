@@ -4,6 +4,7 @@ Worker Thread - 后台工作线程 v5.0 (支持流式文本输出)
 import sys
 import json
 import re
+import threading
 from pathlib import Path
 from typing import Dict, Any
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -61,6 +62,8 @@ class GenerationWorker(QThread):
         self.config = config
         self.orchestrator = None
         self.is_running = False
+        self.pause_event = threading.Event()
+        self.pause_event.set()  # 初始状态：未暂停，允许运行
 
     def run(self):
         self.is_running = True
@@ -90,6 +93,7 @@ class GenerationWorker(QThread):
         }
 
         self.orchestrator = create_orchestrator(orch_config)
+        self.orchestrator.pause_event = self.pause_event  # 注入暂停事件
         self.orchestrator.on_chapter_complete = self._on_chapter_complete
         self.orchestrator.on_error = self._on_error
         self.orchestrator.on_suspended = self._on_suspended
@@ -131,6 +135,19 @@ class GenerationWorker(QThread):
     def stop(self):
         if self.orchestrator: self.orchestrator.stop()
         self.is_running = False
+        self.pause_event.set()  # 解除阻塞，让线程能正常退出
+
+    def pause(self):
+        """暂停生成（阻塞 orchestrator 主循环）"""
+        self.pause_event.clear()
+        if self.orchestrator:
+            self.orchestrator.pause_event = self.pause_event
+
+    def resume(self):
+        """恢复生成"""
+        self.pause_event.set()
+        if self.orchestrator:
+            self.orchestrator.pause_event = self.pause_event
 
 
 

@@ -69,6 +69,7 @@ class Orchestrator:
         self.target_chapters = config.get("target_chapters", 50)
         self.is_running = False
         self.is_suspended = False
+        self.pause_event = None  # 由 UI worker 注入的 threading.Event
 
         # 检查点
         self.checkpoint_interval = config.get("checkpoint_interval", 5)
@@ -328,6 +329,12 @@ class Orchestrator:
                 self._initialize_project_if_needed()
 
             while self.current_chapter <= self.target_chapters and self.is_running:
+                # 暂停检查点：如果 UI 触发了暂停，这里会阻塞直到恢复
+                if self.pause_event is not None:
+                    self.pause_event.wait()
+                    if not self.is_running:
+                        break
+
                 # 写作章节
                 result = self._write_chapter(self.current_chapter)
 

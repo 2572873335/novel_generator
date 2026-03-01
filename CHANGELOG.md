@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.1.1] - 2026-03-01
+
+### Fixed
+- **流式输出 `.value` 崩溃**
+  - `core/emotion_tracker.py`: `_load_ledger` 从 JSON 反序列化时将 `state` 字符串还原为 `EmotionalState` 枚举
+  - 三处 `.value` 调用添加 `isinstance` 防御，兼容 str 和 Enum
+
+- **情绪曲线 X/Y 数组长度不匹配**
+  - `ui/components.py`: `update_curve` 方法为 expected 和 actual 曲线分别生成独立的 X 轴数组
+  - 防止 PyQtGraph 抛出 `X and Y arrays must be the same shape` 异常
+
+- **暂停/恢复功能失效**
+  - `ui/worker_thread.py`: `GenerationWorker` 新增 `threading.Event` 暂停机制 (`pause()` / `resume()`)
+  - `core/orchestrator.py`: 主循环加入 `pause_event.wait()` 阻塞检查点
+  - `ui/main_window.py`: 正确连接暂停/恢复按钮，切换按钮启用状态
+
+- **fill_text genre 类型缺失**
+  - `ui/ui_controller.py`: `fill_text` 处理新增 genre 目标类型
+  - `tools/ui_cli.py`: CLI 新增 `fill_text genre "类型"` 命令
+
+- **project_config 状态未刷新**
+  - `ui/main_window.py`: `_on_request_start` 在保存新项目后重新加载 `project_config`
+
+---
+
 ## [5.1.0] - 2026-02-28
 
 ### Added

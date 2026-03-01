@@ -6,7 +6,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
-from ui.ui_controller import UIDriver
+from ui.ui_controller import UIDriver, UIRemoteServer
 
 # PyQt6 导入
 try:
@@ -104,6 +104,11 @@ class ProducerDashboard(QMainWindow):
 
         # UIDriver - AI 控制 UI 的桥梁
         self.ui_driver = UIDriver(self)
+
+        # IPC 远程控制服务
+        self.remote_server = UIRemoteServer(parent=self)
+        self.remote_server.command_received.connect(self.ui_driver.execute_commands)
+        self.remote_server.start()
 
         # 读取项目配置
         self.load_project_config()
@@ -223,6 +228,9 @@ class ProducerDashboard(QMainWindow):
         project_dir = self.view_preprod.save_project()
         if project_dir:
             self.project_dir = project_dir
+
+        # 1.5 重新加载项目配置（关键：save_project 创建了新目录，必须刷新 config）
+        self.load_project_config()
 
         # 2. 更新生产视图的项目目录（确保加载最新数据）
         self.view_prod.set_project_dir(self.project_dir)
@@ -391,6 +399,12 @@ class ProducerDashboard(QMainWindow):
             "基于Anthropic长运行代理最佳实践的全自动小说创作系统"
         )
 
+    def closeEvent(self, event):
+        """关闭窗口时停止远程服务器"""
+        if hasattr(self, 'remote_server'):
+            self.remote_server.stop()
+        super().closeEvent(event)
+
     def do_start_generation(self):
         """执行开始生成"""
         if GenerationWorker is None:
@@ -416,15 +430,26 @@ class ProducerDashboard(QMainWindow):
         # 启动worker
         self.worker.start()
 
+        # 启用暂停按钮，禁用开始按钮
+        self.view_prod.btn_start.setEnabled(False)
+        self.view_prod.btn_pause.setEnabled(True)
+        self.view_prod.btn_resume.setEnabled(False)
+
     def on_pause_generation(self):
         """暂停生成"""
         if self.worker:
-            self.worker.stop()
+            self.worker.pause()
         self.view_prod.append_log("Generation paused", "warning")
+        self.view_prod.btn_pause.setEnabled(False)
+        self.view_prod.btn_resume.setEnabled(True)
 
     def on_resume_generation(self):
         """恢复生成"""
-        self.view_prod.append_log("Resuming generation...", "system")
+        if self.worker:
+            self.worker.resume()
+        self.view_prod.append_log("Generation resumed", "system")
+        self.view_prod.btn_pause.setEnabled(True)
+        self.view_prod.btn_resume.setEnabled(False)
 
     def connect_worker(self, worker):
         """连接worker信号"""

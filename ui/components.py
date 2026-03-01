@@ -733,17 +733,17 @@ class EmotionWavePanel(QWidget):
         if not PYQTGRAPH_AVAILABLE:
             return
 
-        # 更新数据
-        x = list(range(1, len(expected) + 1))
+        # Expected 曲线（独立 X 轴）
+        if expected:
+            x_exp = list(range(1, len(expected) + 1))
+            self.expected_curve.setData(x_exp, expected)
+            self.expected_glow.setData(x_exp, [y + 1 for y in expected])
 
-        # 主曲线
-        self.expected_curve.setData(x, expected)
-        self.actual_curve.setData(x, actual)
-
-        # 发光效果 (略微偏移的数据)
-        if len(x) > 0:
-            self.expected_glow.setData(x, [y + 1 for y in expected])
-            self.actual_glow.setData(x, [y + 1 for y in actual])
+        # Actual 曲线（独立 X 轴，防止 shape mismatch）
+        if actual:
+            x_act = list(range(1, len(actual) + 1))
+            self.actual_curve.setData(x_act, actual)
+            self.actual_glow.setData(x_act, [y + 1 for y in actual])
 
         # 当前点标记 (最后一个点)
         if actual and len(actual) > 0:
