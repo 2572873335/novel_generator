@@ -1468,3 +1468,70 @@ class SkillEditorDialog(QDialog):
         shutil.rmtree(self.skill_path, ignore_errors=True)
         self.skill_changed.emit()
         self.accept()
+
+
+class GoldenReportDialog(QDialog):
+    """黄金三章评估报告对话框"""
+
+    def __init__(self, report_html: str, parent=None):
+        super().__init__(parent)
+        self.report_html = report_html
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("🏆 黄金三章评估报告")
+        self.setMinimumSize(600, 700)
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {CyberpunkTheme.BG_DEEP};
+            }}
+            QTextBrowser {{
+                background-color: {CyberpunkTheme.BG_CARD};
+                border: 1px solid {CyberpunkTheme.BORDER};
+                border-radius: 8px;
+                padding: 10px;
+                color: #e2e8f0;
+            }}
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_PRIMARY};
+                color: #000;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 24px;
+                font-weight: bold;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: #00ccff;
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # 标题
+        title = QLabel("🏆 黄金三章评估报告")
+        title.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; font-size: 20px; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        # 报告内容
+        self.report_browser = QTextBrowser()
+        self.report_browser.setHtml(self.report_html)
+        self.report_browser.setStyleSheet("""
+            QTextBrowser {
+                background-color: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 15px;
+                color: #e2e8f0;
+                font-size: 14px;
+            }
+        """)
+        layout.addWidget(self.report_browser)
+
+        # 关闭按钮
+        btn_close = QPushButton("关闭")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close, alignment=Qt.AlignmentFlag.AlignCenter)

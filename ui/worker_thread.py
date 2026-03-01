@@ -248,3 +248,150 @@ class ToolWorker(QThread):
             self.result_signal.emit(response)
         except Exception as e:
             self.error_signal.emit(f"生成失败: {str(e)}")
+
+
+class GoldenThreeWorker(QThread):
+    """黄金三章评估Worker - 异步调用LLM评估前三章"""
+    result_signal = pyqtSignal(str)  # 评估结果HTML
+    error_signal = pyqtSignal(str)   # 错误信息
+
+    def __init__(self, project_dir: str):
+        super().__init__()
+        self.project_dir = project_dir
+
+    def run(self):
+        try:
+            from pathlib import Path
+            from core.model_manager import create_model_manager
+
+            project_path = Path(self.project_dir)
+            chapters_dir = project_path / "chapters"
+
+            # 读取前三章内容
+            chapters = []
+            for i in range(1, 4):
+                ch_file = chapters_dir / f"chapter_{i:03d}.md"
+                if ch_file.exists():
+                    content = ch_file.read_text(encoding="utf-8")
+                    # 截取前2000字（避免过长）
+                    chapters.append(f"第{i}章:\n{content[:2000]}")
+
+            if len(chapters) < 3:
+                self.error_signal.emit("需要至少3章内容才能进行黄金三章评估")
+                return
+
+            # 构建评估Prompt
+            combined_chapters = "\n\n".join(chapters)
+
+            evaluate_prompt = f"""你是一位拥有8年网文编辑经验的起点金牌编辑「锐评官」。请对以下小说的黄金三章进行专业评估。
+
+请从以下6个维度进行严格评估并给出分数(0-100)和具体改进建议：
+
+1. **开篇切入点**: 开头是否抓住读者？切入点是否吸引人？
+2. **金手指出现时机**: 金手指/金手指是否在前三章出现？出现时机是否恰当？
+3. **期待感营造**: 是否有悬念/钩子吸引读者往下读？
+4. **节奏把控**: 前三章节奏是否明快？是否有拖沓感？
+5. **人设讨喜度**: 主角人设是否讨喜？是否有记忆点？
+6. **情绪拉扯**: 是否有情绪起伏？爽点/虐点安排是否合理？
+
+小说内容:
+{combined_chapters}
+
+请以JSON格式返回评估结果：
+{{
+    "开篇切入点": {{"分数": XX, "评价": "...", "建议": "..."}},
+    "金手指出现时机": {{"分数": XX, "评价": "...", "建议": "..."}},
+    "期待感营造": {{"分数": XX, "评价": "...", "建议": "..."}},
+    "节奏把控": {{"分数": XX, "评价": "...", "建议": "..."}},
+    "人设讨喜度": {{"分数": XX, "评价": "...", "建议": "..."}},
+    "情绪拉扯": {{"分数": XX, "评价": "...", "建议": "..."}},
+    "综合评级": "S/A/B/C/D",
+    "总体建议": "..."
+}}"""
+
+            mm = create_model_manager()
+            result = mm.generate(
+                prompt=evaluate_prompt,
+                temperature=0.7,
+                system_prompt="你是一位资深网文编辑，擅长评估网文开头质量。请严格评估并给出可操作的改进建议。"
+            )
+
+            # 解析JSON结果并转换为HTML
+            import re
+            import json
+
+            json_match = re.search(r'\{[\s\S]*\}', result)
+            if json_match:
+                diagnosis = json.loads(json_match.group())
+                html = self._build_html_report(diagnosis)
+                self.result_signal.emit(html)
+            else:
+                # 无法解析JSON，返回原始结果
+                self.result_signal.emit(f"<pre>{result}</pre>")
+
+        except Exception as e:
+            self.error_signal.emit(f"评估失败: {str(e)}")
+
+    def _build_html_report(self, diagnosis: dict) -> str:
+        """将诊断结果构建为HTML报告"""
+
+        def get_color(score):
+            if score >= 80:
+                return "#00e676"
+            if score >= 60:
+                return "#ffb300"
+            return "#ff1744"
+
+        def get_emoji(rating):
+            if rating == "S":
+                return "🌟"
+            if rating == "A":
+                return "✨"
+            if rating == "B":
+                return "👍"
+            if rating == "C":
+                return "⚠️"
+            return "❌"
+
+        html = f"""
+        <div style='font-family: "Microsoft YaHei", sans-serif; padding: 10px;'>
+            <h2 style='color: #00e676; text-align: center;'>
+                {get_emoji(diagnosis.get('综合评级', 'B'))} 黄金三章评估 - {diagnosis.get('综合评级', 'B')}级
+            </h2>
+            <hr style='border-color: #334155;'>
+        """
+
+        dimensions = [
+            "开篇切入点", "金手指出现时机", "期待感营造",
+            "节奏把控", "人设讨喜度", "情绪拉扯"
+        ]
+
+        for dim in dimensions:
+            data = diagnosis.get(dim, {})
+            score = data.get("分数", 0)
+            eval_text = data.get("评价", "")
+            suggestion = data.get("建议", "")
+            color = get_color(score)
+
+            html += f"""
+            <div style='margin: 15px 0; padding: 10px; background: #1e293b; border-radius: 8px;'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <span style='font-weight: bold; font-size: 16px;'>{dim}</span>
+                    <span style='color: {color}; font-size: 24px; font-weight: bold;'>{score}分</span>
+                </div>
+                <p style='color: #94a3b8; margin: 8px 0;'>{eval_text}</p>
+                <p style='color: #38bdf8; margin: 8px 0; font-size: 14px;'>💡 建议: {suggestion}</p>
+            </div>
+            """
+
+        overall = diagnosis.get("总体建议", "")
+        if overall:
+            html += f"""
+            <div style='margin-top: 20px; padding: 15px; background: #0f172a; border-radius: 8px; border-left: 4px solid #38bdf8;'>
+                <h3 style='color: #38bdf8; margin: 0 0 10px 0;'>📋 总体建议</h3>
+                <p style='color: #e2e8f0; margin: 0;'>{overall}</p>
+            </div>
+            """
+
+        html += "</div>"
+        return html

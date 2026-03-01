@@ -965,6 +965,29 @@ class ProductionView(QWidget):
         self.btn_resume.clicked.connect(self._on_resume)
         control_layout.addWidget(self.btn_resume)
 
+        # 黄金三章评估按钮
+        self.btn_golden_check = QPushButton("🏆 黄金三章评估")
+        self.btn_golden_check.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_WARNING};
+                color: #000;
+                border: 2px solid {CyberpunkTheme.FG_WARNING};
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #ffca28;
+            }}
+            QPushButton:disabled {{
+                background-color: #475569;
+                border-color: #475569;
+                color: #94a3b8;
+            }}
+        """)
+        self.btn_golden_check.clicked.connect(self._on_golden_check)
+        control_layout.addWidget(self.btn_golden_check)
+
         layout.addWidget(control_bar)
 
         # ===== 核心三栏布局 =====
@@ -1127,6 +1150,65 @@ class ProductionView(QWidget):
         """恢复"""
         self.status_changed.emit("写作中...")
         self.request_resume.emit()
+
+    def _on_golden_check(self):
+        """黄金三章评估"""
+        from pathlib import Path
+
+        chapters_dir = Path(self.project_dir) / "chapters"
+
+        # 检查前三章是否存在
+        missing_chapters = []
+        for i in range(1, 4):
+            ch_file = chapters_dir / f"chapter_{i:03d}.md"
+            if not ch_file.exists():
+                missing_chapters.append(f"chapter_{i:03d}.md")
+
+        if missing_chapters:
+            QMessageBox.warning(
+                self,
+                "无法评估",
+                f"需生成完前三章才能评估！\n\n缺少: {', '.join(missing_chapters)}"
+            )
+            return
+
+        # 禁用按钮，显示评估中
+        self.btn_golden_check.setEnabled(False)
+        self.btn_golden_check.setText("评估中...")
+        self.append_log("正在启动黄金三章评估...", "system")
+
+        # 启动评估Worker
+        try:
+            from ui.worker_thread import GoldenThreeWorker
+            self.golden_worker = GoldenThreeWorker(self.project_dir)
+            self.golden_worker.result_signal.connect(self._on_golden_result)
+            self.golden_worker.error_signal.connect(self._on_golden_error)
+            self.golden_worker.start()
+        except Exception as e:
+            self.append_log(f"评估启动失败: {e}", "error")
+            self.btn_golden_check.setEnabled(True)
+            self.btn_golden_check.setText("🏆 黄金三章评估")
+
+    def _on_golden_result(self, report_html: str):
+        """评估完成，显示报告"""
+        self.btn_golden_check.setEnabled(True)
+        self.btn_golden_check.setText("🏆 黄金三章评估")
+        self.append_log("黄金三章评估完成", "success")
+
+        # 显示报告对话框
+        try:
+            from ui.dialogs import GoldenReportDialog
+            dialog = GoldenReportDialog(report_html, self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.warning(self, "显示报告失败", str(e))
+
+    def _on_golden_error(self, error_msg: str):
+        """评估出错"""
+        self.btn_golden_check.setEnabled(True)
+        self.btn_golden_check.setText("🏆 黄金三章评估")
+        self.append_log(f"评估失败: {error_msg}", "error")
+        QMessageBox.warning(self, "评估失败", error_msg)
 
     def _on_agent_badge_clicked(self, agent_name: str):
         """点击迷你工牌，显示大工牌"""

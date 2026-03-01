@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 写下一章时优先使用摘要（而非完整上一章文本）
   - 摘要包含：章节概要、关键事件、涉及角色、场景地点
 
+- **黄金三章评估功能**
+  - ProductionView 新增 "🏆 黄金三章评估" 按钮
+  - `GoldenThreeWorker` 异步调用 LLM 评估前三章
+  - 从6个维度评估：开篇切入点、金手指出现时机、期待感营造、节奏把控、人设讨喜度、情绪拉扯
+  - `GoldenReportDialog` 展示评估报告（HTML格式）
+
 ### Fixed
 - **流式输出 `.value` 崩溃**
   - `core/emotion_tracker.py`: `_load_ledger` 从 JSON 反序列化时将 `state` 字符串还原为 `EmotionalState` 枚举
