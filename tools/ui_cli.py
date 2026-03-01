@@ -34,7 +34,8 @@ def main():
     sub = p.add_subparsers(dest="action", required=True)
 
     sw = sub.add_parser("switch_view")
-    sw.add_argument("target", choices=["preprod", "production", "vault"])
+    # 移除 choices 限制，接受任意视图名称
+    sw.add_argument("target", help="视图名称 (preprod, production, vault, market)")
 
     ft = sub.add_parser("fill_text")
     # 移除 choices 限制，接受任意目标名称

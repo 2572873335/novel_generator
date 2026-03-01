@@ -1445,7 +1445,37 @@ class SkillMarketView(QWidget):
         header.setStyleSheet(f"color: {CyberpunkTheme.FG_PRIMARY}; margin: 20px 0;")
         layout.addWidget(header)
 
-        # 新建自定义工作流按钮
+        # ===== CLI 控制区域 =====
+        cli_group = QGroupBox("⚡ CLI 控制 (快速创建)")
+        cli_layout = QFormLayout(cli_group)
+
+        self.edit_skill_name = QLineEdit()
+        self.edit_skill_name.setPlaceholderText("输入技能名称...")
+        cli_layout.addRow("技能名称:", self.edit_skill_name)
+
+        self.edit_skill_content = QTextEdit()
+        self.edit_skill_content.setPlaceholderText("输入技能内容 (Markdown格式)...")
+        self.edit_skill_content.setMaximumHeight(150)
+        cli_layout.addRow("技能内容:", self.edit_skill_content)
+
+        self.btn_create_skill = QPushButton("➕ 创建技能")
+        self.btn_create_skill.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_SUCCESS};
+                color: #000;
+                border: none;
+                border-radius: 6px;
+                padding: 10px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #00cc55; }}
+        """)
+        self.btn_create_skill.clicked.connect(self._on_create_skill_from_input)
+        cli_layout.addRow("", self.btn_create_skill)
+
+        layout.addWidget(cli_group)
+
+        # ===== 原有的新建按钮 =====
         btn_create = QPushButton("➕ 新建自定义工作流 (Create Custom Skill)")
         btn_create.setStyleSheet(f"""
             QPushButton {{
@@ -1468,6 +1498,36 @@ class SkillMarketView(QWidget):
         self._load_all_skills()
         scroll.setWidget(self._container)
         layout.addWidget(scroll)
+
+    def _on_create_skill_from_input(self):
+        """从输入框创建技能 (支持 CLI)"""
+        name = self.edit_skill_name.text().strip()
+        content = self.edit_skill_content.toPlainText().strip()
+
+        if not name:
+            QMessageBox.warning(self, "错误", "请输入技能名称！")
+            return
+
+        if not content:
+            content = f"# {name}\n\n在 此编写你的自定义提示词/工作流规则"
+
+        # 保存技能
+        safe = name.replace(" ", "-").lower()
+        dest = Path("user_data/custom_skills") / safe
+        dest.mkdir(parents=True, exist_ok=True)
+
+        # 保存为 SKILL.md
+        skill_file = dest / "SKILL.md"
+        skill_file.write_text(content, encoding="utf-8")
+
+        # 清空输入框
+        self.edit_skill_name.clear()
+        self.edit_skill_content.clear()
+
+        # 刷新列表
+        self._load_all_skills()
+
+        QMessageBox.information(self, "成功", f"技能 [{name}] 已创建！")
 
     def _load_all_skills(self):
         """加载内置 + 自定义技能"""
