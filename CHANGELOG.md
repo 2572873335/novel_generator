@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 技能内容在 `assemble_emotion_writer_prompt()` 中注入到最终 Prompt
   - 支持在 `project_config.json` 中配置 `enabled_skills` 列表自定义启用技能
 
+- **SummaryIndexer 集成到 Orchestrator**
+  - `Orchestrator` 初始化 `SummaryIndexer` 组件
+  - 章节保存后自动调用 `summary_indexer.generate_chapter_summary()` 生成摘要
+  - 写下一章时优先使用摘要（而非完整上一章文本）
+  - 摘要包含：章节概要、关键事件、涉及角色、场景地点
+
 ### Fixed
 - **流式输出 `.value` 崩溃**
   - `core/emotion_tracker.py`: `_load_ledger` 从 JSON 反序列化时将 `state` 字符串还原为 `EmotionalState` 枚举

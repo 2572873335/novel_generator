@@ -63,6 +63,7 @@ class Orchestrator:
         self.creative_director = None
         self.emotion_writer = None
         self.initializer_agent = None
+        self.summary_indexer = None  # 摘要管理器
 
         # 状态
         self.current_chapter = 1
@@ -141,6 +142,7 @@ class Orchestrator:
         from core.emotion_tracker import EmotionTracker
         from core.world_bible import WorldBible
         from core.prompt_assembler import PromptAssembler
+        from core.summary_indexer import SummaryIndexer
         from agents.creative_director import CreativeDirector
         from agents.emotion_writer import EmotionWriter
 
@@ -150,6 +152,7 @@ class Orchestrator:
         self.prompt_assembler = PromptAssembler(str(self.project_dir))
         self.creative_director = CreativeDirector(str(self.project_dir))
         self.emotion_writer = EmotionWriter(self.llm_client, str(self.project_dir))
+        self.summary_indexer = SummaryIndexer(str(self.project_dir))
 
         # 检查是否已有暂停状态
         if self.creative_director.is_suspended():
@@ -346,6 +349,17 @@ class Orchestrator:
                         result.get("emotion", {})
                     )
 
+                    # 生成章节摘要（记忆管理）
+                    if self.summary_indexer:
+                        try:
+                            self.summary_indexer.generate_chapter_summary(
+                                self.current_chapter,
+                                result["content"]
+                            )
+                            logger.info(f"Chapter {self.current_chapter} summary generated")
+                        except Exception as e:
+                            logger.warning(f"Failed to generate summary: {e}")
+
                     # 检查是否需要仲裁
                     reports = result.get("reports", [])
 
@@ -449,22 +463,31 @@ class Orchestrator:
         self._emit_agent_status("EmotionWriter", "writing", chapter_num)
         self._emit_agent_status("WorldBible", "recording", chapter_num)
 
-        # 获取上一章内容
+        # 获取上一章内容（优先使用摘要）
         previous_chapter = ""
         if chapter_num > 1:
-            # 先尝试读取Markdown文件
-            prev_md = self.project_dir / "chapters" / f"chapter_{chapter_num - 1:03d}.md"
-            if prev_md.exists():
-                previous_chapter = prev_md.read_text(encoding="utf-8")
-            else:
-                # 回退到旧的JSON格式
-                prev_file = self.project_dir / "chapters" / f"chapter_{chapter_num - 1}.json"
-                if prev_file.exists():
-                    try:
-                        data = json.loads(prev_file.read_text(encoding="utf-8"))
-                        previous_chapter = data.get("content", "")
-                    except:
-                        pass
+            # 优先使用 SummaryIndexer 加载摘要
+            if self.summary_indexer:
+                prev_summary = self.summary_indexer.get_chapter_summary(chapter_num - 1)
+                if prev_summary:
+                    previous_chapter = f"【前章摘要】{prev_summary.summary}"
+                    if prev_summary.key_events:
+                        previous_chapter += f"\n\n【前章关键事件】\n" + "\n".join(f"- {e}" for e in prev_summary.key_events[:3])
+
+            # 如果没有摘要，回退到读取原始文件
+            if not previous_chapter:
+                prev_md = self.project_dir / "chapters" / f"chapter_{chapter_num - 1:03d}.md"
+                if prev_md.exists():
+                    previous_chapter = prev_md.read_text(encoding="utf-8")
+                else:
+                    # 回退到旧的JSON格式
+                    prev_file = self.project_dir / "chapters" / f"chapter_{chapter_num - 1}.json"
+                    if prev_file.exists():
+                        try:
+                            data = json.loads(prev_file.read_text(encoding="utf-8"))
+                            previous_chapter = data.get("content", "")
+                        except:
+                            pass
 
         # 使用流式写作
         full_content = ""
