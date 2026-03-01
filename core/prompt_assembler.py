@@ -50,6 +50,76 @@ class PromptAssembler:
         self.skills_dir = Path(".opencode/skills")
         self.custom_skills_dir = Path("user_data/custom_skills")
 
+        # 状态管理器（延迟初始化）
+        self.state_manager = None
+
+    def _get_state_manager(self):
+        """获取或初始化状态管理器"""
+        if self.state_manager is None:
+            try:
+                from core.state_snapshot import StateSnapshotManager
+                self.state_manager = StateSnapshotManager(str(self.project_dir))
+            except Exception as e:
+                logger.warning(f"Failed to initialize StateSnapshotManager: {e}")
+        return self.state_manager
+
+    def get_state_summary(self, chapter_num: int = None) -> str:
+        """
+        获取当前世界状态摘要
+
+        从 StateSnapshotManager 获取最新快照的状态信息，用于写入Prompt
+
+        Args:
+            chapter_num: 当前章节号，如果为None则获取最新的
+
+        Returns:
+            格式化的状态摘要文本
+        """
+        state_mgr = self._get_state_manager()
+        if not state_mgr:
+            return ""
+
+        try:
+            # 获取指定章节之前的最新快照
+            snapshot = state_mgr.get_latest_snapshot_before(chapter_num or 999)
+            if not snapshot:
+                return "（暂无世界状态记录）"
+
+            # 提取关键状态信息
+            state = snapshot.world_state
+            summary_parts = ["【当前世界状态】"]
+
+            # 角色状态
+            if state.get("characters"):
+                chars = list(state["characters"].keys())[:5]  # 最多5个
+                summary_parts.append(f"主要角色: {', '.join(chars)}")
+
+            # 地点状态
+            if state.get("locations"):
+                locs = list(state["locations"].keys())[:3]
+                summary_parts.append(f"涉及地点: {', '.join(locs)}")
+
+            # 势力状态
+            if state.get("factions"):
+                facts = list(state["factions"].keys())[:3]
+                summary_parts.append(f"相关势力: {', '.join(facts)}")
+
+            # 物品/道具
+            if state.get("items"):
+                items = list(state["items"].keys())[:3]
+                summary_parts.append(f"关键物品: {', '.join(items)}")
+
+            # 情节点
+            if state.get("plot_points"):
+                plots = list(state["plot_points"].keys())[:3]
+                summary_parts.append(f"进行中情节: {', '.join(plots)}")
+
+            return "\n".join(summary_parts) if len(summary_parts) > 1 else "（世界状态无显著变化）"
+
+        except Exception as e:
+            logger.warning(f"Failed to get state summary: {e}")
+            return ""
+
     def load_skill_prompt(self, skill_name: str) -> str:
         """
         加载指定技能的Prompt内容
@@ -373,7 +443,15 @@ class PromptAssembler:
         except Exception as e:
             logger.warning(f"Failed to load skills: {e}")
 
-        # 6. 防截断规则（最高优先级）
+        # 6. 世界状态摘要（从 StateSnapshotManager 加载）
+        try:
+            state_summary = self.get_state_summary(chapter_num)
+            if state_summary:
+                components.append(PromptComponent("world_state", 4, state_summary))
+        except Exception as e:
+            logger.warning(f"Failed to load state summary: {e}")
+
+        # 7. 防截断规则（最高优先级）
         anti_truncation_rule = """<rule>你必须完整地结束本章，严禁在句子中间或对话中间截断！如果接近字数上限，请立刻收尾并输出完整的句号。最后一段必须逻辑完整。绝对禁止输出被切断的句子！</rule>"""
         components.append(PromptComponent("anti_truncation", 0, anti_truncation_rule))
 

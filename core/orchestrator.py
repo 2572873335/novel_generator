@@ -64,6 +64,7 @@ class Orchestrator:
         self.emotion_writer = None
         self.initializer_agent = None
         self.summary_indexer = None  # 摘要管理器
+        self.state_manager = None  # 状态管理器
 
         # 状态
         self.current_chapter = 1
@@ -143,6 +144,7 @@ class Orchestrator:
         from core.world_bible import WorldBible
         from core.prompt_assembler import PromptAssembler
         from core.summary_indexer import SummaryIndexer
+        from core.state_snapshot import StateSnapshotManager
         from agents.creative_director import CreativeDirector
         from agents.emotion_writer import EmotionWriter
 
@@ -153,6 +155,7 @@ class Orchestrator:
         self.creative_director = CreativeDirector(str(self.project_dir))
         self.emotion_writer = EmotionWriter(self.llm_client, str(self.project_dir))
         self.summary_indexer = SummaryIndexer(str(self.project_dir))
+        self.state_manager = StateSnapshotManager(str(self.project_dir))
 
         # 检查是否已有暂停状态
         if self.creative_director.is_suspended():
@@ -360,6 +363,14 @@ class Orchestrator:
                         except Exception as e:
                             logger.warning(f"Failed to generate summary: {e}")
 
+                    # 创建世界状态快照
+                    if self.state_manager:
+                        try:
+                            self._create_state_snapshot(self.current_chapter, result)
+                            logger.info(f"Chapter {self.current_chapter} state snapshot created")
+                        except Exception as e:
+                            logger.warning(f"Failed to create state snapshot: {e}")
+
                     # 检查是否需要仲裁
                     reports = result.get("reports", [])
 
@@ -439,6 +450,57 @@ class Orchestrator:
             json.dumps(meta_data, ensure_ascii=False, indent=2),
             encoding="utf-8"
         )
+
+    def _create_state_snapshot(self, chapter_num: int, result: Dict[str, Any]):
+        """
+        创建世界状态快照
+
+        Args:
+            chapter_num: 章节编号
+            result: 写作结果（包含 content, emotion 等）
+        """
+        if not self.state_manager:
+            return
+
+        try:
+            from core.state_snapshot import WorldState, SnapshotType
+
+            # 从 WorldBible 获取当前世界状态
+            world_state_data = {}
+            if self.world_bible:
+                world_state_data = {
+                    "characters": self.world_bible.characters if hasattr(self.world_bible, 'characters') else {},
+                    "locations": self.world_bible.locations if hasattr(self.world_bible, 'locations') else {},
+                    "factions": self.world_bible.factions if hasattr(self.world_bible, 'factions') else {},
+                    "items": self.world_bible.items if hasattr(self.world_bible, 'items') else {},
+                    "plot_points": self.world_bible.plot_points if hasattr(self.world_bible, 'plot_points') else {},
+                }
+
+            # 添加情绪状态
+            if self.emotion_tracker:
+                world_state_data["emotion"] = {
+                    "net_debt": self.emotion_tracker.ledger.net_debt,
+                    "accumulated_pressure": self.emotion_tracker.ledger.accumulated_pressure,
+                    "accumulated_payoff": self.emotion_tracker.ledger.accumulated_payoff,
+                }
+
+            # 创建世界状态
+            world_state = WorldState(
+                chapter=chapter_num,
+                timestamp=datetime.now(),
+                **world_state_data
+            )
+
+            # 保存快照
+            self.state_manager.create_snapshot(
+                snapshot_type=SnapshotType.CHAPTER_END,
+                chapter=chapter_num,
+                description=f"第{chapter_num}章结束状态",
+                world_state=world_state
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to create state snapshot: {e}")
 
     def _write_chapter(self, chapter_num: int) -> Dict[str, Any]:
         """写作单章 - 支持流式输出"""
