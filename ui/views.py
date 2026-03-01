@@ -177,6 +177,7 @@ class PreProductionView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.project_dir = "novels/default"
+        self.last_diagnosis = None  # 存储上次诊断结果
         self.init_ui()
 
     def set_project_dir(self, project_dir: str):
@@ -434,6 +435,26 @@ class PreProductionView(QWidget):
         self.diagnose_result = QTextBrowser()
         self.diagnose_result.setPlaceholderText("诊断结果将在这里显示...")
         result_layout.addWidget(self.diagnose_result)
+
+        # 采纳建议按钮（诊断成功后显示）
+        self.btn_apply_advice = QPushButton("💡 采纳建议并修改")
+        self.btn_apply_advice.setFont(QFont("Consolas", 10))
+        self.btn_apply_advice.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {CyberpunkTheme.FG_PRIMARY};
+                color: #000;
+                border: 2px solid {CyberpunkTheme.FG_PRIMARY};
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #00ccff;
+            }}
+        """)
+        self.btn_apply_advice.clicked.connect(self._on_apply_diagnosis_advice)
+        self.btn_apply_advice.setVisible(False)  # 默认隐藏
+        result_layout.addWidget(self.btn_apply_advice)
 
         # 确认并开始写作按钮 - 发出 request_start 信号
         self.btn_start = QPushButton("✅ 确认设定并开始写作")
@@ -755,6 +776,10 @@ class PreProductionView(QWidget):
                         html += '</ul>'
 
                     self.diagnose_result.setHtml(html)
+
+                    # 存储诊断结果并显示采纳按钮
+                    self.last_diagnosis = diagnosis
+                    self.btn_apply_advice.setVisible(True)
                 else:
                     # 无法解析 JSON，直接显示原始结果
                     self.diagnose_result.setPlainText(result)
@@ -769,6 +794,57 @@ class PreProductionView(QWidget):
             """)
         finally:
             self.status_changed.emit("系统待命")
+
+    def _on_apply_diagnosis_advice(self):
+        """采纳诊断建议并修改大纲和人物设定"""
+        if not self.last_diagnosis:
+            return
+
+        suggestions = self.last_diagnosis.get("修改建议", [])
+        if not suggestions:
+            QMessageBox.information(self, "提示", "没有可采纳的建议")
+            return
+
+        # 构建修改后的大纲（追加建议）
+        current_outline = self.edit_outline.toPlainText()
+        new_outline = current_outline
+
+        # 获取各项评价，生成改进建议文本
+        improvements = []
+        for dim, data in self.last_diagnosis.items():
+            if dim == "综合评级" or dim == "修改建议":
+                continue
+            score = data.get("分数", 0)
+            eval_text = data.get("评价", "")
+            if score < 70:  # 只采纳低分项的建议
+                improvements.append(f"【{dim}】{eval_text}")
+
+        if improvements:
+            new_outline += "\n\n" + "="*40 + "\n【根据诊断建议的改进】\n"
+            for imp in improvements:
+                new_outline += f"- {imp}\n"
+
+        # 获取人物设定的改进建议
+        chars = self.edit_chars.toPlainText()
+        # 如果有人物相关的低分建议，追加到人物设定
+        for dim, data in self.last_diagnosis.items():
+            if "人设" in dim:
+                score = data.get("分数", 0)
+                if score < 70:
+                    chars += f"\n\n【根据诊断建议改进】{data.get('评价', '')}"
+
+        # 更新文本框
+        self.edit_outline.setText(new_outline)
+        if chars != self.edit_chars.toPlainText():
+            self.edit_chars.setText(chars)
+
+        # 隐藏按钮
+        self.btn_apply_advice.setVisible(False)
+
+        QMessageBox.information(
+            self, "采纳成功",
+            "已根据诊断建议更新大纲和人物设定！\n请检查并确认修改内容。"
+        )
 
     def _on_chat_send(self):
         """发送聊天消息 - 通过信号委托给主窗口处理"""
