@@ -1,22 +1,32 @@
-# AI Novel Generator - NovelForge v4.2
+# AI Novel Generator - NovelForge v5.0
 
 A fully automated AI novel generation system built based on [Anthropic's best practices for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents).
 
-**Latest Version: NovelForge v4.2** - Production-ready with circuit breaker mechanism, emotion tracking, single-API-call architecture, and enhanced PyQt6 UI.
+**Latest Version: NovelForge v5.0** - DDD architecture with dependency inversion, unified CLI entry point, and modularized PyQt6 UI.
 
 [中文文档](README.zh_CN.md)
 
-## What's New in v4.2
+## What's New in v5.0
 
-- **All v4.0 Features** (see below)
-- **Enhanced Producer Dashboard UI (v4.2)**:
-  - Cyberpunk theme v2.0 with improved color contrast
-  - Top status bar with theme selector
-  - Advanced log panel with search & filtering
-  - Emotion wave chart with threshold lines
-  - Circuit breaker panel with rollback history
-  - Pre-production panel with auto-save indicator
-  - 4 built-in themes: Cyberpunk, Neon Blue, Sunset, Forest
+- **All v4.2 Features** (see below)
+- **Domain-Driven Design Refactoring**:
+  - `NovelProject` class encapsulates all file system operations
+  - Dependency inversion: UI no longer depends on raw `Path` operations
+  - `core/__init__.py` facade pattern for future file reorganization
+
+- **Unified Entry Point** (argparse subcommands):
+  ```bash
+  python main.py gui                    # Launch GUI (default project)
+  python main.py gui -p novels/my_proj # Launch GUI with project
+  python main.py cli -p novels/proj -c 100    # CLI generation
+  python main.py init -t "Title" -g Fantasy -n 50  # Initialize project
+  ```
+
+- **UI Modularization**:
+  - `ui/views.py` uses `NovelProject` for PreProductionView and ProjectVaultView
+  - `ui/worker_thread.py` uses `NovelProject` for config and emotion ledger
+
+---
 
 ## Core Features (v4.0)
 
@@ -39,7 +49,7 @@ This system implements the **long-running agent** solution proposed by Anthropic
 - Plans chapter structure
 - Sets worldview and writing style guide
 
-### 2. NovelForge v4.0 Orchestrator (NEW)
+### 2. NovelForge v4.0 Orchestrator
 - **EmotionWriter**: Single-API-call scene writer with prompt aggregation
 - **CreativeDirector**: Circuit breaker + arbitration
 - **EmotionTracker**: Python-based emotion debt ledger
@@ -57,71 +67,14 @@ This system implements the **long-running agent** solution proposed by Anthropic
 - Provides specific modification suggestions
 - Ensures quality standards before marking complete
 
-### 5. Progress Management System
-- **novel-progress.txt**: Records overall progress and each chapter's status
-- **chapter-list.json**: Chapter list
-- **characters.json**: Character settings
+### 5. Progress Management System (via NovelProject)
+- **project_config.json**: Project configuration
 - **outline.md**: Novel outline
-- **writing_constraints.json**: Locked consistency constraints
-- **emotion_ledger.json**: Emotion debt tracking (v4.0)
-- **world_bible.json**: Event traceability (v4.0)
-
----
-
-## Three-Layer Consistency Defense System
-
-The system implements a robust 3-layer defense to prevent consistency issues:
-
-### Layer 1: Pre-Writing (WritingConstraintManager)
-- Injects strict constraints into LLM prompts
-- Locks faction names, character names, realm system
-- Prevents generation of non-compliant content
-
-**Features:**
-- Faction whitelist enforcement
-- Character name locking
-- Realm hierarchy rules
-- Cultivation speed limits
-- Constitution locking
-- Timeline constraints
-- Weapon naming rules
-
-### Layer 2: Real-time Validation (_pre_save_validation)
-- Validates chapter before saving
-- Uses WritingConstraintManager.validate_chapter()
-- Triggers rewrite if critical violations found
-
-**Checks:**
-- Faction name consistency
-- Character name variants
-- Cross-realm combat violations
-- Cultivation speed violations
-- Constitution change violations
-
-### Layer 3: Post-Writing (Senior-editor Audit)
-- Every 5 chapters: calls senior-editor skill
-- Multi-dimensional quality review
-- Detects issues missed by automated checks
-
----
-
-## NovelForge v4.0 Key Features
-
-### 1. Anti-Token-Blackhole: Prompt Aggregation
-Merge L2+L3 skills into single prompt assembly, reducing API calls from 8-12 to 1 per chapter.
-
-### 2. Anti-LLM-Math-Disaster: Python Arithmetic
-All emotion calculations done in Python, LLM receives only text instructions.
-
-### 3. Anti-Infinite-Loop: Circuit Breaker
-```
-Chapters 1-3:  Max 3 rollbacks → Force SUSPEND
-Chapters 4-10: Max 5 rollbacks → Force SUSPEND
-Chapters 11+:  Max 8 rollbacks → Force SUSPEND
-```
-
-### 4. Event Traceability: World Bible
-Records key events (deaths, resurrections, realm upgrades) for consistency checking.
+- **characters.json**: Character settings
+- **chapters/**: Chapter files
+- **emotion_ledger.json**: Emotion debt tracking
+- **world_bible.json**: Event traceability
+- **novel-progress.txt**: Writing progress
 
 ---
 
@@ -136,45 +89,29 @@ novel_generator/
 │   └── Level 4 - Auditor
 ├── agents/                     # Agent modules
 │   ├── writer_agent_v2.py     # Main writer with pipeline
-│   ├── consistency_checker.py # Strict consistency checker
-│   ├── senior_editor_v2.py    # Senior editor
-│   ├── creative_director.py   # [NEW v4.0] Circuit breaker
-│   └── emotion_writer.py      # [NEW v4.0] Single-API writer
+│   ├── creative_director.py   # Circuit breaker
+│   └── emotion_writer.py      # Single-API writer
 ├── core/                      # Core modules
+│   ├── project_context.py     # [NEW v5.0] NovelProject DDD model
+│   ├── __init__.py            # [NEW v5.0] Facade pattern
 │   ├── novel_generator.py     # Main orchestrator
-│   ├── orchestrator.py        # [NEW v4.0] Main loop assembly
+│   ├── orchestrator.py        # Main loop assembly
 │   ├── agent_manager.py       # Skills management
-│   ├── writing_constraint_manager.py  # Pre-writing constraints
-│   ├── consistency_tracker.py # Real-time tracking
-│   ├── hybrid_checker.py      # 3-layer checking
-│   ├── v7_integrator.py      # Genre-aware system
-│   ├── emotion_tracker.py     # [NEW v4.0] Emotion debt
-│   ├── world_bible.py        # [NEW v4.0] Event traceability
-│   ├── prompt_assembler.py   # [NEW v4.0] Prompt aggregation
-│   └── ...
-├── ui/                        # [NEW v4.0] UI components
-│   └── producer_dashboard.py # Circuit breaker visualization
+│   ├── emotion_tracker.py     # Emotion debt
+│   ├── world_bible.py         # Event traceability
+│   └── prompt_assembler.py    # Prompt aggregation
+├── ui/                        # UI components (modularized)
+│   ├── views.py               # [v5.0] Uses NovelProject
+│   ├── worker_thread.py       # [v5.0] Uses NovelProject
+│   ├── components.py          # UI components
+│   ├── dialogs.py             # Dialogs
+│   ├── main_window.py         # Main window
+│   └── themes.py              # Theme system
 ├── config/                    # Configuration
-│   └── consistency_rules.yaml
 ├── novels/                    # Generated novels
-├── app.py                     # Web UI (Streamlit)
-├── main.py                    # CLI entry point
-├── .env                       # Environment variables
-└── requirements.txt           # Dependencies
+├── main.py                    # [v5.0] Unified CLI entry (argparse)
+└── .env                       # Environment variables
 ```
-
----
-
-## Skills Hierarchy
-
-The system uses a 4-level hierarchy with 27 specialized skills:
-
-| Level | Type | Skills | Count |
-|-------|------|--------|-------|
-| **Level 1** | Coordinator | worldbuilder-coordinator, plot-architect-coordinator, novel-coordinator | 3 |
-| **Level 2** | Architect | outline-architect, volume-architect, chapter-architect, character-designer, rhythm-designer | 5 |
-| **Level 3** | Expert | scene-writer, cultivation-designer, currency-expert, geopolitics-expert, society-expert, web-novel-methodology | 6 |
-| **Level 4** | Auditor | editor, senior-editor, opening-diagnostician | 3 |
 
 ---
 
@@ -205,35 +142,75 @@ cp .env.example .env
 
 ---
 
-## Usage
+## Usage (v5.0)
 
-### 1. Command Line Mode
+### 1. GUI Mode (Recommended)
+
+```bash
+# Launch GUI with default project
+python main.py gui
+
+# Launch GUI with specific project
+python main.py gui -p novels/my_project
+```
+
+### 2. CLI Mode
+
+```bash
+# Initialize new project
+python main.py init -t "My Novel" -g Fantasy -n 50
+
+# Run headless generation
+python main.py cli -p novels/my_project -c 100
+
+# With batch size
+python main.py cli -p novels/my_project -c 50 --batch-size 10
+```
+
+### 3. Legacy Commands (Still Supported)
 
 ```bash
 # Interactive mode
 python main.py --interactive
 
-# Use config file
-python main.py --config my_novel.json
-
-# Use command line arguments
-python main.py --title "My Novel" --genre "Fantasy" --chapters 20
-
-# Batch mode (recommended for long novels)
-python main.py --title "My Novel" --genre "Fantasy" --chapters 1000 --batch-size 20
-
 # Resume from checkpoint
 python main.py --project novels/my_novel --batch-size 20
-
-# View progress
-python main.py --progress novels/my_novel
 ```
 
-### 2. Producer Dashboard (v4.0)
+---
 
-```bash
-# Run circuit breaker visualization UI
-python -m ui.producer_dashboard novels/my_project
+## NovelProject API (v5.0)
+
+```python
+from core import NovelProject
+
+# Create project instance
+project = NovelProject("novels/my_project")
+
+# Config operations
+config = project.load_config()
+project.save_config({"title": "My Novel", "genre": "Fantasy"})
+
+# Outline operations
+outline = project.load_outline()
+project.save_outline("# Story Outline...")
+
+# Character operations
+characters = project.load_characters()
+project.save_characters('{"characters": [...]}')
+
+# Chapter operations
+chapter = project.load_chapter(1)
+project.save_chapter(1, "Chapter content...")
+chapters = project.list_chapters()
+
+# Progress operations
+progress = project.load_progress()
+project.save_progress({"current": 5, "total": 50})
+
+# Emotion ledger
+ledger = project.load_emotion_ledger()
+project.save_emotion_ledger({"records": [...]})
 ```
 
 ---
@@ -247,99 +224,6 @@ python -m ui.producer_dashboard novels/my_project
 | target_chapters | int | 10 | Target chapter count |
 | words_per_chapter | int | 3000 | Words per chapter |
 | description | string | "" | Story summary |
-| enable_self_review | bool | true | Enable self-review |
-| min_chapter_quality_score | float | 7.0 | Minimum quality score |
-
----
-
-## NovelForge v4.0 Components
-
-### EmotionTracker (core/emotion_tracker.py)
-- Python-based emotion debt ledger
-- Automatic decay (30% per chapter)
-- Generates text instructions for LLM
-
-### WorldBible (core/world_bible.py)
-- Event traceability storage
-- Records: deaths, resurrections, realm upgrades
-- Supports event reversal
-
-### PromptAssembler (core/prompt_assembler.py)
-- Aggregates multiple skills into single prompt
-- Elastic outline (near clear, far fuzzy)
-- Emotion continuity checking
-
-### CreativeDirector (agents/creative_director.py)
-- Circuit breaker with configurable thresholds
-- Arbitration: PASS / REWRITE / ROLLBACK / SUSPEND
-- Generates .suspended.json when triggered
-
-### EmotionWriter (agents/emotion_writer.py)
-- Single-API-call scene writer
-- Integrates PromptAssembler + EmotionTracker + WorldBible
-- Automatic event extraction
-
-### Orchestrator (core/orchestrator.py)
-- Main loop with checkpoint support
-- Coordinates all v4.0 components
-- Handles retry logic
-
----
-
-## Workflow
-
-```
-1. Initialization
-   └── WorldBuilder + expert team builds worldview
-
-2. Character Design
-   └── CharacterDesigner designs characters
-
-3. Plot Architecture
-   └── PlotArchitect + Outline/Volume/Chapter layer-by-layer refinement
-
-4. Writing (Pipeline)
-   └── WriterAgentV2: Outline → Draft → Consistency → Polish → Final
-
-5. v4.0 Writing (Single-API)
-   └── EmotionWriter: PromptAssembly → LLM → EmotionTrack → EventRecord
-
-6. Real-time Validation
-   └── _pre_save_validation() before each save
-
-7. Periodic Audit (every 5 chapters)
-   └── senior-editor skill review
-
-8. Circuit Breaker Check (v4.0)
-   └── CreativeDirector: Check threshold → SUSPEND if triggered
-```
-
----
-
-## Core Advantages
-
-### 1. Three-Layer Consistency Defense
-- Pre-writing: Constraint injection
-- Real-time: Validation before save
-- Post-writing: Senior-editor audit
-
-### 2. Incremental Progress
-- Each session handles only one chapter
-- Ensures quality of each chapter
-
-### 3. Hierarchical Agents
-- 27 specialized skills, 4 levels
-- Coordinator → Architect → Expert → Auditor
-
-### 4. Genre-Aware System (V7)
-- Auto-detects 6 genre types
-- Genre-specific constraint templates
-
-### 5. NovelForge v4.0 Production Features
-- Single-API-call reduces cost and latency
-- Circuit breaker prevents infinite loops
-- Python arithmetic ensures calculation accuracy
-- Event traceability prevents timeline issues
 
 ---
 
