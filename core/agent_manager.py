@@ -44,7 +44,8 @@ class AgentManager:
 
         novel_generator_root = Path(__file__).parent.parent
         self.agents_dir = novel_generator_root / "agents"
-        self.skills_dir = novel_generator_root / ".opencode" / "skills"
+        self.skills_dir = novel_generator_root / "skills"
+        self.custom_skills_dir = novel_generator_root / "user_data" / "custom_skills"
         Path(self.project_dir).mkdir(parents=True, exist_ok=True)
 
         # 导入设定追踪器
@@ -64,23 +65,41 @@ class AgentManager:
         self._load_all_skills_metadata()
 
     def _load_all_skills_metadata(self):
-        """加载所有 skills 的元数据"""
-        if not self.skills_dir.exists():
-            return
+        """加载所有 skills 的元数据（递归搜索子目录）"""
+        # 搜索内置技能目录
+        self._scan_skills_directory(self.skills_dir)
 
-        for skill_dir in self.skills_dir.iterdir():
-            if skill_dir.is_dir():
-                skill_file = skill_dir / "SKILL.md"
-                if skill_file.exists():
-                    metadata = self._parse_skill_metadata(skill_file)
-                    if metadata:
-                        self.skills_metadata[skill_dir.name] = metadata
-                        # 建立触发词索引
-                        for trigger in metadata.triggers:
-                            self._trigger_index[trigger.lower()] = skill_dir.name
+        # 搜索自定义技能目录
+        if self.custom_skills_dir.exists():
+            self._scan_skills_directory(self.custom_skills_dir)
 
         # 验证触发词冲突
         self._validate_triggers()
+
+    def _scan_skills_directory(self, base_dir: Path):
+        """扫描技能目录，递归查找所有 SKILL.md"""
+        if not base_dir.exists():
+            return
+
+        # 使用 rglob 递归搜索所有 SKILL.md
+        for skill_file in base_dir.rglob("SKILL.md"):
+            if not skill_file.is_file():
+                continue
+
+            # 获取技能目录名（用于标识）
+            skill_dir = skill_file.parent
+            skill_name = skill_dir.name
+
+            # 跳过非技能目录的 SKILL.md
+            if skill_name.startswith("."):
+                continue
+
+            metadata = self._parse_skill_metadata(skill_file)
+            if metadata:
+                self.skills_metadata[skill_name] = metadata
+                # 建立触发词索引
+                for trigger in metadata.triggers:
+                    self._trigger_index[trigger.lower()] = skill_name
 
     def _parse_skill_metadata(self, skill_file: Path) -> Optional[SkillMetadata]:
         """解析 SKILL.md 的 YAML frontmatter"""
@@ -166,12 +185,48 @@ class AgentManager:
                 return f.read()
         return ""
 
+    def _find_skill_file(self, skill_name: str, base_dir: Path) -> Optional[Path]:
+        """
+        递归搜索技能文件，支持子目录结构
+
+        Args:
+            skill_name: 技能名称
+            base_dir: 搜索的基础目录
+
+        Returns:
+            技能文件路径，如果不存在则返回None
+        """
+        if not base_dir.exists():
+            return None
+
+        # 使用 rglob 递归搜索
+        for file_path in base_dir.rglob("SKILL.md"):
+            # 检查目录名是否匹配技能名
+            if file_path.parent.name == skill_name or file_path.stem == skill_name:
+                return file_path
+
+        return None
+
     def load_skill_prompt(self, skill_name: str) -> str:
-        """加载技能提示词 - 从 .opencode/skills/*/SKILL.md"""
-        skill_file = self.skills_dir / skill_name / "SKILL.md"
-        if skill_file.exists():
-            with open(skill_file, "r", encoding="utf-8") as f:
-                return f.read()
+        """加载技能提示词 - 从 skills 目录递归搜索（支持子目录）"""
+        # 优先从自定义技能目录搜索
+        custom_file = self._find_skill_file(skill_name, self.custom_skills_dir)
+        if custom_file:
+            try:
+                with open(custom_file, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception as e:
+                logger.warning(f"Failed to load custom skill {skill_name}: {e}")
+
+        # 从内置技能目录搜索
+        builtin_file = self._find_skill_file(skill_name, self.skills_dir)
+        if builtin_file:
+            try:
+                with open(builtin_file, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception as e:
+                logger.warning(f"Failed to load builtin skill {skill_name}: {e}")
+
         return ""
 
     def get_available_agents(self) -> List[Dict[str, str]]:

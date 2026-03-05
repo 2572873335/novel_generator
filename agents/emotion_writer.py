@@ -29,6 +29,7 @@ class WritingContext:
     emotion_prompt: str = ""
     recent_debts: List[float] = None
     emotional_vector: Dict = None
+    outline_text: str = ""  # 章节大纲，用于提取情绪净值标记
 
     # 世界观相关
     world_state: Dict = None
@@ -142,7 +143,8 @@ class EmotionWriter:
         # Step 3: 计算情绪值
         emotion_result = self.emotion_tracker.track_chapter_emotion(
             chapter_num=chapter_num,
-            text=chapter_content
+            text=chapter_content,
+            outline_text=context.outline_text if context else ""
         )
 
         # Step 4: 提取并记录关键事件
@@ -292,7 +294,8 @@ class EmotionWriter:
         # Step 4: 计算情绪值
         emotion_result = self.emotion_tracker.track_chapter_emotion(
             chapter_num=chapter_num,
-            text=chapter_content
+            text=chapter_content,
+            outline_text=context.outline_text if context else ""
         )
 
         # Step 5: 提取并记录关键事件
@@ -507,7 +510,8 @@ class EmotionWriter:
     def get_context_for_chapter(
         self,
         chapter_num: int,
-        target_chapters: int
+        target_chapters: int,
+        outline_text: str = ""
     ) -> WritingContext:
         """
         获取章节写作上下文
@@ -515,6 +519,7 @@ class EmotionWriter:
         Args:
             chapter_num: 章节编号
             target_chapters: 目标章节数
+            outline_text: 章节大纲文本（可选，用于提取情绪净值标记）
 
         Returns:
             WritingContext
@@ -537,5 +542,6 @@ class EmotionWriter:
             emotional_debt=self.emotion_tracker.ledger.net_debt,
             emotion_prompt=emotion_prompt,
             recent_debts=recent_debts,
-            emotional_vector=emotional_vector
+            emotional_vector=emotional_vector,
+            outline_text=outline_text
         )

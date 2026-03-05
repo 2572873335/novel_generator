@@ -8,6 +8,12 @@ from pathlib import Path
 from datetime import datetime
 from ui.ui_controller import UIDriver, UIRemoteServer
 
+# Agent 导入
+try:
+    from agents.initializer_agent import InitializerAgent
+except ImportError:
+    InitializerAgent = None
+
 # PyQt6 导入
 try:
     from PyQt6.QtWidgets import (
@@ -35,7 +41,7 @@ except ImportError:
 
 # 导入主题系统
 try:
-    from ui.themes import CyberpunkTheme, Typography, Spacing, ThemeManager, ThemeSelector
+    from ui.themes import CyberpunkTheme, Typography, Spacing, ThemeManager, ThemeSelector, ThemeStyles
 except ImportError:
     from themes import CyberpunkTheme, Typography, Spacing, ThemeManager, ThemeSelector
 
@@ -118,9 +124,48 @@ class ProducerDashboard(QMainWindow):
 
     def init_ui(self):
         """初始化UI - v5.0 架构优化版"""
-        self.setWindowTitle("NovelForge v5.0 - Ultimate Creator Suite")
+        self.setWindowTitle("NovelForge v5.1 - Ultimate Creator Suite")
         self.setMinimumSize(1600, 900)
-        self.setStyleSheet(f"QMainWindow {{ background-color: {CyberpunkTheme.BG_DEEP}; }}")
+
+        # 现代化主窗口样式 - 添加渐变背景
+        self.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: {CyberpunkTheme.BG_DEEP};
+            }}
+            QMenuBar {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                padding: 4px;
+            }}
+            QMenuBar::item {{
+                background: transparent;
+                padding: 6px 12px;
+                border-radius: 4px;
+            }}
+            QMenuBar::item:selected {{
+                background-color: {CyberpunkTheme.BG_HOVER};
+            }}
+            QMenu {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: 8px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                color: #FFFFFF;
+                padding: 8px 24px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: {CyberpunkTheme.BG_LIGHT};
+            }}
+            QStatusBar {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_SECONDARY};
+                border-top: 1px solid {CyberpunkTheme.BORDER_COLOR};
+            }}
+        """)
 
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
@@ -163,10 +208,13 @@ class ProducerDashboard(QMainWindow):
         self.setup_menu()
 
         # ====== 5. 连接导航按钮 ======
-        self.nav_bar.btn_preprod.clicked.connect(lambda: self.main_stack.setCurrentIndex(0))
-        self.nav_bar.btn_prod.clicked.connect(lambda: self.main_stack.setCurrentIndex(1))
-        self.nav_bar.btn_vault.clicked.connect(lambda: self.main_stack.setCurrentIndex(2))
-        self.nav_bar.btn_market.clicked.connect(lambda: self.main_stack.setCurrentIndex(3))
+        self.nav_bar.btn_preprod.clicked.connect(lambda: (self.main_stack.setCurrentIndex(0), self.nav_bar.set_active(0)))
+        self.nav_bar.btn_prod.clicked.connect(lambda: (self.main_stack.setCurrentIndex(1), self.nav_bar.set_active(1)))
+        self.nav_bar.btn_vault.clicked.connect(lambda: (self.main_stack.setCurrentIndex(2), self.nav_bar.set_active(2)))
+        self.nav_bar.btn_market.clicked.connect(lambda: (self.main_stack.setCurrentIndex(3), self.nav_bar.set_active(3)))
+
+        # 初始化导航栏选中状态
+        self.nav_bar.set_active(0)
 
         # ====== 6. 连接视图信号 ======
         self._connect_view_signals()
@@ -191,8 +239,14 @@ class ProducerDashboard(QMainWindow):
         self.view_prod.save_config.connect(self._on_save_config)
         self.view_prod.status_changed.connect(self._on_status_changed)
 
+        # === 全局状态栏信号 ===
+        self.global_status_bar.theme_changed.connect(self._on_theme_changed)
+
     def _on_view_changed(self, index: int):
         """视图切换时重新加载数据"""
+        # 更新导航栏选中状态
+        self.nav_bar.set_active(index)
+
         if index == 0:
             # 切换到前期筹备视图
             self.view_preprod.reload_data()
@@ -207,12 +261,95 @@ class ProducerDashboard(QMainWindow):
         """状态变更处理"""
         self.global_status_bar.update_status(status)
 
+    def _on_theme_changed(self, theme_key: str):
+        """主题切换处理 - 应用主题特定的UI布局风格"""
+        # 获取主题样式配置
+        styles = ThemeStyles.get_theme_styles(theme_key)
+
+        # 设置主窗口样式
+        self.setStyleSheet(f"""
+            {styles['main_window']}
+            {styles['menubar']}
+            QStatusBar {{
+                background-color: {ThemeManager.get_color('BG_MEDIUM')};
+                color: {ThemeManager.get_color('TEXT_SECONDARY')};
+                border-top: 1px solid {ThemeManager.get_color('BORDER_COLOR')};
+            }}
+        """)
+
+        # 重新加载各组件样式
+        self._reload_component_styles(theme_key, styles)
+
+    def _reload_component_styles(self, theme_key: str, styles: dict = None):
+        """重新加载各组件样式"""
+        if styles is None:
+            styles = ThemeStyles.get_theme_styles(theme_key)
+
+        # 重新设置全局状态栏样式
+        self.global_status_bar.setStyleSheet(f"""
+            {styles['statusbar']}
+            QLabel {{
+                {styles['label']}
+                font-family: {styles['font_family']};
+                font-size: {Typography.SIZE_BODY}px;
+            }}
+            {styles['combobox']}
+        """)
+
+        # 重新加载导航栏样式
+        self.nav_bar.setStyleSheet(styles['navbar'])
+
+        # 刷新导航按钮选中状态
+        current_index = self.main_stack.currentIndex()
+        self.nav_bar.set_active(current_index, styles)
+
     # === PreProductionView 信号处理 ===
     def _on_request_generate(self):
-        """处理生成请求"""
+        """处理生成请求 - 使用 InitializerAgent 生成设定"""
+        if InitializerAgent is None:
+            print("❌ InitializerAgent 不可用")
+            return
+
+        # 获取用户输入的配置
+        config = self.view_preprod.get_project_config()
+        title = config.get("title", "未命名")
+        genre = config.get("genre", "玄幻")
+        outline = config.get("outline", "")
+
+        print("📝 正在生成角色设定...")
         self.global_status_bar.update_status("生成中...", "info")
-        # TODO: 实现实际生成逻辑
-        self.global_status_bar.update_status("系统待命", "success")
+
+        try:
+            # 创建 LLM 客户端
+            from core.model_manager import create_model_manager
+            llm_client = create_model_manager()
+
+            if llm_client is None:
+                print("❌ 无法创建 LLM 客户端")
+                self.global_status_bar.update_status("生成失败", "error")
+                return
+
+            # 创建 InitializerAgent
+            project_dir = self.project_dir or "novels/default"
+            agent = InitializerAgent(llm_client, project_dir)
+
+            # 生成角色设定（传入完整大纲）
+            characters = agent._generate_characters(config, outline)
+
+            # 保存到项目
+            characters_path = Path(project_dir) / "characters.json"
+            with open(characters_path, "w", encoding="utf-8") as f:
+                json.dump(characters, f, ensure_ascii=False, indent=2)
+
+            print(f"✅ 角色设定已生成: {len(characters)} 个角色")
+            self.view_preprod.edit_chars.setPlainText(json.dumps(characters, ensure_ascii=False, indent=2))
+            self.global_status_bar.update_status("生成完成", "success")
+
+        except Exception as e:
+            print(f"❌ 生成失败: {e}")
+            self.global_status_bar.update_status("生成失败", "error")
+            import traceback
+            traceback.print_exc()
 
     def _on_request_evaluate(self):
         """处理评估请求"""
@@ -395,8 +532,9 @@ class ProducerDashboard(QMainWindow):
         """关于"""
         QMessageBox.about(
             self, "关于 NovelForge",
-            "NovelForge v5.0 - AI小说生成系统\n\n"
-            "基于Anthropic长运行代理最佳实践的全自动小说创作系统"
+            "NovelForge v5.1 - AI小说生成系统\n\n"
+            "✨ 基于Anthropic长运行代理最佳实践的全自动小说创作系统\n\n"
+            "🎨 现代化UI设计 | 🚀 高效批处理 | 🛡️ 熔断机制"
         )
 
     def closeEvent(self, event):
@@ -496,7 +634,7 @@ def run_dashboard(project_dir: str = None):
     Path(project_dir).mkdir(parents=True, exist_ok=True)
     app.setQuitOnLastWindowClosed(True)
 
-    print("[System] 正在点火，启动赛博编辑部中控大屏 v5.0...")
+    print("[System] 正在点火，启动 NovelForge v5.1 创意工坊...")
 
     window = ProducerDashboard(project_dir)
     window.show()

@@ -203,45 +203,107 @@ class InitializerAgent:
             outline = f"# {config.get('title', '未命名')} 大纲\n\n## 故事梗概\n\n等待AI生成...\n\n## 章节规划\n\n1. 第一章\n2. 第二章\n"
         return outline
 
+    def _load_character_designer_skill(self) -> str:
+        """动态加载 character-designer 技能 (基于内容识别)"""
+        from pathlib import Path
+
+        # 搜索 skills 目录及其所有子目录
+        skills_dir = Path("skills")
+        if skills_dir.exists():
+            for skill_file in skills_dir.rglob("*.md"):
+                try:
+                    content = skill_file.read_text(encoding="utf-8")
+                    # 检查元数据是否匹配 (name: character-designer)
+                    if "name: character-designer" in content[:1000]:
+                        print(f"   ✓ 找到 character-designer skill: {skill_file}")
+                        # 移除 front matter
+                        if content.startswith("---"):
+                            parts = content.split("---", 2)
+                            if len(parts) >= 3:
+                                return parts[2].strip()
+                        return content.strip()
+                except Exception as e:
+                    continue
+
+        print("   ⚠ character-designer 技能未找到")
+        return ""
+
     def _generate_characters(
         self, config: Dict[str, Any], outline: str
     ) -> List[Dict[str, Any]]:
-        """生成角色设定"""
-        prompt = f"""基于以下小说信息，创建详细的角色设定：
+        """生成角色设定 - 使用 character-designer 技能"""
+        # 动态加载 character-designer 技能
+        skill_content = self._load_character_designer_skill()
 
-标题: {config.get("title")}
-类型: {config.get("genre")}
-大纲:
-{outline[:1000]}...
+        # 构建用户上下文
+        title = config.get("title", "未命名")
+        genre = config.get("genre", "未知")
+
+        if skill_content:
+            # 使用技能构建 prompt
+            prompt = f"""请根据以下小说背景和专家指令，设计符合要求的角色设定：
+
+【书名】: {title}
+【题材】: {genre}
+【故事大纲】:
+{outline}
+
+请严格遵循以下专家指令和JSON格式要求进行输出：
+
+{skill_content}
+
+请直接以JSON数组格式输出，不要添加任何其他文字说明。"""
+            system_msg = "你是商业网文人物架构师，擅长创造极致执念与金手指高度适配的角色。请严格按照JSON格式输出。"
+        else:
+            # 回退到新格式（商业网文格式）
+            print("   ⚠ character-designer 技能未找到，使用新商业格式")
+            prompt = f"""请根据以下小说背景，设计符合要求的角色设定：
+
+【书名】: {title}
+【题材】: {genre}
+【故事大纲】:
+{outline}
 
 请创建5-8个角色，包括：
 - 1-2个主角
 - 1个反派或对立角色
 - 3-5个配角
 
-每个角色需要包含以下字段：
-{{
-    "name": "角色名",
-    "role": "protagonist/antagonist/supporting/minor",
-    "age": 年龄,
-    "appearance": "外貌描述",
-    "personality": "性格特点",
-    "background": "背景故事",
-    "motivation": "动机和目标",
-    "character_arc": "成长弧线",
-    "relationships": {{"角色名": "关系描述"}},
-    "distinctive_features": ["显著特征1", "显著特征2"],
-    "speech_patterns": "说话风格"
-}}
+请严格按照以下JSON格式输出（禁止使用旧格式如 appearance, personality, background）：
 
-请以JSON数组格式输出。"""
+```json
+[
+  {{
+    "name": "角色姓名",
+    "age": "年龄",
+    "gender": "性别",
+    "role": "主角/主要配角/核心反派",
+    "commercial_tags": ["商业标签1", "商业标签2"],
+    "core_obsession": "极度渴望的具体目标",
+    "reverse_scale": "绝对不可触碰的底线/逆鳞",
+    "golden_finger_synergy": "（仅主角）性格如何将金手指发挥到最大化？",
+    "external_persona": "对外展现的伪装/人设",
+    "internal_logic": "真实的内心算计与行为逻辑（反派需体现不降智的逻辑闭环）",
+    "growth_path": "从【初始状态】到【终极状态】的权力/力量跃迁",
+    "classic_dialogue": "最能代表其性格的一句极具网文张力的台词",
+    "voice_tag": {{
+      "tone": "慵懒/清冷/癫狂/温柔/铁血等",
+      "speech_pattern": "短句/长句/反问/沉默/习惯性语气词",
+      "signature_phrase": "标志性口头禅"
+    }}
+  }}
+]
+```
+
+请直接以JSON数组格式输出，不要添加任何其他文字说明。"""
+            system_msg = "你是商业网文人物架构师，擅长创造极致执念与金手指高度适配的角色。请严格按照新的JSON格式输出，不要使用旧格式。"
 
         # 调用LLM生成角色
         try:
             characters_str = self.llm.generate(
                 prompt=prompt,
                 temperature=0.8,
-                system_prompt="你是一位专业的人物设计师，擅长创造立体生动的角色。请直接以JSON数组格式输出角色设定，不要添加任何其他文字。",
+                system_prompt=system_msg,
             )
             # 使用改进的JSON提取
             characters = self._extract_json(characters_str)

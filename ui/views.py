@@ -26,7 +26,7 @@ except ImportError:
 
 # 导入主题系统
 try:
-    from ui.themes import CyberpunkTheme, Typography, Spacing
+    from ui.themes import CyberpunkTheme, Typography, Spacing, ThemeManager, ThemeStyles
 except ImportError:
     from themes import CyberpunkTheme, Typography, Spacing
 
@@ -44,46 +44,115 @@ except ImportError:
 class GlobalStatusBar(QFrame):
     """全局状态栏 - 显示当前项目、进度、模型等信息（无操作按钮）"""
 
+    # 主题切换信号
+    theme_changed = pyqtSignal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
 
     def init_ui(self):
-        self.setFixedHeight(40)
+        self.setFixedHeight(44)
         self.setStyleSheet(f"""
             QFrame {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
+                background-color: {CyberpunkTheme.BG_DARK};
                 border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
             }}
             QLabel {{
                 color: {CyberpunkTheme.TEXT_SECONDARY};
-                font-family: Consolas;
-                font-size: 12px;
+                font-family: {Typography.FONT_PRIMARY};
+                font-size: {Typography.SIZE_BODY}px;
+            }}
+            QComboBox {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
+                border-radius: {Spacing.RADIUS_SM}px;
+                padding: 4px 10px;
+                font-family: {Typography.FONT_PRIMARY};
+                font-size: {Typography.SIZE_SMALL}px;
+                min-width: 100px;
+            }}
+            QComboBox:hover {{
+                border-color: {CyberpunkTheme.FG_PRIMARY};
+                background-color: {CyberpunkTheme.BG_LIGHT};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
+                selection-background-color: {CyberpunkTheme.BG_LIGHT};
+                border: 1px solid {CyberpunkTheme.BORDER_COLOR};
             }}
         """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 0, 20, 0)
-        layout.setSpacing(30)
+        layout.setContentsMargins(24, 0, 24, 0)
+        layout.setSpacing(24)
 
-        # 状态指示
+        # 状态指示 - 带脉冲效果
         self.status_label = QLabel("● 系统就绪")
-        self.status_label.setStyleSheet(f"color: {CyberpunkTheme.FG_SUCCESS};")
+        self.status_label.setStyleSheet(f"""
+            color: {CyberpunkTheme.FG_SUCCESS};
+            font-weight: {Typography.WEIGHT_MEDIUM};
+        """)
         layout.addWidget(self.status_label)
+
+        # 分隔线
+        self._add_divider(layout)
 
         # 当前项目
         self.project_label = QLabel("📁 项目: 未加载")
         layout.addWidget(self.project_label)
 
+        # 分隔线
+        self._add_divider(layout)
+
         # 进度
         self.progress_label = QLabel("📊 进度: -")
         layout.addWidget(self.progress_label)
+
+        # 分隔线
+        self._add_divider(layout)
 
         # 当前模型
         self.model_label = QLabel("🤖 模型: DeepSeek-V3")
         layout.addWidget(self.model_label)
 
         layout.addStretch()
+
+        # 分隔线
+        self._add_divider(layout)
+
+        # 主题切换器
+        theme_label = QLabel("🎨 主题:")
+        layout.addWidget(theme_label)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Slate Dark", "cyberpunk")
+        self.theme_combo.addItem("明日方舟", "arknights")
+        self.theme_combo.addItem("日落", "sunset")
+        self.theme_combo.addItem("森林", "forest")
+        self.theme_combo.addItem("现代浅色", "modern_light")
+        self.theme_combo.setCurrentText(ThemeManager.THEMES[ThemeManager.current_theme]["name"])
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        layout.addWidget(self.theme_combo)
+
+    def _on_theme_changed(self):
+        """主题切换处理"""
+        theme_key = self.theme_combo.currentData()
+        ThemeManager.set_theme(theme_key)
+        self.theme_changed.emit(theme_key)
+
+    def _add_divider(self, layout):
+        """添加分隔线"""
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setStyleSheet(f"background-color: {CyberpunkTheme.BORDER_COLOR};")
+        layout.addWidget(divider)
 
     def update_status(self, status: str, status_type: str = "success"):
         color = CyberpunkTheme.FG_SUCCESS if status_type == "success" else CyberpunkTheme.FG_WARNING if status_type == "warning" else CyberpunkTheme.FG_DANGER
@@ -108,57 +177,114 @@ class MainNavigationBar(QFrame):
         self.init_ui()
 
     def init_ui(self):
-        self.setFixedHeight(60)
+        self.setFixedHeight(64)
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {CyberpunkTheme.BG_DEEP};
-                border-bottom: 2px solid {CyberpunkTheme.BORDER_COLOR};
+                border-bottom: 1px solid {CyberpunkTheme.BORDER_COLOR};
             }}
             QPushButton {{
-                background-color: {CyberpunkTheme.BG_MEDIUM};
+                background-color: transparent;
                 color: {CyberpunkTheme.TEXT_SECONDARY};
-                border: 2px solid {CyberpunkTheme.BORDER_COLOR};
-                border-radius: 8px;
-                padding: 10px 30px;
-                font-family: Consolas;
-                font-size: 14px;
-                font-weight: bold;
+                border: none;
+                border-radius: {Spacing.RADIUS_MD}px;
+                padding: 12px 24px;
+                font-family: {Typography.FONT_PRIMARY};
+                font-size: {Typography.SIZE_BODY}px;
+                font-weight: {Typography.WEIGHT_MEDIUM};
             }}
             QPushButton:hover {{
-                background-color: {CyberpunkTheme.BG_LIGHT};
-                border-color: {CyberpunkTheme.FG_PRIMARY};
-                color: {CyberpunkTheme.FG_PRIMARY};
+                background-color: {CyberpunkTheme.BG_MEDIUM};
+                color: {CyberpunkTheme.TEXT_PRIMARY};
             }}
             QPushButton:pressed {{
-                background-color: {CyberpunkTheme.FG_PRIMARY};
-                color: {CyberpunkTheme.BG_DARK};
+                background-color: {CyberpunkTheme.BG_LIGHT};
             }}
         """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(50, 5, 50, 5)
-        layout.setSpacing(30)
+        layout.setContentsMargins(50, 8, 50, 8)
+        layout.setSpacing(16)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # 前期筹备按钮
-        self.btn_preprod = QPushButton("📝 前期筹备")
-        self.btn_preprod.setFixedWidth(200)
-        layout.addWidget(self.btn_preprod)
+        # Logo / 标题区域
+        logo_label = QLabel("⚡ NovelForge")
+        logo_label.setStyleSheet(f"""
+            font-family: {Typography.FONT_DISPLAY};
+            font-size: {Typography.SIZE_H2}px;
+            font-weight: {Typography.WEIGHT_BOLD};
+            color: {CyberpunkTheme.FG_PRIMARY};
+        """)
+        layout.addWidget(logo_label)
 
-        # 生产监控按钮
-        self.btn_prod = QPushButton("🎬 生产监控")
-        self.btn_prod.setFixedWidth(200)
-        layout.addWidget(self.btn_prod)
+        # 分隔线
+        divider = QFrame()
+        divider.setFixedWidth(1)
+        divider.setFixedHeight(32)
+        divider.setStyleSheet(f"background-color: {CyberpunkTheme.BORDER_COLOR}; margin: 8px 0;")
+        layout.addWidget(divider)
 
-        # 项目仓库按钮
-        self.btn_vault = QPushButton("📚 项目仓库")
-        self.btn_vault.setFixedWidth(200)
-        layout.addWidget(self.btn_vault)
+        # 导航按钮
+        nav_buttons = [
+            ("📝 前期筹备", "btn_preprod"),
+            ("🎬 生产监控", "btn_prod"),
+            ("📚 项目仓库", "btn_vault"),
+            ("🧩 工作流集市", "btn_market"),
+        ]
 
-        # 工作流集市按钮
-        self.btn_market = QPushButton("🧩 工作流集市")
-        self.btn_market.setFixedWidth(200)
-        layout.addWidget(self.btn_market)
+        for text, attr_name in nav_buttons:
+            btn = QPushButton(text)
+            btn.setObjectName(attr_name)
+            btn.setFixedWidth(160)
+            layout.addWidget(btn)
+            setattr(self, attr_name, btn)
+
+        # 右侧留白
+        layout.addStretch()
+
+        # 存储按钮引用用于设置选中状态
+        self.nav_buttons = [self.btn_preprod, self.btn_prod, self.btn_vault, self.btn_market]
+
+    def set_active(self, index: int, styles: dict = None):
+        """设置选中状态的导航按钮"""
+        # 如果没有传入样式，使用默认的
+        if styles is None:
+            styles = {
+                "navbar_active": f"""
+                    QPushButton {{
+                        background-color: {CyberpunkTheme.FG_PRIMARY};
+                        color: #FFFFFF;
+                        border: none;
+                        border-radius: {Spacing.RADIUS_MD}px;
+                        padding: 12px 24px;
+                        font-family: {Typography.FONT_PRIMARY};
+                        font-size: {Typography.SIZE_BODY}px;
+                        font-weight: {Typography.WEIGHT_BOLD};
+                    }}
+                """,
+                "navbar": f"""
+                    QPushButton {{
+                        background-color: transparent;
+                        color: {CyberpunkTheme.TEXT_SECONDARY};
+                        border: none;
+                        border-radius: {Spacing.RADIUS_MD}px;
+                        padding: 12px 24px;
+                        font-family: {Typography.FONT_PRIMARY};
+                        font-size: {Typography.SIZE_BODY}px;
+                        font-weight: {Typography.WEIGHT_MEDIUM};
+                    }}
+                    QPushButton:hover {{
+                        background-color: {CyberpunkTheme.BG_MEDIUM};
+                        color: {CyberpunkTheme.TEXT_PRIMARY};
+                    }}
+                """
+            }
+
+        for i, btn in enumerate(self.nav_buttons):
+            if i == index:
+                btn.setStyleSheet(styles["navbar_active"])
+            else:
+                btn.setStyleSheet(styles["navbar"])
 
 
 # ============================================================================
@@ -356,7 +482,8 @@ class PreProductionView(QWidget):
         form_inner.addRow("主角:", self.edit_protagonist)
 
         self.edit_genre = QComboBox()
-        self.edit_genre.addItems(["玄幻", "仙侠", "科幻", "都市", "历史", "悬疑", "言情"])
+        self.edit_genre.setEditable(True)
+        self.edit_genre.addItems(["玄幻", "仙侠", "科幻", "都市", "历史", "悬疑", "言情", "科幻悬疑", "玄幻都市"])
         form_inner.addRow("题材:", self.edit_genre)
 
         self.edit_chapters = QSpinBox()
@@ -1556,7 +1683,7 @@ class SkillMarketView(QWidget):
         row, col = 0, 0
 
         # --- 内置技能 ---
-        builtin_dir = Path(".opencode/skills")
+        builtin_dir = Path("skills")
         if builtin_dir.exists():
             lbl = QLabel("🔒 内置系统技能 (Built-in)")
             lbl.setStyleSheet(f"color: {CyberpunkTheme.TEXT_SECONDARY}; font-weight: bold; font-size: 13px; font-family: Consolas;")
