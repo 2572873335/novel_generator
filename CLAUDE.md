@@ -123,7 +123,8 @@ novel_generator/
 │   │
 │   ├── emotion_tracker.py     # [NEW v4.0] Emotion debt ledger
 │   ├── world_bible.py         # [NEW v4.0] Event traceability
-│   └── prompt_assembler.py    # [NEW v4.0] Prompt aggregation
+│   ├── prompt_assembler.py    # [NEW v4.0] Prompt aggregation
+│   └── story_state.py         # [NEW v5.2] Story state for continuity
 │
 ├── ui/                        # [NEW v5.0] UI components (modularized)
 │   ├── __init__.py            # Package exports
@@ -166,6 +167,7 @@ novel_generator/
 | **EmotionTracker** | `emotion_tracker.py` | [NEW v4.0] Python-based emotion debt ledger |
 | **WorldBible** | `world_bible.py` | [NEW v4.0] Event traceability storage |
 | **PromptAssembler** | `prompt_assembler.py` | [NEW v4.0] Multi-skill prompt aggregation |
+| **StoryStateManager** | `story_state.py` | [NEW v5.2] Global story state for continuity |
 
 ### Legacy Agents (`agents/`)
 
@@ -297,6 +299,29 @@ class WorldBible:
         # Detects: resurrection inconsistencies, power level changes
 ```
 
+### 5. Anti-Context-Amnesia: Story State Manager (v5.2)
+
+**Problem**: AI writer suffers from context amnesia - repeated openings, random name changes, power inflation
+**Solution**: Global story state tracking with hard constraints in prompts
+
+```python
+# core/story_state.py
+class StoryStateManager:
+    def get_story_state_constraints(self) -> str:
+        # Returns mandatory constraints for prompt injection:
+        # - Current location (cannot change without justification)
+        # - Character names (mandatory whitelist)
+        # - Power level cap (cannot exceed without consequence)
+        # - Active plot threads (must continue, not restart)
+        # - Last chapter ending (must connect naturally)
+
+    def validate_chapter(self, chapter_text: str) -> tuple[bool, list]:
+        # Validates chapter for continuity errors:
+        # - Template openings detection
+        # - Power inflation detection
+        # - Name consistency check
+```
+
 ## Skills System (27 Skills)
 
 Located in `.opencode/skills/`, organized in 4 levels + styles + genre experts:
@@ -345,6 +370,21 @@ ArbitrationResult = {
 }
 ```
 
+### Story State (v5.2)
+```python
+StoryState = {
+    "current_location": str,           # Current location
+    "female_lead_name": str,         # Female lead name
+    "male_lead_name": str,           # Male lead name
+    "power_level": str,              # Current power level
+    "power_level_cap": str,          # Power level cap
+    "active_plot_threads": List[dict], # Ongoing plot threads
+    "last_chapter_ending": str,      # Last 1000 chars of previous chapter
+    "character_whitelist": List[str], # Allowed character names
+    "forbidden_patterns": List[str]  # Patterns to avoid
+}
+```
+
 ## Circuit Breaker Threshold
 
 | Chapter Range | Max Rollbacks | Action |
@@ -359,6 +399,7 @@ ArbitrationResult = {
 |------|-------------|
 | `emotion_ledger.json` | Emotion debt tracking |
 | `world_bible.json` | Event traceability |
+| `story_state.json` | Global story state (location, characters, power level, plot threads) |
 | `.suspended.json` | Circuit breaker triggered |
 | `.checkpoint.json` | Writing progress |
 | `rollback_log.json` | Rollback history |

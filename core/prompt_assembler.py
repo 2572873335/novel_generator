@@ -47,7 +47,7 @@ class PromptAssembler:
         self.style_file = self.project_dir / "style_signature.json"
 
         # 技能目录
-        self.skills_dir = Path(".opencode/skills")
+        self.skills_dir = Path("skills")
         self.custom_skills_dir = Path("user_data/custom_skills")
 
         # 状态管理器（延迟初始化）
@@ -62,6 +62,26 @@ class PromptAssembler:
             except Exception as e:
                 logger.warning(f"Failed to initialize StateSnapshotManager: {e}")
         return self.state_manager
+
+    def _get_story_state_manager(self):
+        """获取或初始化故事状态管理器"""
+        if not hasattr(self, 'story_state_manager') or self.story_state_manager is None:
+            try:
+                from core.story_state import StoryStateManager
+                self.story_state_manager = StoryStateManager(str(self.project_dir))
+            except Exception as e:
+                logger.warning(f"Failed to initialize StoryStateManager: {e}")
+        return self.story_state_manager
+
+    def _get_story_state_constraints(self) -> str:
+        """获取故事状态约束"""
+        try:
+            story_state_mgr = self._get_story_state_manager()
+            if story_state_mgr:
+                return story_state_mgr.get_story_state_constraints()
+        except Exception as e:
+            logger.warning(f"Failed to get story state constraints: {e}")
+        return ""
 
     def get_state_summary(self, chapter_num: int = None) -> str:
         """
@@ -120,13 +140,47 @@ class PromptAssembler:
             logger.warning(f"Failed to get state summary: {e}")
             return ""
 
+    def _find_skill_file(self, skill_name: str, base_dir: Path) -> Optional[Path]:
+        """
+        递归搜索技能文件，支持子目录结构
+        通过目录名或文件内容中的 name 字段识别技能
+
+        Args:
+            skill_name: 技能名称
+            base_dir: 搜索的基础目录
+
+        Returns:
+            技能文件路径，如果不存在则返回None
+        """
+        if not base_dir.exists():
+            return None
+
+        # 方法1: 先尝试按目录名匹配
+        for file_path in base_dir.rglob("SKILL.md"):
+            if file_path.parent.name == skill_name:
+                return file_path
+
+        # 方法2: 通过文件内容中的 name 字段识别
+        for file_path in base_dir.rglob("*.md"):
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                # 检查是否包含 name: {skill_name}
+                if f"name: {skill_name}" in content[:1500]:
+                    return file_path
+            except Exception:
+                continue
+
+        return None
+
+        return None
+
     def load_skill_prompt(self, skill_name: str) -> str:
         """
         加载指定技能的Prompt内容
 
-        搜索顺序：
-        1. user_data/custom_skills/{skill_name}/SKILL.md (自定义技能优先)
-        2. .opencode/skills/{skill_name}/SKILL.md (内置技能)
+        搜索顺序（使用递归搜索，支持子目录）：
+        1. user_data/custom_skills/ (自定义技能优先)
+        2. skills/ (内置技能)
 
         Args:
             skill_name: 技能名称
@@ -134,19 +188,27 @@ class PromptAssembler:
         Returns:
             技能Prompt内容，如果不存在则返回空字符串
         """
-        # 优先从自定义技能目录加载
-        custom_path = self.custom_skills_dir / skill_name / "SKILL.md"
-        if custom_path.exists():
-            content = custom_path.read_text(encoding="utf-8")
-            # 跳过 front matter
-            return self._strip_front_matter(content)
+        # 优先从自定义技能目录递归搜索
+        custom_file = self._find_skill_file(skill_name, self.custom_skills_dir)
+        if custom_file:
+            try:
+                content = custom_file.read_text(encoding="utf-8")
+                logger.info(f"Loaded custom skill: {skill_name} from {custom_file}")
+                return self._strip_front_matter(content)
+            except Exception as e:
+                logger.warning(f"Failed to load custom skill {skill_name}: {e}")
 
-        # 从内置技能目录加载
-        builtin_path = self.skills_dir / skill_name / "SKILL.md"
-        if builtin_path.exists():
-            content = builtin_path.read_text(encoding="utf-8")
-            return self._strip_front_matter(content)
+        # 从内置技能目录递归搜索
+        builtin_file = self._find_skill_file(skill_name, self.skills_dir)
+        if builtin_file:
+            try:
+                content = builtin_file.read_text(encoding="utf-8")
+                logger.info(f"Loaded builtin skill: {skill_name} from {builtin_file}")
+                return self._strip_front_matter(content)
+            except Exception as e:
+                logger.warning(f"Failed to load builtin skill {skill_name}: {e}")
 
+        logger.warning(f"Skill file not found for: {skill_name}")
         return ""
 
     def _strip_front_matter(self, content: str) -> str:
@@ -156,6 +218,63 @@ class PromptAssembler:
             if len(parts) >= 3:
                 return parts[2].strip()
         return content.strip()
+
+    def _load_characters_json(self) -> str:
+        """加载角色设定 JSON 并格式化为 Prompt 注入"""
+        import json
+
+        characters_file = self.project_dir / "characters.json"
+        if not characters_file.exists():
+            logger.warning(f"characters.json not found at {characters_file}")
+            return ""
+
+        try:
+            with open(characters_file, "r", encoding="utf-8") as f:
+                characters = json.load(f)
+
+            if not characters:
+                return ""
+
+            # 格式化角色信息（提取商业标签和声线标签）
+            character_sections = []
+            for char in characters:
+                name = char.get("name", "未命名")
+                role = char.get("role", "配角")
+                commercial_tags = char.get("commercial_tags", [])
+                core_obsession = char.get("core_obsession", "")
+                reverse_scale = char.get("reverse_scale", "")
+                golden_finger = char.get("golden_finger_synergy", "")
+                external = char.get("external_persona", "")
+                internal = char.get("internal_logic", "")
+                classic_dialogue = char.get("classic_dialogue", "")
+                voice_tag = char.get("voice_tag", {})
+                growth_path = char.get("growth_path", "")
+
+                char_info = f"""【角色: {name}】(角色类型: {role})
+- 商业标签: {', '.join(commercial_tags) if commercial_tags else '无'}
+- 核心执念: {core_obsession}
+- 逆鳞/底线: {reverse_scale}
+- 金手指适配: {golden_finger}
+- 对外人设: {external}
+- 内在逻辑: {internal}
+- 代表性台词: {classic_dialogue}
+- 声线: {voice_tag.get('tone', '')} / {voice_tag.get('speech_pattern', '')} / {voice_tag.get('signature_phrase', '')}
+- 成长路径: {growth_path}"""
+                character_sections.append(char_info)
+
+            characters_text = "\n\n".join(character_sections)
+
+            # 注入格式
+            injected = f"""
+【核心人物设定】（极其重要，请严格遵循每个角色的商业标签、核心执念和声线进行写作）:
+{characters_text}
+
+"""
+            return injected
+
+        except Exception as e:
+            logger.warning(f"Failed to load characters.json: {e}")
+            return ""
 
     def load_active_skills(self) -> Dict[str, str]:
         """
@@ -433,7 +552,7 @@ class PromptAssembler:
         if custom_instructions:
             components.append(PromptComponent("custom", 5, custom_instructions))
 
-        # 5.5. 技能Prompt (从 .opencode/skills/ 加载)
+        # 5.5. 技能Prompt (从 skills/ 加载)
         try:
             active_skills = self.load_active_skills()
             if active_skills:
@@ -451,7 +570,25 @@ class PromptAssembler:
         except Exception as e:
             logger.warning(f"Failed to load state summary: {e}")
 
-        # 7. 防截断规则（最高优先级）
+        # 7. 角色设定注入（从 characters.json 读取）
+        try:
+            characters_json = self._load_characters_json()
+            if characters_json:
+                components.append(PromptComponent("characters", 1, characters_json))
+                logger.info(f"Injected character data for chapter {chapter_num}")
+        except Exception as e:
+            logger.warning(f"Failed to load characters.json: {e}")
+
+        # 8. 故事状态约束（最高优先级 - Context Amnesia Fix）
+        try:
+            story_state_constraints = self._get_story_state_constraints()
+            if story_state_constraints:
+                components.append(PromptComponent("story_state_constraints", 0, story_state_constraints))
+                logger.info("Injected story state constraints into prompt")
+        except Exception as e:
+            logger.warning(f"Failed to add story state constraints: {e}")
+
+        # 9. 防截断规则（最高优先级）
         anti_truncation_rule = """<rule>你必须完整地结束本章，严禁在句子中间或对话中间截断！如果接近字数上限，请立刻收尾并输出完整的句号。最后一段必须逻辑完整。绝对禁止输出被切断的句子！</rule>"""
         components.append(PromptComponent("anti_truncation", 0, anti_truncation_rule))
 
@@ -465,6 +602,10 @@ class PromptAssembler:
 - 字数：3000-6000字
 - 语言：简体中文
 - 风格：网文风格，节奏明快
+
+【重要提醒】
+请务必严格遵循【核心人物设定】中的商业标签(core_obsession)、声线标签(voice_tag)和行为逻辑(internal_logic)来写作！
+每个角色的外在表现必须符合其商业标签和执念，绝不能ooc(Out Of Character)！
 
 """
 

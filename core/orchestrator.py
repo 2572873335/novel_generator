@@ -65,6 +65,7 @@ class Orchestrator:
         self.initializer_agent = None
         self.summary_indexer = None  # 摘要管理器
         self.state_manager = None  # 状态管理器
+        self.story_state_manager = None  # 故事状态管理器
 
         # 状态
         self.current_chapter = 1
@@ -145,6 +146,7 @@ class Orchestrator:
         from core.prompt_assembler import PromptAssembler
         from core.summary_indexer import SummaryIndexer
         from core.state_snapshot import StateSnapshotManager
+        from core.story_state import StoryStateManager
         from agents.creative_director import CreativeDirector
         from agents.emotion_writer import EmotionWriter
 
@@ -156,11 +158,20 @@ class Orchestrator:
         self.emotion_writer = EmotionWriter(self.llm_client, str(self.project_dir))
         self.summary_indexer = SummaryIndexer(str(self.project_dir))
         self.state_manager = StateSnapshotManager(str(self.project_dir))
+        self.story_state_manager = StoryStateManager(str(self.project_dir))
 
         # 检查是否已有暂停状态
         if self.creative_director.is_suspended():
             logger.warning("Project is in suspended state!")
             self.is_suspended = True
+
+        # 初始化故事状态（从characters.json读取）
+        if self.story_state_manager:
+            try:
+                self.story_state_manager.initialize_from_characters()
+                logger.info("Story state initialized from characters.json")
+            except Exception as e:
+                logger.warning(f"Failed to initialize story state: {e}")
 
         logger.info("Orchestrator initialized successfully")
 
@@ -370,6 +381,24 @@ class Orchestrator:
                             logger.info(f"Chapter {self.current_chapter} state snapshot created")
                         except Exception as e:
                             logger.warning(f"Failed to create state snapshot: {e}")
+
+                    # 更新故事状态（Context Amnesia Fix）
+                    if self.story_state_manager:
+                        try:
+                            # 先验证章节内容
+                            is_valid, errors = self.story_state_manager.validate_chapter(result["content"])
+                            if not is_valid:
+                                logger.warning(f"Chapter {self.current_chapter} validation errors: {errors}")
+                                self._emit_log(f"第{self.current_chapter}章警告: {', '.join(errors)}")
+
+                            # 然后更新状态
+                            self.story_state_manager.update_from_chapter(
+                                self.current_chapter,
+                                result["content"]
+                            )
+                            logger.info(f"Chapter {self.current_chapter} story state updated")
+                        except Exception as e:
+                            logger.warning(f"Failed to update story state: {e}")
 
                     # 检查是否需要仲裁
                     reports = result.get("reports", [])
